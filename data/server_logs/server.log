@@ -1,0 +1,1292 @@
+[2026-06-17T08:39:56] CRM iniciado em http://127.0.0.1:8767
+[2026-06-17T08:39:56] Falha ao preparar catalogo de busca para ionlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:39:56] Falha ao preparar catalogo de busca para ciorbrasil:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:39:56] Falha ao preparar catalogo de busca para even:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:39:56] Falha ao preparar catalogo de busca para onix:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:39:56] Falha ao preparar catalogo de busca para vitralab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:39:56] Falha ao preparar catalogo de busca para ambarlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:39:56] Falha ao preparar catalogo de busca para nativalab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:40:35] CRM iniciado em http://127.0.0.1:8765
+[2026-06-17T08:40:35] Falha ao preparar catalogo de busca para ionlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:40:35] Falha ao preparar catalogo de busca para ciorbrasil:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:40:35] Falha ao preparar catalogo de busca para even:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:40:35] Falha ao preparar catalogo de busca para onix:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:40:35] Falha ao preparar catalogo de busca para vitralab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:40:35] Falha ao preparar catalogo de busca para ambarlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:40:35] Falha ao preparar catalogo de busca para nativalab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:41:22] CRM iniciado em http://127.0.0.1:8765
+[2026-06-17T08:41:22] Falha ao preparar catalogo de busca para ionlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:41:22] Falha ao preparar catalogo de busca para ciorbrasil:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:41:22] Falha ao preparar catalogo de busca para even:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:41:22] Falha ao preparar catalogo de busca para onix:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:41:22] Falha ao preparar catalogo de busca para vitralab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:41:22] Falha ao preparar catalogo de busca para ambarlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T08:41:22] Falha ao preparar catalogo de busca para nativalab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 9692, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3779, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 598, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3782, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3787, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3541, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 588, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3544, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 3550, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 7669, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\2.0\server.py", line 552, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T13:21:36] CRM iniciado em http://127.0.0.1:8767
+[2026-06-17T13:21:36] Falha ao preparar catalogo de busca para ionlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 9818, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3847, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 599, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3850, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3855, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3609, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 589, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3612, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3618, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 7759, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 553, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T13:21:36] Falha ao preparar catalogo de busca para ciorbrasil:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 9818, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3847, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 599, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3850, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3855, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3609, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 589, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3612, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3618, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 7759, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 553, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T13:21:36] Falha ao preparar catalogo de busca para even:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 9818, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3847, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 599, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3850, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3855, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3609, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 589, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3612, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3618, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 7759, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 553, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T13:21:36] Falha ao preparar catalogo de busca para onix:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 9818, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3847, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 599, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3850, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3855, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3609, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 589, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3612, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3618, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 7759, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 553, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T13:21:36] Falha ao preparar catalogo de busca para vitralab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 9818, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3847, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 599, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3850, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3855, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3609, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 589, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3612, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3618, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 7759, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 553, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T13:21:36] Falha ao preparar catalogo de busca para ambarlab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 9818, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3847, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 599, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3850, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3855, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3609, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 589, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3612, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3618, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 7759, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 553, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+[2026-06-17T13:21:36] Falha ao preparar catalogo de busca para nativalab:
+Traceback (most recent call last):
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 9818, in warm_start_caches
+    product_search_index(company_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3847, in product_search_index
+    return shared_cached_payload(
+        ("product_search_index", company_id),
+        product_search_dependencies(company_id),
+        lambda: build_product_search_index(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 599, in shared_cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3850, in <lambda>
+    lambda: build_product_search_index(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3855, in build_product_search_index
+    price_by_ref = quote_price_map(company_id)
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3609, in quote_price_map
+    return cached_payload(
+        ("quote_price_map", company_id),
+        [price_table_file(company_id), costing_file(company_id), costing_fabricated_file(company_id)],
+        lambda: build_quote_price_map(company_id),
+    )
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 589, in cached_payload
+    payload = builder()
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3612, in <lambda>
+    lambda: build_quote_price_map(company_id),
+            ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 3618, in build_quote_price_map
+    for record in price_table_records_with_cost(company_id, save=True):
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 7759, in price_table_records_with_cost
+    records = load_json(price_table_file(company_id), [])
+  File "C:\Users\tcoiado\Desktop\vendas-ionlab-main\3.0\server.py", line 553, in load_json
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+  File "C:\Python313\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python313\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
