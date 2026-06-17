@@ -1,4 +1,4 @@
-const companies = [];
+Ôªøconst companies = [];
 
 const pageTitles = {
   home: "Pagina principal",
@@ -15,7 +15,7 @@ const pageTitles = {
   "costing-table": "Custeio",
   "follow-up": "Follow-UP Atendimentos",
   vendors: "Vendedores",
-  regions: "Regiıes",
+  regions: "Regi√µes",
   "blocked-clients": "Bloqueios",
   users: "Usuarios",
   "vendor-page": "Painel do vendedor",
@@ -175,7 +175,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260613-remover-envios1";
+const appAssetVersion = "20260617-email-primeira-senha1";
 const apiMemoryCache = new Map();
 const fastCacheMs = 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
@@ -248,7 +248,7 @@ function invalidateLoadedViews() {
 const viewPermissionMap = {
   dashboard: ["dashboard.uf", "dashboard.activity", "dashboard.vendor-regions", "dashboard.annual-sales", "dashboard.monthly-evolution", "dashboard.family-sales"],
   prospect: ["prospect"],
-  cadastros: ["cadastros.sales", "cadastros.clients", "cadastros.stock", "cadastros.in-transit", "cadastros.slow-items", "cadastros.prices-import", "cadastros.products", "cadastros.costing", "cadastros.costing-fabricated", "cadastros.vendors", "cadastros.regions"],
+  cadastros: ["cadastros.sales", "cadastros.clients", "cadastros.stock", "cadastros.in-transit", "cadastros.slow-items", "cadastros.prices-import", "cadastros.products", "cadastros.costing", "cadastros.costing-fabricated", "cadastros.vendors", "cadastros.regions", "users"],
   "sales-table": ["sales-table"],
   "clients-table": ["clients-table"],
   "stock-table": ["stock-table"],
@@ -259,7 +259,6 @@ const viewPermissionMap = {
   "costing-table": ["costing-table"],
   "follow-up": ["follow-up"],
   "blocked-clients": ["blocked-clients"],
-  users: ["users"],
 };
 
 const dashboardPermissionMap = {
@@ -281,6 +280,7 @@ const routinePermissionMap = {
   products: "cadastros.products",
   costing: "cadastros.costing",
   "costing-fabricated": "cadastros.costing-fabricated",
+  users: "users",
 };
 
 async function fetchJson(url, options) {
@@ -367,7 +367,7 @@ function canAccessView(viewName) {
 }
 
 function firstAllowedView() {
-  const order = ["dashboard", "prospect", "cadastros", "sales-table", "clients-table", "stock-table", "in-transit-table", "mercado-livre", "costing-table", "follow-up", "blocked-clients", "users"];
+  const order = ["dashboard", "prospect", "cadastros", "sales-table", "clients-table", "stock-table", "in-transit-table", "mercado-livre", "costing-table", "follow-up", "blocked-clients"];
   return order.find((viewName) => canAccessView(viewName)) || "home";
 }
 
@@ -536,9 +536,6 @@ function setView(viewName) {
   if (viewName === "blocked-clients") {
     loadBlockedPage();
   }
-  if (viewName === "users") {
-    loadUsers();
-  }
 }
 
 function handleGlobalNavigationClick(event) {
@@ -682,7 +679,7 @@ async function renderStats() {
       <article class="stat-card">
         <p class="eyebrow">${stats.empresa}</p>
         <strong>${formatNumber.format(stats.notas)}</strong>
-        <span class="muted">${formatNumber.format(stats.linhas)} linhas de vendas ∑ ${formatNumber.format(stats.clientes)} clientes</span>
+        <span class="muted">${formatNumber.format(stats.linhas)} linhas de vendas ¬∑ ${formatNumber.format(stats.clientes)} clientes</span>
       </article>
     `;
   }));
@@ -1322,15 +1319,15 @@ async function loadVendorRegionsChart() {
   if (!vendorId) {
     summary.innerHTML = "";
     sections.innerHTML = "";
-    status.textContent = "Selecione um vendedor para visualizar as regiıes atendidas.";
+    status.textContent = "Selecione um vendedor para visualizar as regi√µes atendidas.";
     return;
   }
 
-  status.textContent = "Carregando regiıes atendidas...";
+  status.textContent = "Carregando regi√µes atendidas...";
   try {
     const payload = await fetchJson(`/api/vendor-regions-data?company=${encodeURIComponent(company)}&vendor_id=${encodeURIComponent(vendorId)}`);
     renderVendorRegions(payload);
-    status.textContent = `${payload.empresa}: regiıes calculadas para ${payload.vendedor.nome_completo}.`;
+    status.textContent = `${payload.empresa}: regi√µes calculadas para ${payload.vendedor.nome_completo}.`;
   } catch (error) {
     summary.innerHTML = "";
     sections.innerHTML = "";
@@ -1459,8 +1456,8 @@ function moveQuoteEditorHome() {
   panel.classList.remove("sent-commercial-editor");
   const title = document.getElementById("quote-workspace-title");
   const subtitle = document.getElementById("quote-workspace-subtitle");
-  if (title) title.textContent = "OrÁamentos/Pedidos";
-  if (subtitle) subtitle.textContent = "Monte o orÁamento, confira disponibilidade e gere o PDF para envio ao cliente.";
+  if (title) title.textContent = "Or√ßamentos/Pedidos";
+  if (subtitle) subtitle.textContent = "Monte o or√ßamento, confira disponibilidade e gere o PDF para envio ao cliente.";
 }
 
 function moveQuoteEditorToSent() {
@@ -1473,8 +1470,8 @@ function moveQuoteEditorToSent() {
   quotePanel.classList.add("active", "sent-commercial-editor");
   const title = document.getElementById("quote-workspace-title");
   const subtitle = document.getElementById("quote-workspace-subtitle");
-  if (title) title.textContent = "OrÁamentos/Pedidos Enviados";
-  if (subtitle) subtitle.textContent = "Revise orÁamentos e pedidos salvos, converta em pedido ou gere o PDF atualizado.";
+  if (title) title.textContent = "Or√ßamentos/Pedidos Enviados";
+  if (subtitle) subtitle.textContent = "Revise or√ßamentos e pedidos salvos, converta em pedido ou gere o PDF atualizado.";
 }
 
 function renderSimpleVendorTable(payload, headId, bodyId, emptyText) {
@@ -2062,7 +2059,7 @@ async function closeQuote() {
       status.textContent = `Orcamento ${quote.numero} gerado com sucesso. Tela pronta para novo orcamento.`;
       currentQuoteContext = null;
       await loadQuoteWorkspace();
-      status.textContent = `Orcamento ${quote.numero} gerado com sucesso. Clique em Enviar orÁamento por e-mail para enviar ao cliente.`;
+      status.textContent = `Orcamento ${quote.numero} gerado com sucesso. Clique em Enviar or√ßamento por e-mail para enviar ao cliente.`;
     }
   } catch (error) {
     status.textContent = error.message;
@@ -2195,7 +2192,7 @@ async function loadVendorDayByDay() {
   if (!status || !summary || !content) {
     return;
   }
-  status.textContent = "Carregando rotina di·ria...";
+  status.textContent = "Carregando rotina di√°ria...";
   summary.innerHTML = "";
   content.innerHTML = "";
   try {
@@ -2203,7 +2200,7 @@ async function loadVendorDayByDay() {
     currentVendorDayByDayPayload = payload;
     currentVendorDayByDayClient = null;
     renderVendorDayByDay();
-    status.textContent = `${payload.empresa}: lista di·ria de ${payload.data_label} carregada.`;
+    status.textContent = `${payload.empresa}: lista di√°ria de ${payload.data_label} carregada.`;
   } catch (error) {
     currentVendorDayByDayPayload = null;
     status.textContent = error.message;
@@ -2220,17 +2217,17 @@ function renderVendorDayByDay() {
   if (payload.dia_util === false) {
     summary.innerHTML = `
       <article class="daybyday-progress-card">
-        <span>Rotina di·ria</span>
+        <span>Rotina di√°ria</span>
         <strong>Sem Day by Day hoje</strong>
-        <small>${escapeHtml(payload.mensagem || "O Day by Day considera somente dias ˙teis.")}</small>
+        <small>${escapeHtml(payload.mensagem || "O Day by Day considera somente dias √∫teis.")}</small>
       </article>
       <article><span>Data</span><strong>${escapeHtml(payload.data_label || "")}</strong></article>
-      <article><span>PrÛximo dia ˙til</span><strong>${escapeHtml(payload.proximo_dia_util_label || "")}</strong></article>
+      <article><span>Pr√≥ximo dia √∫til</span><strong>${escapeHtml(payload.proximo_dia_util_label || "")}</strong></article>
     `;
     content.innerHTML = `
       <section class="daybyday-list-card">
         <div class="empty-state">
-          ${escapeHtml(payload.mensagem || "O Day by Day considera somente dias ˙teis, de segunda-feira a sexta-feira.")}
+          ${escapeHtml(payload.mensagem || "O Day by Day considera somente dias √∫teis, de segunda-feira a sexta-feira.")}
         </div>
       </section>
     `;
@@ -2247,14 +2244,14 @@ function renderVendorDayByDay() {
       <span>Progresso da rotina</span>
       <strong>${formatNumber.format(savedContacts)} / ${formatNumber.format(dailyGoal)}</strong>
       <div class="daybyday-progress"><i style="width: ${progressPercent}%"></i></div>
-      <small>${missingContacts > 0 ? `${formatNumber.format(missingContacts)} contato(s) restantes` : "Meta concluÌda"}</small>
+      <small>${missingContacts > 0 ? `${formatNumber.format(missingContacts)} contato(s) restantes` : "Meta conclu√≠da"}</small>
     </article>
     <article><span>Data</span><strong>${escapeHtml(payload.data_label || "")}</strong></article>
     <article><span>Clientes do dia</span><strong>${formatNumber.format(payload.resumo?.total || 0)}</strong></article>
     <article><span>Inativos</span><strong>${formatNumber.format(payload.resumo?.inativos || 0)}</strong></article>
     <article><span>Nunca comprou</span><strong>${formatNumber.format(payload.resumo?.nunca_comprou || 0)}</strong></article>
-    <article><span>J· contatados</span><strong>${formatNumber.format(payload.resumo?.ja_contatados || 0)}</strong></article>
-    <article><span>Carteira elegÌvel</span><strong>${formatNumber.format(eligibleWallet)}</strong></article>
+    <article><span>J√° contatados</span><strong>${formatNumber.format(payload.resumo?.ja_contatados || 0)}</strong></article>
+    <article><span>Carteira eleg√≠vel</span><strong>${formatNumber.format(eligibleWallet)}</strong></article>
     <article><span>Base de retorno</span><strong>${formatNumber.format(recontactWallet)}</strong></article>
     <article><span>UFs</span><strong>${escapeHtml((payload.resumo?.ufs_consideradas || []).join(", ") || "Sem UF")}</strong></article>
   `;
@@ -2262,7 +2259,7 @@ function renderVendorDayByDay() {
     <div class="daybyday-lists">
       ${renderVendorDayByDayList("Clientes Inativos", payload.inativos || [], "inactive")}
       ${renderVendorDayByDayList("Nunca Comprou", payload.nunca_comprou || [], "never")}
-      ${(payload.recontatos || []).length ? renderVendorDayByDayList("Clientes j· contatados", payload.recontatos || [], "recontact") : ""}
+      ${(payload.recontatos || []).length ? renderVendorDayByDayList("Clientes j√° contatados", payload.recontatos || [], "recontact") : ""}
     </div>
     ${payload.contagem?.faltam === 0 ? renderVendorDayByDayPreviousContacts(payload.contatos_anteriores || []) : ""}
   `;
@@ -2308,7 +2305,7 @@ function renderVendorDayByDayList(title, rows, statusKey) {
         <div>
           <p class="eyebrow">${formatNumber.format(quota)} ${plannedLabel}</p>
           <h4>${escapeHtml(title)}</h4>
-          <span>${formatNumber.format(rows.length)} cliente(s) disponÌveis nesta fila</span>
+          <span>${formatNumber.format(rows.length)} cliente(s) dispon√≠veis nesta fila</span>
         </div>
         <strong>${formatNumber.format(rows.length)}</strong>
       </div>
@@ -2318,11 +2315,11 @@ function renderVendorDayByDayList(title, rows, statusKey) {
             <div class="daybyday-client-main">
               <span class="client-code">${escapeHtml(client.codigo || client.id || "")}</span>
               <strong>${escapeHtml(client.nome || "")}</strong>
-              <span>${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - ") || "Localidade n„o informada")}</span>
+              <span>${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - ") || "Localidade n√£o informada")}</span>
             </div>
             <div class="daybyday-client-meta">
-              <span>DDD ${escapeHtml(client.ddd || "N„o informado")}</span>
-              <span>⁄ltima compra: ${escapeHtml(client.ultima_compra || "")}</span>
+              <span>DDD ${escapeHtml(client.ddd || "N√£o informado")}</span>
+              <span>√öltima compra: ${escapeHtml(client.ultima_compra || "")}</span>
               ${statusKey === "recontact" ? `<span>Contato mais antigo: ${escapeHtml(client.primeiro_contato_label || client.primeiro_contato || "")}</span>` : ""}
             </div>
             ${statusKey === "recontact" && client.resumo_contato ? `<span>${escapeHtml(client.resumo_contato)}</span>` : ""}
@@ -2372,7 +2369,7 @@ function renderVendorDayByDayPurchases(purchases, year) {
           <th>Data</th>
           <th>NF</th>
           <th>Itens</th>
-          <th>Faturamento lÌquido</th>
+          <th>Faturamento l√≠quido</th>
         </tr>
       </thead>
       <tbody>
@@ -2447,7 +2444,7 @@ function yesNoSelect(name, value = "") {
     <select name="${escapeHtml(name)}">
       <option value="">Selecione</option>
       <option value="Sim" ${value === "Sim" ? "selected" : ""}>Sim</option>
-      <option value="N„o" ${value === "N„o" ? "selected" : ""}>N„o</option>
+      <option value="N√£o" ${value === "N√£o" ? "selected" : ""}>N√£o</option>
     </select>
   `;
 }
@@ -2456,7 +2453,7 @@ function noPurchaseReasonSelect(value = "") {
   const options = [
     "Falta de demanda",
     "Teve problema com SAC",
-    "Tem melhor preÁo com outro fornecedor",
+    "Tem melhor pre√ßo com outro fornecedor",
     "O valor de frete inviabiliza a compra",
     "Sem motivo",
   ];
@@ -2519,7 +2516,7 @@ function renderVendorDayByDayClientForm() {
         <div>
           <p class="eyebrow">${escapeHtml(client.status || "")}</p>
           <h4>${escapeHtml(client.nome || "")}</h4>
-          <span>${escapeHtml(client.codigo || "")} | ${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - "))} | ⁄ltima compra: ${escapeHtml(client.ultima_compra || "")}</span>
+          <span>${escapeHtml(client.codigo || "")} | ${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - "))} | √öltima compra: ${escapeHtml(client.ultima_compra || "")}</span>
           <button class="mini-action" type="button" id="daybyday-history-button">Contatos Anteriores</button>
         </div>
       </div>
@@ -2529,17 +2526,17 @@ function renderVendorDayByDayClientForm() {
       <form class="daybyday-form" id="daybyday-client-form">
         <label>Cliente Revenda ${yesNoSelect("cliente_revenda", form.cliente_revenda || "")}</label>
         <div class="daybyday-main-fields" id="daybyday-main-fields">
-        <label>Cliente ainda em operaÁ„o ${yesNoSelect("cliente_ainda_operacao", form.cliente_ainda_operacao || "")}</label>
+        <label>Cliente ainda em opera√ß√£o ${yesNoSelect("cliente_ainda_operacao", form.cliente_ainda_operacao || "")}</label>
         <div class="daybyday-closed-fields" id="daybyday-closed-fields">
           <label>Empresa baixada no CNPJ ${yesNoSelect("empresa_baixada_cnpj", form.empresa_baixada_cnpj || "")}</label>
           <label>Cliente mudou ramo de atividade ${yesNoSelect("cliente_mudou_ramo", form.cliente_mudou_ramo || "")}</label>
-          <label class="full">ObservaÁıes <textarea name="observacoes" rows="4">${escapeHtml(form.observacoes || "")}</textarea></label>
+          <label class="full">Observa√ß√µes <textarea name="observacoes" rows="4">${escapeHtml(form.observacoes || "")}</textarea></label>
         </div>
         <label>Nome do Contato <input name="nome_contato" value="${escapeHtml(form.nome_contato || "")}" placeholder="Nome do contato"></label>
         <label>Telefone com DDD <input name="telefone_ddd" value="${escapeHtml(form.telefone_ddd || client.telefone || "")}" placeholder="(00) 0000-0000"></label>
         <label>WhatsApp <input name="whatsapp" value="${escapeHtml(form.whatsapp || "")}" placeholder="(00) 00000-0000"></label>
         <label>E-mails de contato <input name="emails_contato" value="${escapeHtml(form.emails_contato || client.email || "")}" placeholder="email@cliente.com.br"></label>
-        <label>Cliente vende apenas em LicitaÁ„o ${yesNoSelect("vende_licitacao", form.vende_licitacao || "")}</label>
+        <label>Cliente vende apenas em Licita√ß√£o ${yesNoSelect("vende_licitacao", form.vende_licitacao || "")}</label>
         ${isInactiveClient ? `<label>Motivo de nao ter mais compra ${noPurchaseReasonSelect(form.motivo_sem_compra || "")}</label>` : ""}
         <label>Cliente tem ecommerce ${yesNoSelect("tem_ecommerce", form.tem_ecommerce || "")}</label>
         <label>Cliente tem site ${yesNoSelect("tem_site", form.tem_site || "")}</label>
@@ -2548,9 +2545,9 @@ function renderVendorDayByDayClientForm() {
         <label class="full daybyday-problem-field" id="daybyday-problem-field">Descritivo resumido do problema relatado
           <textarea name="descritivo_problema_relatado" rows="3">${escapeHtml(form.descritivo_problema_relatado || "")}</textarea>
         </label>
-        <label>Cliente pertence a um grupo EconÙmico ${yesNoSelect("pertence_grupo_economico", form.pertence_grupo_economico || "")}</label>
-        <label class="daybyday-group-client-field" id="daybyday-group-client-field">CÛdigo do Cliente Matriz do grupo
-          <input id="daybyday-group-client-search" type="search" value="${escapeHtml(form.cliente_matriz_grupo_id ? `${form.cliente_matriz_grupo_id} - ${form.cliente_matriz_grupo_nome || ""}` : "")}" placeholder="Digite cÛdigo ou nome do cliente matriz">
+        <label>Cliente pertence a um grupo Econ√¥mico ${yesNoSelect("pertence_grupo_economico", form.pertence_grupo_economico || "")}</label>
+        <label class="daybyday-group-client-field" id="daybyday-group-client-field">C√≥digo do Cliente Matriz do grupo
+          <input id="daybyday-group-client-search" type="search" value="${escapeHtml(form.cliente_matriz_grupo_id ? `${form.cliente_matriz_grupo_id} - ${form.cliente_matriz_grupo_nome || ""}` : "")}" placeholder="Digite c√≥digo ou nome do cliente matriz">
           <input name="cliente_matriz_grupo_id" id="daybyday-group-client-id" type="hidden" value="${escapeHtml(form.cliente_matriz_grupo_id || "")}">
           <input name="cliente_matriz_grupo_nome" id="daybyday-group-client-name" type="hidden" value="${escapeHtml(form.cliente_matriz_grupo_nome || "")}">
           <div class="prospect-suggestions" id="daybyday-group-client-suggestions"></div>
@@ -2695,12 +2692,12 @@ function validateVendorDayByDayForm(formElement) {
   if (dayByDayIsNo(resellerValue)) {
     return true;
   }
-  markMissing("cliente_ainda_operacao", "Cliente ainda em operaÁ„o");
+  markMissing("cliente_ainda_operacao", "Cliente ainda em opera√ß√£o");
   const operationValue = formElement.querySelector('[name="cliente_ainda_operacao"]')?.value || "";
   if (dayByDayIsNo(operationValue)) {
     markMissing("empresa_baixada_cnpj", "Empresa baixada no CNPJ");
     markMissing("cliente_mudou_ramo", "Cliente mudou ramo de atividade");
-    markMissing("observacoes", "ObservaÁıes");
+    markMissing("observacoes", "Observa√ß√µes");
   }
   if (currentVendorDayByDayClient?.status_key === "inactive") {
     markMissing("motivo_sem_compra", "Motivo de nao ter mais compra");
@@ -2710,12 +2707,12 @@ function validateVendorDayByDayForm(formElement) {
     ["telefone_ddd", "Telefone com DDD"],
     ["whatsapp", "WhatsApp"],
     ["emails_contato", "E-mails de contato"],
-    ["vende_licitacao", "Cliente vende apenas em LicitaÁ„o"],
+    ["vende_licitacao", "Cliente vende apenas em Licita√ß√£o"],
     ["tem_ecommerce", "Cliente tem ecommerce"],
     ["tem_site", "Cliente tem site"],
     ["produtos_site_ecommerce", "Cliente tem nossos produtos no site ou ecommerce"],
     ["relatou_problema_antes", "Cliente relatou algum problema ocorrido antes"],
-    ["pertence_grupo_economico", "Cliente pertence a um grupo EconÙmico"],
+    ["pertence_grupo_economico", "Cliente pertence a um grupo Econ√¥mico"],
   ].forEach(([name, label]) => markMissing(name, label));
 
   const problemValue = formElement.querySelector('[name="relatou_problema_antes"]')?.value || "";
@@ -2727,7 +2724,7 @@ function validateVendorDayByDayForm(formElement) {
   if (dayByDayIsYes(groupValue)) {
     const matrixId = formElement.querySelector('[name="cliente_matriz_grupo_id"]');
     if (!String(matrixId?.value || "").trim()) {
-      missing.push("CÛdigo do Cliente Matriz do grupo");
+      missing.push("C√≥digo do Cliente Matriz do grupo");
       formElement.querySelector("#daybyday-group-client-field")?.classList.add("daybyday-field-error");
     }
   }
@@ -2746,7 +2743,7 @@ function validateVendorDayByDayForm(formElement) {
   }
 
   if (missing.length) {
-    status.textContent = `Preencha todos os campos obrigatÛrios antes de salvar. Faltando: ${missing.join(", ")}.`;
+    status.textContent = `Preencha todos os campos obrigat√≥rios antes de salvar. Faltando: ${missing.join(", ")}.`;
     const firstError = formElement.querySelector(".daybyday-field-error");
     firstError?.scrollIntoView({ behavior: "smooth", block: "center" });
     return false;
@@ -2986,8 +2983,8 @@ function renderVendorPageGoals() {
             <th>Valor Atingido</th>
             <th>% Atingido</th>
             <th>Peso</th>
-            <th>% Comiss„o M·x.</th>
-            <th>Comiss„o R$</th>
+            <th>% Comiss√£o M√°x.</th>
+            <th>Comiss√£o R$</th>
           </tr>
         </thead>
         <tbody>${rows || '<tr><td colspan="7">Nenhuma meta cadastrada para este mes.</td></tr>'}</tbody>
@@ -3046,7 +3043,7 @@ async function loadVendorDailyContactsChart() {
     monthInput.value = new Date().toISOString().slice(0, 7);
   }
   const selectedMonth = monthInput?.value || new Date().toISOString().slice(0, 7);
-  status.textContent = "Carregando contatos di·rios...";
+  status.textContent = "Carregando contatos di√°rios...";
   chart.innerHTML = "";
   total.textContent = "Carregando...";
   try {
@@ -3057,7 +3054,7 @@ async function loadVendorDailyContactsChart() {
       const { start, end } = dailyContactsMonthRange(selectedMonth);
       const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force: true });
       renderVendorDailyContactsChart(buildDailyContactsPayloadFromReport(report, selectedMonth));
-      status.textContent += " Dados carregados pelo relatÛrio de contatos.";
+      status.textContent += " Dados carregados pelo relat√≥rio de contatos.";
     } catch (fallbackError) {
       chart.innerHTML = "";
       total.textContent = "Sem dados";
@@ -3142,8 +3139,8 @@ function renderVendorDailyContactsChart(payload) {
   const maxValue = Math.max(1, ...rows.map((row) => Number(row.total || 0)));
   total.textContent = `${formatNumber.format(payload.totals?.total || 0)} contatos | Inativos ${formatNumber.format(payload.totals?.inativos || 0)} | Nunca Comprou ${formatNumber.format(payload.totals?.nunca_comprou || 0)}`;
   if (!rows.length) {
-    chart.innerHTML = '<div class="empty-state">Nenhum contato di·rio encontrado para este vendedor.</div>';
-    status.textContent = "Nenhum contato di·rio encontrado.";
+    chart.innerHTML = '<div class="empty-state">Nenhum contato di√°rio encontrado para este vendedor.</div>';
+    status.textContent = "Nenhum contato di√°rio encontrado.";
     return;
   }
   chart.innerHTML = `
@@ -3170,7 +3167,7 @@ function renderVendorDailyContactsChart(payload) {
       <span><i class="never"></i>Nunca Comprou</span>
     </div>
   `;
-  status.textContent = `${payload.empresa}: ${formatNumber.format(rows.length)} dia(s) com contatos no mÍs selecionado.`;
+  status.textContent = `${payload.empresa}: ${formatNumber.format(rows.length)} dia(s) com contatos no m√™s selecionado.`;
 }
 
 function setVendorRegionDimension(dimension) {
@@ -3270,7 +3267,7 @@ async function loadVendorRegionClients(force = false) {
   if (!params) {
     return;
   }
-  status.textContent = "Carregando clientes da regi„o...";
+  status.textContent = "Carregando clientes da regi√£o...";
   try {
     const payload = await fetchJson(`/api/vendor-region-clients?${params.toString()}`);
     fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
@@ -3296,7 +3293,7 @@ async function loadVendorRegionClients(force = false) {
           return `<td>${escapeHtml(value)}</td>`;
         }).join("")}
       </tr>
-    `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta seleÁ„o.</td></tr>`;
+    `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta sele√ß√£o.</td></tr>`;
     status.textContent = payload.total_resultado > payload.rows.length
       ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
       : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
@@ -3608,7 +3605,7 @@ function vendorRegionTable(title, rows, years, months, closedMonths) {
         <table>
           <thead>
             <tr>
-              <th>Regi„o</th>
+              <th>Regi√£o</th>
               <th>Indicador</th>
               ${years.map((year) => `<th>${year}</th>`).join("")}
               ${monthHeaders}
@@ -3633,11 +3630,11 @@ function renderUfChart(payload) {
   document.getElementById("dashboard-total-clients").textContent = formatNumber.format(payload.total_clientes);
   document.getElementById("dashboard-active-ufs").textContent = `${payload.ufs_com_clientes}/27`;
   document.getElementById("dashboard-top-uf").textContent = payload.maior_uf.uf
-    ? `${payload.maior_uf.uf} ∑ ${formatNumber.format(payload.maior_uf.clientes)}`
+    ? `${payload.maior_uf.uf} ¬∑ ${formatNumber.format(payload.maior_uf.clientes)}`
     : "-";
   document.getElementById("dashboard-total-revenue").textContent = formatCurrency.format(payload.faturamento_total || 0);
   document.getElementById("dashboard-top-revenue-uf").textContent = payload.maior_faturamento_uf.uf
-    ? `${payload.maior_faturamento_uf.uf} ∑ ${formatCurrency.format(payload.maior_faturamento_uf.faturamento_total || 0)}`
+    ? `${payload.maior_faturamento_uf.uf} ¬∑ ${formatCurrency.format(payload.maior_faturamento_uf.faturamento_total || 0)}`
     : "-";
 
   const notes = [];
@@ -3760,11 +3757,11 @@ function formatMercadoLivreCell(columnKey, value) {
   if (value === null || value === undefined || value === "") {
     return "";
   }
-  if (["PreÁo", "PreÁo de venda Ionlab", "MKPC", "MKPPV", "PreÁo Onix", "PreÁo Vitralab", "PreÁo Nativalab"].includes(columnKey)) {
+  if (["Pre√ßo", "Pre√ßo de venda Ionlab", "MKPC", "MKPPV", "Pre√ßo Onix", "Pre√ßo Vitralab", "Pre√ßo Nativalab"].includes(columnKey)) {
     const number = Number(value);
     return Number.isFinite(number) ? formatPercent2.format(number) : formatCell(value);
   }
-  if (["Estoque no depÛsito", "Estoque Ionlab", "Estoque no depÛsito Onix", "Estoque no depÛsito Vitralab", "Estoque no depÛsito Nativalab"].includes(columnKey)) {
+  if (["Estoque no dep√≥sito", "Estoque Ionlab", "Estoque no dep√≥sito Onix", "Estoque no dep√≥sito Vitralab", "Estoque no dep√≥sito Nativalab"].includes(columnKey)) {
     const number = Number(value);
     return Number.isFinite(number) ? new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 }).format(number) : formatCell(value);
   }
@@ -3995,12 +3992,12 @@ function vendorStorageKey(company) {
 function normalizeSearchText(value) {
   return String(value || "")
     .normalize("NFKD")
-    .replace(/[ﬂ]/g, "SS")
-    .replace(/[∆Ê]/g, "AE")
-    .replace(/[åú]/g, "OE")
-    .replace(/[ÿ¯]/g, "O")
-    .replace(/[–]/g, "D")
-    .replace(/[ﬁ˛]/g, "TH")
+    .replace(/[√ü]/g, "SS")
+    .replace(/[√Ü√¶]/g, "AE")
+    .replace(/[≈í≈ì]/g, "OE")
+    .replace(/[√ò√∏]/g, "O")
+    .replace(/[√ê√∞]/g, "D")
+    .replace(/[√û√æ]/g, "TH")
     .replace(/[Ll]/g, "L")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^A-Z0-9]/gi, "")
@@ -4012,12 +4009,12 @@ const searchStopWords = new Set(["A", "O", "OS", "AS", "E", "DE", "DA", "DO", "D
 function normalizeSearchTokens(value) {
   return String(value || "")
     .normalize("NFKD")
-    .replace(/[ﬂ]/g, "SS")
-    .replace(/[∆Ê]/g, "AE")
-    .replace(/[åú]/g, "OE")
-    .replace(/[ÿ¯]/g, "O")
-    .replace(/[–]/g, "D")
-    .replace(/[ﬁ˛]/g, "TH")
+    .replace(/[√ü]/g, "SS")
+    .replace(/[√Ü√¶]/g, "AE")
+    .replace(/[≈í≈ì]/g, "OE")
+    .replace(/[√ò√∏]/g, "O")
+    .replace(/[√ê√∞]/g, "D")
+    .replace(/[√û√æ]/g, "TH")
     .replace(/[Ll]/g, "L")
     .replace(/[\u0300-\u036f]/g, "")
     .split(/[^A-Z0-9]+/i)
@@ -4176,7 +4173,7 @@ function blockReasonsStorageKey() {
 function defaultBlockReasons() {
   return [
     { id: "financeiro", motivo: "Financeiro" },
-    { id: "solicitacao-diretoria", motivo: "SolicitaÁ„o Diretoria" },
+    { id: "solicitacao-diretoria", motivo: "Solicita√ß√£o Diretoria" },
     { id: "empresa-encerrada", motivo: "Empresa Encerrada" },
   ];
 }
@@ -4795,13 +4792,13 @@ function renderExcludedVendorCities() {
     const dddText = city.ddds?.length ? `DDD ${city.ddds.join(", ")}` : "Sem DDD";
     const ownerText = city.assignedTo.length
       ? `Com outro vendedor: ${city.assignedTo.join(", ")}`
-      : (city.available ? "DisponÌvel para seleÁ„o" : "Sem vendedor definido");
+      : (city.available ? "Dispon√≠vel para sele√ß√£o" : "Sem vendedor definido");
     return `
       <div class="assignment-item ${city.assignedTo.length ? "pending" : "available"}">
         <div><strong>${escapeHtml(city.cidade)} - ${escapeHtml(city.uf)}</strong><span>${escapeHtml(`${dddText} | ${ownerText}`)}</span></div>
       </div>
     `;
-  }).join("") || '<div class="client-found">Nenhuma cidade excluÌda para as UFs selecionadas.</div>';
+  }).join("") || '<div class="client-found">Nenhuma cidade exclu√≠da para as UFs selecionadas.</div>';
 }
 
 function renderAvailableVendorCities() {
@@ -6003,7 +6000,7 @@ function renderVendorGoals(payload) {
         </div>
         <div class="table-scroll compact">
           <table class="vendor-goal-table">
-            <thead><tr><th>Meta / Objetivo</th><th>Valor / Quantidade</th><th>Peso</th><th>% Comiss„o M·x.</th></tr></thead>
+            <thead><tr><th>Meta / Objetivo</th><th>Valor / Quantidade</th><th>Peso</th><th>% Comiss√£o M√°x.</th></tr></thead>
             <tbody>${objectiveRows}</tbody>
           </table>
         </div>
@@ -6371,7 +6368,7 @@ function renderResult(summary) {
   panel.innerHTML = `
     <p class="eyebrow">Resultado</p>
     <h3>${summary.empresa}</h3>
-    <p class="muted">${summary.arquivo} ∑ aba ${summary.aba}</p>
+    <p class="muted">${summary.arquivo} ¬∑ aba ${summary.aba}</p>
     <div class="result-grid">
       <div class="result-item">
         <span>Linhas lidas</span>
@@ -6398,7 +6395,7 @@ function renderClientResult(summary) {
   panel.innerHTML = `
     <p class="eyebrow">Resultado</p>
     <h3>${summary.empresa}</h3>
-    <p class="muted">${summary.arquivo} ∑ aba ${summary.aba}</p>
+    <p class="muted">${summary.arquivo} ¬∑ aba ${summary.aba}</p>
     <div class="result-grid">
       <div class="result-item">
         <span>Linhas lidas</span>
@@ -6429,7 +6426,7 @@ function renderStockResult(summary) {
   panel.innerHTML = `
     <p class="eyebrow">Resultado</p>
     <h3>${summary.empresa}</h3>
-    <p class="muted">${summary.arquivo} ∑ ${summary.aba}</p>
+    <p class="muted">${summary.arquivo} ¬∑ ${summary.aba}</p>
     <div class="result-grid">
       <div class="result-item">
         <span>Linhas lidas</span>
@@ -6547,7 +6544,7 @@ function renderProductsImportResult(summary) {
   panel.innerHTML = `
     <p class="eyebrow">Resultado</p>
     <h3>${summary.empresa}</h3>
-    <p class="muted">${summary.arquivo} ∑ ${summary.aba}</p>
+    <p class="muted">${summary.arquivo} ¬∑ ${summary.aba}</p>
     <div class="result-grid">
       <div class="result-item">
         <span>Linhas lidas</span>
@@ -6604,7 +6601,7 @@ function renderCostingResult(summary) {
   panel.innerHTML = `
     <p class="eyebrow">Resultado</p>
     <h3>${summary.empresa}</h3>
-    <p class="muted">${summary.arquivo} ∑ ${summary.aba}</p>
+    <p class="muted">${summary.arquivo} ¬∑ ${summary.aba}</p>
     <div class="result-grid">
       <div class="result-item">
         <span>Indice de Custeio</span>
@@ -7676,18 +7673,33 @@ function setRoutine(routineName) {
   if (routineName === "slow-items") {
     loadSlowItems();
   }
+  if (routineName === "users") {
+    loadUsers();
+  }
 }
 
 function showLoginScreen(message = "") {
   document.getElementById("login-screen").classList.remove("auth-hidden");
+  document.getElementById("password-change-screen").classList.add("auth-hidden");
   document.getElementById("app-shell").classList.add("auth-hidden");
   if (message) {
     document.getElementById("login-status").textContent = message;
   }
 }
 
+function showPasswordChangeScreen(message = "") {
+  document.getElementById("login-screen").classList.add("auth-hidden");
+  document.getElementById("password-change-screen").classList.remove("auth-hidden");
+  document.getElementById("app-shell").classList.add("auth-hidden");
+  document.getElementById("password-change-new").value = "";
+  document.getElementById("password-change-confirm").value = "";
+  document.getElementById("password-change-status").textContent = message || "A senha precisa ter pelo menos 6 caracteres.";
+  setTimeout(() => document.getElementById("password-change-new")?.focus(), 50);
+}
+
 function showAppScreen() {
   document.getElementById("login-screen").classList.add("auth-hidden");
+  document.getElementById("password-change-screen").classList.add("auth-hidden");
   document.getElementById("app-shell").classList.remove("auth-hidden");
 }
 
@@ -7721,6 +7733,10 @@ async function handleLogin(event) {
     localStorage.setItem(authTokenKey, payload.token);
     currentUser = payload.user;
     currentUserCatalog = { groups: payload.groups || [], levels: payload.levels || [] };
+    if (payload.force_password_change || payload.user?.trocar_senha_primeiro_acesso) {
+      showPasswordChangeScreen("Defina uma nova senha para liberar seu acesso.");
+      return;
+    }
     window.location.reload();
   } catch (error) {
     status.textContent = error.message;
@@ -7742,6 +7758,10 @@ async function checkAuthSession() {
       return false;
     }
     currentUser = payload.user;
+    if (payload.force_password_change || payload.user?.trocar_senha_primeiro_acesso) {
+      showPasswordChangeScreen("Defina uma nova senha para liberar seu acesso.");
+      return false;
+    }
     return true;
   } catch (error) {
     localStorage.removeItem(authTokenKey);
@@ -7759,6 +7779,27 @@ async function logout() {
   localStorage.removeItem(authTokenKey);
   currentUser = null;
   showLoginScreen("Sessao encerrada.");
+}
+
+async function handlePasswordChange(event) {
+  event.preventDefault();
+  const status = document.getElementById("password-change-status");
+  const newPassword = document.getElementById("password-change-new").value;
+  const confirmPassword = document.getElementById("password-change-confirm").value;
+  status.textContent = "Salvando nova senha...";
+  try {
+    const payload = await fetchJson("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nova_senha: newPassword, confirmar_senha: confirmPassword }),
+    });
+    currentUser = payload.user;
+    currentUserCatalog = { groups: payload.groups || [], levels: payload.levels || [] };
+    status.textContent = payload.message || "Senha alterada com sucesso.";
+    window.location.reload();
+  } catch (error) {
+    status.textContent = error.message;
+  }
 }
 
 function usersElements() {
@@ -7801,20 +7842,25 @@ function clearUserForm() {
   document.getElementById("user-id").value = "";
   document.getElementById("user-name").value = "";
   document.getElementById("user-login").value = "";
+  document.getElementById("user-email").value = "";
   document.getElementById("user-password").value = "";
   document.getElementById("user-status").value = "Ativo";
   document.getElementById("user-type").value = "usuario";
+  document.getElementById("user-force-password-change").checked = true;
   renderUserPermissionGroups({});
-  document.getElementById("user-form-status").textContent = "";
+  document.getElementById("user-form-status").textContent = "Novo usuario pronto para cadastro.";
+  document.getElementById("user-name").focus();
 }
 
 function fillUserForm(user) {
   document.getElementById("user-id").value = user.id || "";
   document.getElementById("user-name").value = user.nome || "";
   document.getElementById("user-login").value = user.login || "";
+  document.getElementById("user-email").value = user.email || "";
   document.getElementById("user-password").value = "";
   document.getElementById("user-status").value = user.status || "Ativo";
   document.getElementById("user-type").value = user.tipo || "usuario";
+  document.getElementById("user-force-password-change").checked = Boolean(user.trocar_senha_primeiro_acesso);
   renderUserPermissionGroups(user.permissions || {});
   document.getElementById("user-form-status").textContent = `Editando ${user.nome || user.login}.`;
 }
@@ -7868,9 +7914,11 @@ async function saveUser(event) {
     id: document.getElementById("user-id").value,
     nome: document.getElementById("user-name").value,
     login: document.getElementById("user-login").value,
+    email: document.getElementById("user-email").value,
     senha: document.getElementById("user-password").value,
     status: document.getElementById("user-status").value,
     tipo: document.getElementById("user-type").value,
+    trocar_senha_primeiro_acesso: document.getElementById("user-force-password-change").checked,
     permissions,
   };
   const status = document.getElementById("user-form-status");
@@ -8010,7 +8058,7 @@ function renderFollowUp(payload) {
   const clients = new Set(rows.map((row) => row.client_id).filter(Boolean)).size;
   elements.summary.innerHTML = `
     <article><span>Atendimentos</span><strong>${formatNumber.format(payload.total || 0)}</strong></article>
-    <article><span>Clientes ˙nicos</span><strong>${formatNumber.format(clients)}</strong></article>
+    <article><span>Clientes √∫nicos</span><strong>${formatNumber.format(clients)}</strong></article>
     <article><span>Com agenda</span><strong>${formatNumber.format(scheduled)}</strong></article>
     <article><span>Prob. 7 a 10</span><strong>${formatNumber.format(highProbability)}</strong></article>
   `;
@@ -8067,6 +8115,8 @@ function toggleFollowUpDetail(index) {
 
 async function init() {
   document.getElementById("login-form").addEventListener("submit", handleLogin);
+  document.getElementById("password-change-form").addEventListener("submit", handlePasswordChange);
+  document.getElementById("password-change-logout").addEventListener("click", logout);
   document.getElementById("logout-button").addEventListener("click", logout);
   repairReconstructedLayout();
   if (!await checkAuthSession()) {
@@ -8424,7 +8474,7 @@ async function init() {
   document.getElementById("prices-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-prices",
     panelId: "prices-import-result-panel",
-    defaultButton: "Importar tabela de preÁos",
+    defaultButton: "Importar tabela de pre√ßos",
     loadingButton: "Importando...",
     render: renderPriceImportResult,
   }));

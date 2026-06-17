@@ -4,12 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CRM Ionlab</title>
-    <link rel="stylesheet" href="/vendas/styles.css?v=20260613-remover-envios1">
+    <link rel="stylesheet" href="/styles.css?v=20260617-email-primeira-senha1">
   </head>
   <body>
     <section class="login-screen auth-hidden" id="login-screen">
       <form class="login-card" id="login-form">
-        <img src="/vendas/assets/ion_logo.jpg" alt="Ionlab">
+        <img src="/assets/ion_logo.jpg" alt="Ionlab">
         <p class="eyebrow">CRM Ionlab</p>
         <h1>Acesso ao sistema</h1>
         <label>
@@ -25,11 +25,31 @@
       </form>
     </section>
 
+    <section class="login-screen auth-hidden" id="password-change-screen">
+      <form class="login-card" id="password-change-form">
+        <img src="/assets/ion_logo.jpg" alt="Ionlab">
+        <p class="eyebrow">Seguranca</p>
+        <h1>Definir nova senha</h1>
+        <p class="muted">Para continuar, crie uma senha nova para o seu acesso.</p>
+        <label>
+          Nova senha
+          <input id="password-change-new" type="password" autocomplete="new-password" required minlength="6">
+        </label>
+        <label>
+          Confirmar senha
+          <input id="password-change-confirm" type="password" autocomplete="new-password" required minlength="6">
+        </label>
+        <button class="primary-action" type="submit">Salvar nova senha</button>
+        <button class="secondary-action" id="password-change-logout" type="button">Sair</button>
+        <p class="muted" id="password-change-status">A senha precisa ter pelo menos 6 caracteres.</p>
+      </form>
+    </section>
+
     <div class="app-shell auth-hidden" id="app-shell">
       <aside class="sidebar">
         <div class="brand">
           <div class="brand-mark">
-            <img src="/vendas/assets/ion_logo.jpg" alt="Ionlab">
+            <img src="/assets/ion_logo.jpg" alt="Ionlab">
           </div>
           <div>
             <strong>Ionlab</strong>
@@ -94,17 +114,13 @@
             <span class="nav-icon">!</span>
             Bloqueios
           </button>
-          <button class="nav-item" data-view="users">
-            <span class="nav-icon">U</span>
-            Usuarios
-          </button>
         </nav>
       </aside>
 
       <main class="content">
         <section class="topbar">
           <div class="topbar-title">
-            <img class="topbar-logo" src="/vendas/assets/ion_logo.jpg" alt="Ionlab">
+            <img class="topbar-logo" src="/assets/ion_logo.jpg" alt="Ionlab">
             <div>
               <p class="eyebrow">CRM Ionlab</p>
               <h1 id="page-title">Pagina principal</h1>
@@ -139,7 +155,6 @@
               <button class="secondary-action" data-view="regions">Regiões</button>
               <button class="secondary-action" data-view="follow-up">Follow-UP Atendimentos</button>
               <button class="secondary-action" data-view="blocked-clients">Bloqueios</button>
-              <button class="secondary-action" data-view="users">Usuarios</button>
             </div>
           </div>
 
@@ -697,6 +712,7 @@
             <button class="routine-tab" type="button" data-routine="costing-fabricated">Custeio Fabricado</button>
             <button class="routine-tab" type="button" data-view="vendors">Vendedores</button>
             <button class="routine-tab" type="button" data-view="regions">Regiões</button>
+            <button class="routine-tab" type="button" data-routine="users">Usuários</button>
           </div>
 
           <div class="routine visible" id="sales-routine">
@@ -967,6 +983,79 @@
               </div>
             </div>
           </div>
+
+          <div class="routine" id="users-routine">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Sistema</p>
+              <h2>Usuarios e permissoes</h2>
+              <p class="muted">Cadastre usuarios e defina permissoes por rotina.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Pesquisa
+                <input id="users-search" type="search" placeholder="Nome, login ou tipo">
+              </label>
+              <button class="primary-action" id="user-new-button" type="button">Novo usuario</button>
+            </div>
+          </div>
+
+          <div class="block-layout users-layout">
+            <form id="user-form" class="vendor-form">
+              <input id="user-id" type="hidden">
+              <label>
+                Nome
+                <input id="user-name" type="text" required placeholder="Nome do usuario">
+              </label>
+              <label>
+                Login
+                <input id="user-login" type="text" required placeholder="login">
+              </label>
+              <label>
+                E-mail
+                <input id="user-email" type="email" placeholder="email@empresa.com.br">
+              </label>
+              <label>
+                Senha
+                <input id="user-password" type="password" placeholder="Preencha para definir ou alterar">
+              </label>
+              <label class="checkbox-row">
+                <input id="user-force-password-change" type="checkbox">
+                <span>Exigir nova senha no primeiro acesso</span>
+              </label>
+              <label>
+                Status
+                <select id="user-status">
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                </select>
+              </label>
+              <label>
+                Tipo
+                <select id="user-type">
+                  <option value="usuario">Usuario</option>
+                  <option value="master">Master</option>
+                </select>
+              </label>
+              <div class="permission-groups" id="user-permission-groups"></div>
+              <div class="vendor-actions">
+                <button class="primary-action" type="submit">Salvar usuario</button>
+                <button class="secondary-action" id="user-clear-button" type="button">Limpar</button>
+              </div>
+              <p class="muted" id="user-form-status"></p>
+            </form>
+
+            <div class="table-panel">
+              <div class="table-status" id="users-status">Carregando usuarios...</div>
+              <div class="table-scroll">
+                <table>
+                  <thead id="users-table-head"></thead>
+                  <tbody id="users-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
         </section>
 
         <section class="view" id="sales-table-view">
@@ -2053,72 +2142,7 @@
             </div>
           </div>
         </section>
-
-        <section class="view" id="users-view">
-          <div class="section-header table-heading">
-            <div>
-              <p class="eyebrow">Sistema</p>
-              <h2>Usuarios e permissoes</h2>
-              <p class="muted">Cadastre usuarios e defina permissoes por rotina.</p>
-            </div>
-            <div class="table-tools">
-              <label>
-                Pesquisa
-                <input id="users-search" type="search" placeholder="Nome, login ou tipo">
-              </label>
-              <button class="primary-action" id="user-new-button" type="button">Novo usuario</button>
-            </div>
-          </div>
-
-          <div class="block-layout users-layout">
-            <form id="user-form" class="vendor-form">
-              <input id="user-id" type="hidden">
-              <label>
-                Nome
-                <input id="user-name" type="text" required placeholder="Nome do usuario">
-              </label>
-              <label>
-                Login
-                <input id="user-login" type="text" required placeholder="login">
-              </label>
-              <label>
-                Senha
-                <input id="user-password" type="password" placeholder="Preencha para definir ou alterar">
-              </label>
-              <label>
-                Status
-                <select id="user-status">
-                  <option value="Ativo">Ativo</option>
-                  <option value="Inativo">Inativo</option>
-                </select>
-              </label>
-              <label>
-                Tipo
-                <select id="user-type">
-                  <option value="usuario">Usuario</option>
-                  <option value="master">Master</option>
-                </select>
-              </label>
-              <div class="permission-groups" id="user-permission-groups"></div>
-              <div class="vendor-actions">
-                <button class="primary-action" type="submit">Salvar usuario</button>
-                <button class="secondary-action" id="user-clear-button" type="button">Limpar</button>
-              </div>
-              <p class="muted" id="user-form-status"></p>
-            </form>
-
-            <div class="table-panel">
-              <div class="table-status" id="users-status">Carregando usuarios...</div>
-              <div class="table-scroll">
-                <table>
-                  <thead id="users-table-head"></thead>
-                  <tbody id="users-table-body"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
+</main>
     </div>
 
     <script>
@@ -2139,7 +2163,7 @@
         document.body.appendChild(box);
       });
     </script>
-    <script src="/vendas/app.js?v=20260613-remover-envios1"></script>
+    <script src="/app.js?v=20260617-email-primeira-senha1"></script>
   </body>
 </html>
 

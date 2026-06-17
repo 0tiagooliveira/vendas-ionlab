@@ -5753,9 +5753,11 @@ def default_master_user() -> dict:
         "id": "master",
         "nome": "Usuario Master",
         "login": "master",
+        "email": "",
         "senha_hash": password_hash("master"),
         "status": "Ativo",
         "tipo": "master",
+        "trocar_senha_primeiro_acesso": False,
         "permissions": normalize_permissions({}, "edit"),
         "_criado_em": now,
         "_atualizado_em": now,
@@ -5784,8 +5786,10 @@ def user_public_record(user: dict) -> dict:
         "id": user.get("id"),
         "nome": user.get("nome"),
         "login": user.get("login"),
+        "email": user.get("email") or "",
         "status": user.get("status") or "Ativo",
         "tipo": user.get("tipo") or "usuario",
+        "trocar_senha_primeiro_acesso": bool(user.get("trocar_senha_primeiro_acesso")),
         "permissions": normalize_permissions(
             user.get("permissions"),
             "edit" if user.get("tipo") == "master" else "blocked",
@@ -5817,6 +5821,7 @@ def users_payload(query: str = ""):
         "columns": [
             {"key": "nome", "label": "Nome"},
             {"key": "login", "label": "Login"},
+            {"key": "email", "label": "E-mail"},
             {"key": "status", "label": "Status"},
             {"key": "tipo", "label": "Tipo"},
         ],
@@ -5857,14 +5862,14 @@ def auth_login_payload(payload: dict):
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
     save_json(auth_sessions_file(), sessions)
-    return {"token": token, "user": user_public_record(user), **user_catalog_payload()}
+    return {"token": token, "user": user_public_record(user), "force_password_change": bool(user.get("trocar_senha_primeiro_acesso")), **user_catalog_payload()}
 
 
 def auth_session_payload(token: str):
     user = current_user_from_token(token)
     if not user:
         return {"authenticated": False, **user_catalog_payload()}
-    return {"authenticated": True, "user": user_public_record(user), **user_catalog_payload()}
+    return {"authenticated": True, "user": user_public_record(user), "force_password_change": bool(user.get("trocar_senha_primeiro_acesso")), **user_catalog_payload()}
 
 
 def auth_logout_payload(token: str):
@@ -5873,6 +5878,31 @@ def auth_logout_payload(token: str):
         sessions.pop(token, None)
         save_json(auth_sessions_file(), sessions)
     return {"message": "Sessao encerrada."}
+
+
+def change_password_payload(payload: dict, token: str):
+    user = current_user_from_token(token)
+    if not user:
+        raise ValueError("Sessao expirada. Entre novamente.")
+    new_password = str(payload.get("nova_senha") or "").strip()
+    confirm_password = str(payload.get("confirmar_senha") or "").strip()
+    if len(new_password) < 6:
+        raise ValueError("A nova senha deve ter pelo menos 6 caracteres.")
+    if new_password != confirm_password:
+        raise ValueError("A confirmacao da senha nao confere.")
+    if user.get("senha_hash") == password_hash(new_password):
+        raise ValueError("A nova senha deve ser diferente da senha atual.")
+    users = load_users()
+    now = datetime.now().isoformat(timespec="seconds")
+    for item in users:
+        if item.get("id") == user.get("id"):
+            item["senha_hash"] = password_hash(new_password)
+            item["trocar_senha_primeiro_acesso"] = False
+            item["_atualizado_em"] = now
+            user = item
+            break
+    save_json(users_file(), users)
+    return {"message": "Senha alterada com sucesso.", "user": user_public_record(user), **user_catalog_payload()}
 
 
 def require_master_user(token: str):
@@ -5915,8 +5945,10 @@ def save_user_payload(payload: dict, token: str):
     target.update({
         "nome": name,
         "login": login,
+        "email": str(normalize_record(payload.get("email")) or "").strip(),
         "status": "Ativo" if payload.get("status") == "Ativo" else "Inativo",
         "tipo": user_type,
+        "trocar_senha_primeiro_acesso": bool(payload.get("trocar_senha_primeiro_acesso")),
         "permissions": normalize_permissions(payload.get("permissions"), "edit" if user_type == "master" else "blocked"),
         "_atualizado_em": now,
     })
@@ -9438,6 +9470,15 @@ class CRMHandler(BaseHTTPRequestHandler):
             try:
                 token = self.headers.get("X-Auth-Token", "")
                 return self.send_json(auth_logout_payload(token))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/auth/change-password":
+            try:
+                token = self.headers.get("X-Auth-Token", "")
+                content_length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
+                return self.send_json(change_password_payload(payload, token))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
