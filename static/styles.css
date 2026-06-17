@@ -1525,6 +1525,48 @@ h3 {
   display: grid;
 }
 
+.daybyday-extra-contacts {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.daybyday-extra-contacts-head {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.daybyday-extra-contacts-head span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 3px;
+}
+
+.daybyday-extra-contacts-list {
+  display: grid;
+  gap: 10px;
+}
+
+.daybyday-extra-contact-row {
+  align-items: end;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  padding-top: 12px;
+}
+
+.mini-action.danger {
+  border-color: rgba(190, 24, 44, 0.28);
+  color: #be123c;
+}
+
 .daybyday-form input,
 .daybyday-form select,
 .daybyday-form textarea {
@@ -4041,6 +4083,21 @@ select option.city-option-added {
   align-items: center;
   padding: 0 16px;
   font-weight: 700;
+}
+
+.vendor-link-warning {
+  align-items: flex-start;
+  background: #fff1f2;
+  border: 1px solid rgba(190, 18, 60, 0.32);
+  border-radius: 8px;
+  color: #9f1239;
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.vendor-link-warning p {
+  margin: 0;
 }
 
 .table-scroll {

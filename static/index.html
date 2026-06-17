@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CRM Ionlab</title>
-    <link rel="stylesheet" href="/styles.css?v=20260617-email-primeira-senha1">
+    <link rel="stylesheet" href="/styles.css?v=20260617-vinculo-usuario-codigo1">
   </head>
   <body>
     <section class="login-screen auth-hidden" id="login-screen">
@@ -1102,6 +1102,7 @@
                 Pesquisa
                 <input id="clients-table-search" type="search" placeholder="Nome, documento, cidade...">
               </label>
+              <button class="secondary-action" id="clients-table-export-button" type="button">Exportar para Excel</button>
             </div>
           </div>
 
@@ -1717,6 +1718,12 @@
                   <input id="vendor-login" type="text" placeholder="usuario.sistema">
                 </label>
                 <label>
+                  Usuário vinculado
+                  <select id="vendor-linked-user">
+                    <option value="">Selecione um usuário cadastrado</option>
+                  </select>
+                </label>
+                <label>
                   Senha de acesso
                   <input id="vendor-password" type="password" placeholder="Preencha para definir ou alterar">
                 </label>
@@ -2072,6 +2079,7 @@
                 </select>
               </label>
               <button class="primary-action" id="follow-up-load" type="button">Buscar</button>
+              <button class="secondary-action" id="follow-up-export" type="button">Exportar para Excel</button>
             </div>
 
             <div class="follow-up-summary" id="follow-up-summary"></div>
@@ -2163,7 +2171,7 @@
         document.body.appendChild(box);
       });
     </script>
-    <script src="/app.js?v=20260617-email-primeira-senha1"></script>
+    <script src="/app.js?v=20260617-vinculo-usuario-codigo1"></script>
   </body>
 </html>
 

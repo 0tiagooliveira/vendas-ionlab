@@ -175,7 +175,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260617-email-primeira-senha1";
+const appAssetVersion = "20260617-vinculo-usuario-codigo1";
 const apiMemoryCache = new Map();
 const fastCacheMs = 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
@@ -717,13 +717,51 @@ async function renderHomeVendorPages() {
     );
   }
 
-  grid.innerHTML = activeVendors.map((vendor) => `
+  const allActiveVendors = [...activeVendors];
+  const isMaster = currentUser?.tipo === "master";
+  const currentUserId = currentUser?.id || "";
+  const currentUserIdKey = normalizeSearchText(currentUserId);
+  const currentLogin = currentUser?.login || "";
+  const currentLoginKey = normalizeSearchText(currentLogin);
+  const linkedUserVendors = allActiveVendors.filter((vendor) => String(vendor.usuario_vinculado_id || "").trim());
+  const filledLoginVendors = allActiveVendors.filter((vendor) => String(vendor.login_acesso || vendor.login || "").trim());
+  if (!isMaster) {
+    activeVendors = activeVendors.filter((vendor) =>
+      (currentUserIdKey && normalizeSearchText(vendor.usuario_vinculado_id || "") === currentUserIdKey)
+      || (currentLoginKey && normalizeSearchText(vendor.login_acesso || vendor.login || "") === currentLoginKey)
+    );
+  }
+
+  const cards = activeVendors.map((vendor) => `
     <a class="home-vendor-card" href="${escapeHtml(vendor.pagina_vendedor)}?v=${appAssetVersion}">
       <span>${escapeHtml(vendor.empresa || vendor.empresa_nome || "")}</span>
       <strong>${escapeHtml(vendor.nome_completo || "Vendedor")}</strong>
       <small>Entrar no painel individual</small>
     </a>
-  `).join("") || '<div class="table-status">Nenhum vendedor ativo encontrado.</div>';
+  `).join("");
+  if (cards) {
+    grid.innerHTML = cards;
+    return;
+  }
+  if (isMaster) {
+    grid.innerHTML = '<div class="table-status">Nenhum vendedor ativo encontrado.</div>';
+    return;
+  }
+  const diagnosticMessage = !currentLoginKey
+    ? "a sessão atual não informou um login de usuário válido."
+    : linkedUserVendors.length
+      ? `existem ${formatNumber.format(linkedUserVendors.length)} vendedor(es) ativo(s) com Usuário vinculado preenchido, mas nenhum está com o código do usuário atual "${escapeHtml(currentUserId || currentLogin)}".`
+      : filledLoginVendors.length
+      ? `existem ${formatNumber.format(filledLoginVendors.length)} vendedor(es) ativo(s) com Login de acesso preenchido, mas nenhum está igual ao login atual "${escapeHtml(currentLogin)}".`
+      : "nenhum vendedor ativo está com Usuário vinculado ou Login de acesso preenchido.";
+  grid.innerHTML = `
+    <div class="table-status vendor-link-warning">
+      <strong>Nenhuma página de vendedor vinculada ao seu login.</strong>
+      <p>Motivo: ${diagnosticMessage}</p>
+      <p>Usuário atual identificado: <b>${escapeHtml(currentUserId || "sem código")}</b>. Login: <b>${escapeHtml(currentLogin || "não identificado")}</b>. Tipo de usuário: <b>${escapeHtml(currentUser?.tipo || "não identificado")}</b>.</p>
+      <p>Confirme se o vendedor está Ativo, se o usuário está Ativo e se o campo Usuário vinculado no cadastro do vendedor aponta para o código deste usuário. O Login de acesso fica apenas como compatibilidade. Depois clique em Sair e entre novamente.</p>
+    </div>
+  `;
 }
 
 function setupProspectPeriodControls() {
@@ -2315,6 +2353,7 @@ function renderVendorDayByDayList(title, rows, statusKey) {
             <div class="daybyday-client-main">
               <span class="client-code">${escapeHtml(client.codigo || client.id || "")}</span>
               <strong>${escapeHtml(client.nome || "")}</strong>
+              <span>CNPJ: ${escapeHtml(client.documento || "Não informado")}</span>
               <span>${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - ") || "Localidade não informada")}</span>
             </div>
             <div class="daybyday-client-meta">
@@ -2499,6 +2538,60 @@ function renderVendorDayByDayHistory(history) {
   `;
 }
 
+function dayByDayContactRow(contact = {}) {
+  return `
+    <div class="daybyday-extra-contact-row">
+      <label>Nome do contato <input type="text" data-extra-contact-field="nome" value="${escapeHtml(contact.nome || "")}" placeholder="Nome do contato"></label>
+      <label>Telefone com DDD <input type="text" data-extra-contact-field="telefone_ddd" value="${escapeHtml(contact.telefone_ddd || "")}" placeholder="(00) 0000-0000"></label>
+      <label>WhatsApp <input type="text" data-extra-contact-field="whatsapp" value="${escapeHtml(contact.whatsapp || "")}" placeholder="(00) 00000-0000"></label>
+      <label>E-mails de contato <input type="text" data-extra-contact-field="emails_contato" value="${escapeHtml(contact.emails_contato || "")}" placeholder="email@cliente.com.br"></label>
+      <button class="mini-action danger" type="button" data-remove-extra-contact>Remover</button>
+    </div>
+  `;
+}
+
+function setupDayByDayExtraContacts(contacts = []) {
+  const list = document.getElementById("daybyday-extra-contacts-list");
+  const addButton = document.getElementById("daybyday-add-contact");
+  if (!list || !addButton) {
+    return;
+  }
+  const renderRows = (items) => {
+    list.innerHTML = (items || []).map(dayByDayContactRow).join("") || '<div class="empty-state compact">Nenhum contato adicional cadastrado.</div>';
+    list.querySelectorAll("[data-remove-extra-contact]").forEach((button) => {
+      button.addEventListener("click", () => {
+        button.closest(".daybyday-extra-contact-row")?.remove();
+        if (!list.querySelector(".daybyday-extra-contact-row")) {
+          list.innerHTML = '<div class="empty-state compact">Nenhum contato adicional cadastrado.</div>';
+        }
+      });
+    });
+  };
+  addButton.addEventListener("click", () => {
+    list.querySelector(".empty-state")?.remove();
+    list.insertAdjacentHTML("beforeend", dayByDayContactRow());
+    list.querySelectorAll("[data-remove-extra-contact]").forEach((button) => {
+      button.onclick = () => {
+        button.closest(".daybyday-extra-contact-row")?.remove();
+        if (!list.querySelector(".daybyday-extra-contact-row")) {
+          list.innerHTML = '<div class="empty-state compact">Nenhum contato adicional cadastrado.</div>';
+        }
+      };
+    });
+  });
+  renderRows(contacts);
+}
+
+function collectDayByDayExtraContacts(formElement) {
+  return Array.from(formElement.querySelectorAll(".daybyday-extra-contact-row")).map((row) => {
+    const contact = {};
+    row.querySelectorAll("[data-extra-contact-field]").forEach((input) => {
+      contact[input.dataset.extraContactField] = input.value.trim();
+    });
+    return contact;
+  }).filter((contact) => Object.values(contact).some(Boolean));
+}
+
 function renderVendorDayByDayClientForm() {
   const detail = currentVendorDayByDayClient;
   const content = document.getElementById("vendor-daybyday-content");
@@ -2516,7 +2609,7 @@ function renderVendorDayByDayClientForm() {
         <div>
           <p class="eyebrow">${escapeHtml(client.status || "")}</p>
           <h4>${escapeHtml(client.nome || "")}</h4>
-          <span>${escapeHtml(client.codigo || "")} | ${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - "))} | Última compra: ${escapeHtml(client.ultima_compra || "")}</span>
+          <span>${escapeHtml(client.codigo || "")} | CNPJ: ${escapeHtml(client.documento || "Não informado")} | ${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - "))} | Última compra: ${escapeHtml(client.ultima_compra || "")}</span>
           <button class="mini-action" type="button" id="daybyday-history-button">Contatos Anteriores</button>
         </div>
       </div>
@@ -2536,6 +2629,16 @@ function renderVendorDayByDayClientForm() {
         <label>Telefone com DDD <input name="telefone_ddd" value="${escapeHtml(form.telefone_ddd || client.telefone || "")}" placeholder="(00) 0000-0000"></label>
         <label>WhatsApp <input name="whatsapp" value="${escapeHtml(form.whatsapp || "")}" placeholder="(00) 00000-0000"></label>
         <label>E-mails de contato <input name="emails_contato" value="${escapeHtml(form.emails_contato || client.email || "")}" placeholder="email@cliente.com.br"></label>
+        <section class="daybyday-extra-contacts full">
+          <div class="daybyday-extra-contacts-head">
+            <div>
+              <strong>Contatos adicionais</strong>
+              <span>Cadastre quantos contatos forem necessários para este cliente.</span>
+            </div>
+            <button class="secondary" type="button" id="daybyday-add-contact">Adicionar novo contato</button>
+          </div>
+          <div class="daybyday-extra-contacts-list" id="daybyday-extra-contacts-list"></div>
+        </section>
         <label>Cliente vende apenas em Licitação ${yesNoSelect("vende_licitacao", form.vende_licitacao || "")}</label>
         ${isInactiveClient ? `<label>Motivo de nao ter mais compra ${noPurchaseReasonSelect(form.motivo_sem_compra || "")}</label>` : ""}
         <label>Cliente tem ecommerce ${yesNoSelect("tem_ecommerce", form.tem_ecommerce || "")}</label>
@@ -2620,6 +2723,7 @@ function renderVendorDayByDayClientForm() {
   syncProblemFields();
   syncGroupFields();
   syncScheduleFields();
+  setupDayByDayExtraContacts(form.contatos_adicionais || []);
   content.querySelector("#daybyday-back-list").addEventListener("click", renderVendorDayByDay);
   content.querySelector("#daybyday-cancel-form").addEventListener("click", renderVendorDayByDay);
   content.querySelector("#daybyday-client-form").addEventListener("submit", saveVendorDayByDayClient);
@@ -2767,6 +2871,7 @@ async function saveVendorDayByDayClient(event) {
   const formData = new FormData(formElement);
   const form = Object.fromEntries(formData.entries());
   form.interesse_agrp = formData.getAll("interesse_agrp");
+  form.contatos_adicionais = collectDayByDayExtraContacts(formElement);
   status.textContent = "Salvando atendimento...";
   try {
     const saved = await fetchJson("/api/vendor-day-by-day/client", {
@@ -4073,6 +4178,34 @@ function saveLocalVendorRows(company, rows) {
   localStorage.setItem(vendorStorageKey(company), JSON.stringify(rows));
 }
 
+function localUserRows() {
+  const stored = localStorage.getItem("crm-usuarios-cache");
+  return stored ? JSON.parse(stored) : [];
+}
+
+async function loadVendorLinkedUserOptions(selectedUserId = "") {
+  const select = document.getElementById("vendor-linked-user");
+  if (!select) {
+    return;
+  }
+  let users = currentUsersPayload?.rows || [];
+  if (!users.length) {
+    try {
+      const payload = await fetchJson("/api/users?q=");
+      users = payload.rows || [];
+      currentUsersPayload = payload;
+      localStorage.setItem("crm-usuarios-cache", JSON.stringify(users));
+    } catch (error) {
+      users = localUserRows();
+    }
+  }
+  select.innerHTML = '<option value="">Selecione um usuário cadastrado</option>' + users
+    .filter((user) => (user.status || "Ativo") === "Ativo")
+    .map((user) => `<option value="${escapeHtml(user.id || "")}">${escapeHtml(`${user.id || ""} - ${user.nome || user.login || ""} (${user.login || "sem login"})`)}</option>`)
+    .join("");
+  select.value = selectedUserId || "";
+}
+
 function localVendorsPayload(company, query = "") {
   const rows = localVendorRows(company);
   const normalizedQuery = normalizeLocalText(query);
@@ -4096,6 +4229,7 @@ function localVendorsPayload(company, query = "") {
       { key: "status", label: "Status" },
       { key: "tipo_usuario", label: "Tipo usuario" },
       { key: "nome_completo", label: "Nome completo" },
+      { key: "usuario_vinculado_nome", label: "Usuario vinculado" },
       { key: "login_acesso", label: "Login" },
       { key: "acesso_configurado", label: "Acesso" },
       { key: "telefone", label: "Telefone" },
@@ -4150,6 +4284,8 @@ function saveLocalVendor(payload) {
     email: payload.email,
     foto_vendedor: payload.foto_vendedor || row.foto_vendedor || "",
     login_acesso: payload.login_acesso,
+    usuario_vinculado_id: payload.usuario_vinculado_id,
+    usuario_vinculado_nome: payload.usuario_vinculado_nome,
     tipo_usuario: payload.tipo_usuario === "Vendedor Lider/Supervisor" ? "Vendedor Lider/Supervisor" : "Vendedor",
     status: payload.status === "Ativo" ? "Ativo" : "Inativo",
     empresas_acesso: payload.empresas_acesso.length ? payload.empresas_acesso : [company],
@@ -5501,6 +5637,7 @@ function clearVendorForm() {
   document.getElementById("vendor-whatsapp").value = "";
   document.getElementById("vendor-email").value = "";
   document.getElementById("vendor-login").value = "";
+  document.getElementById("vendor-linked-user").value = "";
   document.getElementById("vendor-password").value = "";
   document.getElementById("vendor-status").value = "Inativo";
   document.getElementById("vendor-user-type").value = "Vendedor";
@@ -5510,6 +5647,7 @@ function clearVendorForm() {
   currentVendorAssignments = { ufs: [], cidades: [], clientes_especificos: [] };
   renderVendorPhotoPreview("");
   renderVendorAccessOptions();
+  loadVendorLinkedUserOptions("");
   renderVendorUfOptions([]);
   renderVendorAssignmentLists();
   applyVendorPermissionState();
@@ -5532,6 +5670,7 @@ async function editVendor(vendorId) {
   document.getElementById("vendor-whatsapp").value = vendor.whatsapp || "";
   document.getElementById("vendor-email").value = vendor.email || "";
   document.getElementById("vendor-login").value = vendor.login_acesso || "";
+  await loadVendorLinkedUserOptions(vendor.usuario_vinculado_id || "");
   document.getElementById("vendor-password").value = "";
   document.getElementById("vendor-status").value = vendor.status === "Ativo" ? "Ativo" : "Inativo";
   document.getElementById("vendor-user-type").value = vendor.tipo_usuario === "Vendedor Lider/Supervisor" ? "Vendedor Lider/Supervisor" : "Vendedor";
@@ -5552,6 +5691,7 @@ async function loadVendors() {
   const query = document.getElementById("vendors-search").value.trim();
   const status = document.getElementById("vendors-status");
   status.textContent = "Carregando vendedores...";
+  await loadVendorLinkedUserOptions(document.getElementById("vendor-linked-user")?.value || "");
   await loadVendorAssignmentOptions();
 
   try {
@@ -6282,6 +6422,7 @@ function scheduleVendorsLoad() {
 }
 
 function vendorPayloadFromForm() {
+  const linkedUserSelect = document.getElementById("vendor-linked-user");
   return {
     company: document.getElementById("vendors-company").value || "ionlab",
     actor_role: document.getElementById("vendor-actor-role").value,
@@ -6293,6 +6434,8 @@ function vendorPayloadFromForm() {
     whatsapp: document.getElementById("vendor-whatsapp").value,
     email: document.getElementById("vendor-email").value,
     login_acesso: document.getElementById("vendor-login").value,
+    usuario_vinculado_id: linkedUserSelect.value,
+    usuario_vinculado_nome: linkedUserSelect.selectedOptions?.[0]?.textContent || "",
     senha_acesso: document.getElementById("vendor-password").value,
     status: document.getElementById("vendor-status").value,
     empresas_acesso: selectedVendorAccess(),
@@ -6857,6 +7000,12 @@ function exportCostingTable(tableName) {
   const company = document.getElementById(`${tableName}-table-company`).value || "ionlab";
   const kind = tableName === "costing-fabricated" ? "fabricated" : "imported";
   window.location.href = `/api/export-costing-xlsx?company=${encodeURIComponent(company)}&kind=${encodeURIComponent(kind)}&_=${Date.now()}`;
+}
+
+function exportClientsTable() {
+  const company = document.getElementById("clients-table-company").value || "ionlab";
+  const query = document.getElementById("clients-table-search").value.trim();
+  window.location.href = `/api/export-clients-xlsx?company=${encodeURIComponent(company)}&q=${encodeURIComponent(query)}&_=${Date.now()}`;
 }
 
 async function recalculateStockValue() {
@@ -8025,6 +8174,14 @@ function followUpParams() {
   });
 }
 
+function exportFollowUp() {
+  const params = followUpParams();
+  const token = localStorage.getItem(authTokenKey) || "";
+  params.set("token", token);
+  params.set("_", String(Date.now()));
+  window.location.href = `/api/follow-up/export-xlsx?${params.toString()}`;
+}
+
 async function loadFollowUp() {
   const elements = followUpElements();
   if (!elements.company) {
@@ -8291,10 +8448,12 @@ async function init() {
     await loadFollowUp();
   });
   document.getElementById("follow-up-load").addEventListener("click", loadFollowUp);
+  document.getElementById("follow-up-export").addEventListener("click", exportFollowUp);
   ["follow-up-vendor", "follow-up-region", "follow-up-uf", "follow-up-city", "follow-up-start", "follow-up-end", "follow-up-probability", "follow-up-scheduled"].forEach((id) => {
     document.getElementById(id).addEventListener("change", loadFollowUp);
   });
   document.getElementById("follow-up-client").addEventListener("input", scheduleFollowUpLoad);
+  document.getElementById("clients-table-export-button").addEventListener("click", exportClientsTable);
   document.getElementById("stock-table-export-button").addEventListener("click", exportStockTable);
   document.getElementById("in-transit-table-export-button").addEventListener("click", exportInTransitTable);
   document.getElementById("prices-table-export-button").addEventListener("click", exportPriceTable);

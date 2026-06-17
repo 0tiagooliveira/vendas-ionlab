@@ -43,6 +43,7 @@ SERVER_LOG_FILE = DATA_DIR / "server_logs" / "server.log"
 JSON_CACHE = {}
 PAYLOAD_CACHE = {}
 SHARED_PAYLOAD_CACHE = {}
+RUNTIME_AUTH_SESSIONS = {}
 
 COMPANIES = {
     "ionlab": "Ionlab",
@@ -244,6 +245,7 @@ VENDOR_TABLE_COLUMNS = [
     ("status", "Status"),
     ("tipo_usuario", "Tipo usuario"),
     ("nome_completo", "Nome completo"),
+    ("usuario_vinculado_nome", "Usuario vinculado"),
     ("login_acesso", "Login"),
     ("acesso_configurado", "Acesso"),
     ("pagina_vendedor", "Pagina"),
@@ -2464,6 +2466,7 @@ def vendor_day_by_day_client_row(client_id: str, client: dict, stats: dict, stat
         "id": client_id,
         "codigo": client.get("ID") or client_id,
         "nome": client.get("NOM") or "",
+        "documento": client.get("CGC") or client.get("CNPJ") or client.get("Documento") or "",
         "uf": str(client.get("UF") or "").strip().upper(),
         "cidade": str(client.get("CID") or "").strip(),
         "ddd": client_ddd(client),
@@ -2999,6 +3002,18 @@ def save_vendor_day_by_day_client_payload(payload: dict):
     agrps = raw_form.get("interesse_agrp") or []
     if isinstance(agrps, str):
         agrps = [agrps]
+    extra_contacts = []
+    for contact in raw_form.get("contatos_adicionais") or []:
+        if not isinstance(contact, dict):
+            continue
+        clean_contact = {
+            "nome": normalize_record(contact.get("nome")),
+            "telefone_ddd": normalize_record(contact.get("telefone_ddd")),
+            "whatsapp": normalize_record(contact.get("whatsapp")),
+            "emails_contato": normalize_record(contact.get("emails_contato")),
+        }
+        if any(clean_contact.values()):
+            extra_contacts.append(clean_contact)
     form = {
         "cliente_revenda": normalize_record(raw_form.get("cliente_revenda")),
         "cliente_ainda_operacao": normalize_record(raw_form.get("cliente_ainda_operacao")),
@@ -3024,6 +3039,7 @@ def save_vendor_day_by_day_client_payload(payload: dict):
         "quer_agendar_contato": normalize_record(raw_form.get("quer_agendar_contato")),
         "data_agendamento_contato": normalize_record(raw_form.get("data_agendamento_contato")),
         "descritivo_novo_contato": normalize_record(raw_form.get("descritivo_novo_contato")),
+        "contatos_adicionais": extra_contacts,
     }
     validate_vendor_day_by_day_form(form, client_payload.get("status_key") or "")
     data = load_json(vendor_day_by_day_file(company_id), {"listas": {}, "atendimentos": {}, "contagens": {}})
@@ -3252,9 +3268,12 @@ def vendor_ids_for_user(company_id: str, user: dict) -> set[str]:
     user_id_key = normalize_text((user or {}).get("id"))
     allowed = set()
     for vendor in vendors:
+        linked_user_id = normalize_text(vendor.get("usuario_vinculado_id"))
         vendor_login = normalize_text(vendor.get("login_acesso"))
         vendor_id = normalize_text(vendor.get("id"))
-        if login_key and vendor_login == login_key:
+        if user_id_key and linked_user_id == user_id_key:
+            allowed.add(str(vendor.get("id") or ""))
+        elif login_key and vendor_login == login_key:
             allowed.add(str(vendor.get("id") or ""))
         elif user_id_key and vendor_id == user_id_key:
             allowed.add(str(vendor.get("id") or ""))
@@ -3293,6 +3312,22 @@ def follow_up_form_answers(form: dict) -> list[dict]:
         value = str(value or "").strip()
         if value:
             answers.append({"key": key, "label": label, "value": value})
+    for index, contact in enumerate(form.get("contatos_adicionais") or [], start=1):
+        if not isinstance(contact, dict):
+            continue
+        for key, label in (
+            ("nome", "Nome do contato"),
+            ("telefone_ddd", "Telefone com DDD"),
+            ("whatsapp", "WhatsApp"),
+            ("emails_contato", "E-mails de contato"),
+        ):
+            value = normalize_record(contact.get(key))
+            if value:
+                answers.append({
+                    "key": f"contato_adicional_{index}_{key}",
+                    "label": f"Contato adicional {index} - {label}",
+                    "value": value,
+                })
     return answers
 
 
@@ -3425,6 +3460,43 @@ def follow_up_payload(company_id: str, params: dict, token: str):
         "total": len(filtered),
         "total_registros": len(rows),
     }
+
+
+def follow_up_export_xlsx(company_id: str, params: dict, token: str) -> bytes:
+    payload = follow_up_payload(company_id, params, token)
+    rows = payload.get("rows") or []
+    base_columns = [
+        ("data_label", "Data"),
+        ("empresa", "Empresa"),
+        ("vendedor", "Vendedor"),
+        ("cliente_codigo", "Codigo"),
+        ("cliente_nome", "Cliente"),
+        ("uf", "UF"),
+        ("cidade", "Cidade"),
+        ("ddd", "DDD"),
+        ("status", "Tipo"),
+        ("resumo", "Resumo"),
+        ("probabilidade_compra_futura", "Probabilidade"),
+        ("data_agendamento_contato", "Agenda"),
+        ("descritivo_novo_contato", "Tratativa do novo contato"),
+    ]
+    answer_columns = []
+    seen_labels = set(label for _key, label in base_columns)
+    for row in rows:
+        for answer in row.get("answers") or []:
+            label = normalize_record(answer.get("label"))
+            if label and label not in seen_labels:
+                seen_labels.add(label)
+                answer_columns.append(label)
+    export_rows = []
+    for row in rows:
+        item = {label: row.get(key) for key, label in base_columns}
+        for answer in row.get("answers") or []:
+            label = normalize_record(answer.get("label"))
+            if label:
+                item[label] = answer.get("value")
+        export_rows.append(item)
+    return export_records_xlsx(export_rows, [label for _key, label in base_columns] + answer_columns, "Follow-UP")
 
 
 def vendor_region_management_payload(company_id: str, vendor_id_value: str):
@@ -5081,6 +5153,18 @@ def vendor_id(company_id: str, name: str) -> str:
     return f"{company_id}-{key[:48]}"
 
 
+def user_label_by_id(user_id: str) -> str:
+    user_id = str(user_id or "").strip()
+    if not user_id:
+        return ""
+    user = next((item for item in load_users() if str(item.get("id") or "") == user_id), None)
+    if not user:
+        return user_id
+    name = user.get("nome") or user.get("login") or user_id
+    login = user.get("login") or ""
+    return f"{user_id} - {name}" + (f" ({login})" if login and login != name else "")
+
+
 def is_client_record(record: dict) -> bool:
     category = str(record.get("CAT") or "").strip().casefold()
     account_type = str(record.get("CC_DES") or "").strip().casefold()
@@ -5100,6 +5184,8 @@ def vendor_public_record(record: dict) -> dict:
     payload.setdefault("clientes_atendidos", {"ufs": [], "cidades": [], "clientes_especificos": []})
     payload["empresas_acesso"] = allowed
     payload["empresas_acesso_nomes"] = ", ".join(COMPANIES[company_id] for company_id in allowed)
+    payload["usuario_vinculado_id"] = str(record.get("usuario_vinculado_id") or "").strip()
+    payload["usuario_vinculado_nome"] = user_label_by_id(payload["usuario_vinculado_id"])
     payload["acesso_configurado"] = "Configurado" if record.get("senha_hash") or record.get("senha_acesso") else "Pendente"
     page_company = record.get("_empresa_id") or (allowed[0] if allowed else "")
     payload["pagina_vendedor"] = f"/vendedor/{page_company}/{record.get('id')}"
@@ -5135,6 +5221,7 @@ def sync_vendors_from_sales(company_id: str):
             "email": "",
             "foto_vendedor": "",
             "login_acesso": "",
+            "usuario_vinculado_id": "",
             "tipo_usuario": "Vendedor",
             "status": "Inativo",
             "empresas_acesso": [company_id],
@@ -5657,6 +5744,7 @@ def save_vendor_payload(payload: dict):
         "email": str(payload.get("email") or "").strip(),
         "foto_vendedor": str(payload.get("foto_vendedor") or target.get("foto_vendedor") or "").strip(),
         "login_acesso": str(payload.get("login_acesso") or "").strip(),
+        "usuario_vinculado_id": str(payload.get("usuario_vinculado_id") or "").strip(),
         "tipo_usuario": user_type,
         "status": status,
         "empresas_acesso": allowed,
@@ -5837,6 +5925,8 @@ def current_user_from_token(token: str) -> dict | None:
     sessions = load_json(auth_sessions_file(), {})
     session = sessions.get(token) if isinstance(sessions, dict) else None
     if not session:
+        session = RUNTIME_AUTH_SESSIONS.get(token)
+    if not session:
         return None
     user_id = session.get("user_id")
     user = next((item for item in load_users() if item.get("id") == user_id), None)
@@ -5861,7 +5951,11 @@ def auth_login_payload(payload: dict):
         "login": user.get("login"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
-    save_json(auth_sessions_file(), sessions)
+    RUNTIME_AUTH_SESSIONS[token] = sessions[token]
+    try:
+        save_json(auth_sessions_file(), sessions)
+    except PermissionError:
+        pass
     return {"token": token, "user": user_public_record(user), "force_password_change": bool(user.get("trocar_senha_primeiro_acesso")), **user_catalog_payload()}
 
 
@@ -5876,7 +5970,11 @@ def auth_logout_payload(token: str):
     sessions = load_json(auth_sessions_file(), {})
     if isinstance(sessions, dict) and token in sessions:
         sessions.pop(token, None)
-        save_json(auth_sessions_file(), sessions)
+        try:
+            save_json(auth_sessions_file(), sessions)
+        except PermissionError:
+            pass
+    RUNTIME_AUTH_SESSIONS.pop(token, None)
     return {"message": "Sessao encerrada."}
 
 
@@ -7662,6 +7760,18 @@ def products_export_xlsx(company_id: str) -> bytes:
     return export_records_xlsx(records, [key for key, _label in PRODUCT_TABLE_COLUMNS], "Cadastro de Produtos")
 
 
+def clients_export_xlsx(company_id: str, query: str = "") -> bytes:
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+
+    records = [
+        record
+        for record in load_json(clients_file(company_id), [])
+        if value_matches(record, query)
+    ]
+    return export_records_xlsx(records, [key for key, _label in CLIENT_TABLE_COLUMNS], "Clientes")
+
+
 def price_table_records_with_cost(company_id: str, save: bool = False) -> list[dict]:
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
@@ -7724,7 +7834,7 @@ def all_costing_info_by_reference(preferred_company_id: str = "") -> dict:
 
 
 def missing_product_classification(value) -> bool:
-    text = normalize_record(value).upper()
+    text = str(normalize_record(value) or "").strip().upper()
     return not text or text in {"-1", "SEM AGRP", "SEM CADASTRO DE CUSTEIO"}
 
 
@@ -8935,6 +9045,24 @@ class CRMHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+        if path in ("/api/export-clients-xlsx", "/api/export-clients", "/api/clients/export"):
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            query = params.get("q", [""])[0]
+            try:
+                content = clients_export_xlsx(company_id, query)
+                filename = f"clientes_{company_id}.xlsx"
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
         if path in ("/api/export-stock-missing-cost", "/api/export-stock-missing-cost/", "/api/stock/missing-cost"):
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["ionlab"])[0]
@@ -9376,6 +9504,24 @@ class CRMHandler(BaseHTTPRequestHandler):
             token = self.headers.get("X-Auth-Token", "")
             try:
                 return self.send_json(follow_up_payload(company_id, params, token))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/follow-up/export-xlsx":
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            token = self.headers.get("X-Auth-Token", "") or params.get("token", [""])[0]
+            try:
+                content = follow_up_export_xlsx(company_id, params, token)
+                filename = f"follow_up_atendimentos_{company_id}.xlsx"
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
