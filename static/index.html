@@ -4,12 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CRM Ionlab</title>
-    <link rel="stylesheet" href="/styles.css?v=20260618-ux-login-loading1">
+    <link rel="stylesheet" href="/styles.css?v=20260618-botoes-home-ajuste1">
   </head>
   <body>
     <section class="login-screen auth-hidden" id="login-screen">
       <form class="login-card" id="login-form">
-        <img class="login-logo" src="https://mcusercontent.com/d315c990296355ed94752eef4/images/32c589c6-9323-3173-29cd-8b8cd32b9d67.png" alt="Ionlab">
+        <img src="/assets/ion_logo.jpg" alt="Ionlab">
         <p class="eyebrow">CRM Ionlab</p>
         <h1>Acesso ao sistema</h1>
         <label>
@@ -21,7 +21,6 @@
           <input id="login-password" type="password" autocomplete="current-password" required>
         </label>
         <button class="primary-action" type="submit">Entrar</button>
-        <button class="link-action" id="forgot-password-button" type="button">Esqueci minha senha</button>
         <p class="muted" id="login-status">Usuario inicial: master / master</p>
       </form>
     </section>
@@ -43,26 +42,6 @@
         <button class="primary-action" type="submit">Salvar nova senha</button>
         <button class="secondary-action" id="password-change-logout" type="button">Sair</button>
         <p class="muted" id="password-change-status">A senha precisa ter pelo menos 6 caracteres.</p>
-      </form>
-    </section>
-
-    <section class="login-screen auth-hidden" id="reset-password-screen">
-      <form class="login-card" id="reset-password-form">
-        <img class="login-logo" src="https://mcusercontent.com/d315c990296355ed94752eef4/images/32c589c6-9323-3173-29cd-8b8cd32b9d67.png" alt="Ionlab">
-        <p class="eyebrow">Redefinicao de senha</p>
-        <h1>Criar nova senha</h1>
-        <p class="muted">Informe uma nova senha para concluir a redefinicao do acesso.</p>
-        <label>
-          Nova senha
-          <input id="reset-password-new" type="password" autocomplete="new-password" required minlength="6">
-        </label>
-        <label>
-          Confirmar senha
-          <input id="reset-password-confirm" type="password" autocomplete="new-password" required minlength="6">
-        </label>
-        <button class="primary-action" type="submit">Redefinir senha</button>
-        <button class="secondary-action" id="reset-password-back" type="button">Voltar ao login</button>
-        <p class="muted" id="reset-password-status">A senha precisa ter pelo menos 6 caracteres.</p>
       </form>
     </section>
 
@@ -230,6 +209,18 @@
 
           <section class="dashboard-chart-panel visible" id="dashboard-chart-uf">
             <div class="dashboard-grid">
+              <section class="chart-panel">
+                <div class="chart-title-row">
+                  <div>
+                    <p class="eyebrow">Distribuicao geografica</p>
+                    <h3 id="uf-chart-title">Clientes por estado</h3>
+                    <p class="muted chart-subtitle" id="uf-chart-subtitle"></p>
+                  </div>
+                  <div class="chart-total" id="uf-chart-total">0</div>
+                </div>
+                <div class="uf-chart" id="uf-chart"></div>
+              </section>
+
               <aside class="insight-panel">
                 <div class="insight-card">
                   <span>Total de clientes</span>
@@ -253,18 +244,6 @@
                 </div>
                 <div class="insight-note" id="dashboard-note"></div>
               </aside>
-
-              <section class="chart-panel">
-                <div class="chart-title-row">
-                  <div>
-                    <p class="eyebrow">Distribuicao geografica</p>
-                    <h3 id="uf-chart-title">Clientes por estado</h3>
-                    <p class="muted chart-subtitle" id="uf-chart-subtitle"></p>
-                  </div>
-                  <div class="chart-total" id="uf-chart-total">0</div>
-                </div>
-                <div class="uf-chart" id="uf-chart"></div>
-              </section>
             </div>
           </section>
 
@@ -274,7 +253,7 @@
                 <div>
                   <p class="eyebrow">Atividade comercial</p>
                   <h3 id="activity-chart-title">Clientes Ativos/Inativos por UF - Ionlab</h3>
-                  <p class="muted chart-subtitle">Clientes ativos fizeram pelo menos uma compra no ano selecionado; inativos não compraram nesse período.</p>
+                  <p class="muted chart-subtitle">Ativo = cliente com pelo menos uma compra no ano.</p>
                 </div>
                 <div class="activity-legend">
                   <span><i class="legend-active"></i>Ativos</span>
@@ -291,7 +270,7 @@
                 <div>
                   <p class="eyebrow">Vendedores</p>
                   <h3>Vendedores X Regiões Atendidas</h3>
-                  <p class="muted chart-subtitle">Carteira calculada pela UF, DDD e cidade do cliente, sem depender do vendedor informado na nota fiscal.</p>
+                  <p class="muted chart-subtitle">Calculo feito pela UF, DDD e cidade do cliente, independente do vendedor da nota fiscal.</p>
                 </div>
                 <label class="dashboard-company">
                   Vendedor
@@ -323,7 +302,7 @@
                 <div>
                   <p class="eyebrow">Vendas Anuais</p>
                   <h3 id="dashboard-annual-title">Faturamento anual</h3>
-                  <p class="muted chart-subtitle" id="dashboard-annual-subtitle">Faturamento líquido calculado pelo valor dos produtos, menos frete e descontos.</p>
+                  <p class="muted chart-subtitle" id="dashboard-annual-subtitle">Faturamento liquido: PR_SBT - V_FRETE_NF - V_DESCONTO.</p>
                 </div>
                 <label class="dashboard-company">
                   Ano
@@ -349,7 +328,7 @@
                 <div>
                   <p class="eyebrow">Evolucao Mensal</p>
                   <h3 id="dashboard-monthly-title">Faturamento mensal</h3>
-                  <p class="muted chart-subtitle" id="dashboard-monthly-subtitle">Faturamento líquido mensal calculado pelo valor dos produtos, menos frete e descontos.</p>
+                  <p class="muted chart-subtitle" id="dashboard-monthly-subtitle">Faturamento liquido: PR_SBT - V_FRETE_NF - V_DESCONTO.</p>
                 </div>
                 <div class="dashboard-filter-stack">
                   <label class="dashboard-company">
@@ -389,7 +368,7 @@
                 <div>
                   <p class="eyebrow">Faturamento por Familia</p>
                   <h3 id="dashboard-family-title">Faturamento por AGRP</h3>
-                  <p class="muted chart-subtitle" id="dashboard-family-subtitle">Faturamento líquido por família de produto, já descontando frete e descontos comerciais.</p>
+                  <p class="muted chart-subtitle" id="dashboard-family-subtitle">Faturamento liquido: PR_SBT - V_FRETE_NF - V_DESCONTO.</p>
                 </div>
                 <div class="dashboard-filter-stack">
                   <label class="dashboard-company">

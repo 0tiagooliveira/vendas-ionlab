@@ -113,11 +113,6 @@ let currentVendorRegionPayload = null;
 let currentVendorPageGoalsPayload = null;
 let currentVendorDayByDayPayload = null;
 let currentVendorDayByDayClient = null;
-let currentVendorAgendaKey = "";
-let currentVendorContactReportKey = "";
-let currentVendorDailyContactsKey = "";
-let currentVendorGoalsKey = "";
-let currentQuoteContextKey = "";
 let currentVendorRegionDimension = "ufs";
 let currentVendorRegionIndicator = "quant";
 let currentVendorRegionTarget = "dashboard";
@@ -187,7 +182,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260618-ux-login-loading1";
+const appAssetVersion = "20260618-botoes-home-ajuste1";
 const apiMemoryCache = new Map();
 const fastCacheMs = 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
@@ -255,38 +250,6 @@ function invalidateLoadedViews() {
   dashboardLoaded = false;
   mercadoLivreOverview = { companies: [] };
   currentUsersPayload = null;
-}
-
-function loadingMarkup(message = "Carregando dados...", options = {}) {
-  const rows = options.rows || 4;
-  const compact = options.compact ? " compact" : "";
-  return `
-    <div class="loading-state${compact}" role="status" aria-live="polite">
-      <div class="loading-state-head">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        <span>${escapeHtml(message)}</span>
-      </div>
-      <div class="skeleton-grid" aria-hidden="true">
-        ${Array.from({ length: rows }, () => '<span class="skeleton-line"></span>').join("")}
-      </div>
-    </div>
-  `;
-}
-
-function setLoadingState(target, message = "Carregando dados...", options = {}) {
-  const element = typeof target === "string" ? document.getElementById(target) : target;
-  if (!element) {
-    return;
-  }
-  element.classList.add("is-loading");
-  element.innerHTML = loadingMarkup(message, options);
-}
-
-function clearLoadingState(target) {
-  const element = typeof target === "string" ? document.getElementById(target) : target;
-  if (element) {
-    element.classList.remove("is-loading");
-  }
 }
 
 const viewPermissionMap = {
@@ -754,7 +717,7 @@ async function renderStats(selection = {}) {
   if (!grid) {
     return;
   }
-  grid.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Carregando indicadores do vendedor...")}</div>`;
+  grid.innerHTML = '<div class="table-status">Carregando indicadores do vendedor...</div>';
   try {
     const params = new URLSearchParams();
     if (selection.company) {
@@ -939,7 +902,7 @@ async function renderHomeVendorPages() {
   }
 
   if (grid) {
-    grid.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Carregando vendedores ativos...")}</div>`;
+    grid.innerHTML = '<div class="table-status">Carregando vendedores ativos...</div>';
   }
   let activeVendors = [];
   try {
@@ -1250,7 +1213,7 @@ async function loadDashboard() {
   }
 
   if (!dashboardLoaded || currentDashboardChart === "uf" || currentDashboardChart === "activity") {
-    chart.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Carregando dashboard...")}</div>`;
+    chart.innerHTML = '<div class="table-status">Carregando dashboard...</div>';
 
     try {
       const payload = await fetchJson(`/api/dashboard/clients-by-uf?company=${encodeURIComponent(company)}`);
@@ -1405,13 +1368,13 @@ async function loadDashboardSalesCharts() {
       ? "dashboard-family-status"
       : "dashboard-annual-status");
   if (currentDashboardChart === "monthly-evolution") {
-    monthlyChart.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Carregando evolucao mensal...")}</div>`;
+    monthlyChart.innerHTML = '<div class="table-status">Carregando evolucao mensal...</div>';
   } else if (currentDashboardChart === "family-sales") {
-    familyChart.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Carregando faturamento por familia...")}</div>`;
+    familyChart.innerHTML = '<div class="table-status">Carregando faturamento por familia...</div>';
   } else {
-    annualChart.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Carregando vendas anuais...")}</div>`;
+    annualChart.innerHTML = '<div class="table-status">Carregando vendas anuais...</div>';
   }
-  setLoadingState(status, "Calculando faturamento liquido...", { compact: true, rows: 2 });
+  status.textContent = "Calculando faturamento liquido...";
   try {
     const endpoint = currentDashboardChart === "family-sales" ? "sales-family" : "sales-annual";
     const origin = currentDashboardChart === "family-sales"
@@ -1430,7 +1393,6 @@ async function loadDashboardSalesCharts() {
     } else {
       renderDashboardAnnualSales(payload);
     }
-    clearLoadingState(status);
     status.textContent = `${payload.empresa}: faturamento liquido calculado. Vendas entre empresas do grupo excluidas: ${formatNumber.format(payload.vendas_grupo_excluidas || 0)}.`;
   } catch (error) {
     if (currentDashboardChart === "monthly-evolution") {
@@ -1440,7 +1402,6 @@ async function loadDashboardSalesCharts() {
     } else {
       annualChart.innerHTML = `<div class="table-status">${escapeHtml(error.message)}</div>`;
     }
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -1705,16 +1666,14 @@ async function loadVendorRegionsChart() {
     return;
   }
 
-  setLoadingState(status, "Carregando regiões atendidas...", { compact: true, rows: 2 });
+  status.textContent = "Carregando regiões atendidas...";
   try {
     const payload = await fetchJson(`/api/vendor-regions-data?company=${encodeURIComponent(company)}&vendor_id=${encodeURIComponent(vendorId)}`);
     renderVendorRegions(payload);
-    clearLoadingState(status);
     status.textContent = `${payload.empresa}: regiões calculadas para ${payload.vendedor.nome_completo}.`;
   } catch (error) {
     summary.innerHTML = "";
     sections.innerHTML = "";
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -1757,7 +1716,7 @@ async function loadVendorPageIndicators() {
   const { status, summary, sections } = vendorRegionElements();
   summary.innerHTML = "";
   sections.innerHTML = "";
-  setLoadingState(status, "Carregando indicadores do vendedor...", { compact: true, rows: 2 });
+  status.textContent = "Carregando indicadores do vendedor...";
 
   try {
     const payload = await fetchJson(`/api/vendor-page-data?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`);
@@ -1767,12 +1726,10 @@ async function loadVendorPageIndicators() {
     document.getElementById("vendor-page-subtitle").textContent =
       "Indicadores exclusivos das regioes, DDDs e cidades definidos para este vendedor.";
     renderVendorRegions(payload);
-    clearLoadingState(status);
     status.textContent = `${payload.empresa}: painel individual atualizado para ${payload.vendedor.nome_completo}.`;
   } catch (error) {
     summary.innerHTML = "";
     sections.innerHTML = "";
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -1789,20 +1746,20 @@ function setVendorWorkspaceSection(section) {
     panel.classList.toggle("active", panel.id === `vendor-workspace-${section}`);
   });
   if (section === "clients") {
-    loadVendorRegionClients(false);
+    loadVendorRegionClients(true);
   }
   if (section === "indicators") {
     loadVendorPageIndicators();
-    loadVendorDailyContactsChart(false);
+    loadVendorDailyContactsChart();
   }
   if (section === "agenda") {
-    loadVendorAgenda(false);
+    loadVendorAgenda();
   }
   if (section === "contact-report") {
-    loadVendorContactReport(false);
+    loadVendorContactReport();
   }
   if (section === "goals") {
-    loadVendorPageGoals(false);
+    loadVendorPageGoals();
   }
   if (section === "quick-consult") {
     setTimeout(() => document.getElementById("quick-consult-search")?.focus(), 50);
@@ -1810,7 +1767,7 @@ function setVendorWorkspaceSection(section) {
   if (section === "quotes") {
     if (!loadingSavedCommercialDocument) {
       resetQuoteEditor();
-      loadQuoteWorkspace(false);
+      loadQuoteWorkspace();
     }
     document.getElementById("vendor-workspace-quotes")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -1875,29 +1832,19 @@ function renderSimpleVendorTable(payload, headId, bodyId, emptyText) {
   `).join("") || `<tr><td colspan="${Math.max(1, columns.length)}">${escapeHtml(emptyText)}</td></tr>`;
 }
 
-async function loadQuoteWorkspace(force = false) {
+async function loadQuoteWorkspace() {
   const route = vendorPageRoute();
   const status = document.getElementById("quote-status");
   if (!route || !status) {
     return;
   }
-  const cacheKey = `${route.company}|${route.vendorId}`;
-  if (!force && currentQuoteContext && currentQuoteContextKey === cacheKey) {
-    document.getElementById("quote-number").textContent = currentQuoteContext.proximo_orcamento || "";
-    renderQuoteItems();
-    status.textContent = "Ambiente de orcamentos pronto.";
-    return;
-  }
-  setLoadingState(status, "Carregando ambiente de orcamentos...", { compact: true, rows: 2 });
+  status.textContent = "Carregando ambiente de orcamentos...";
   try {
     currentQuoteContext = await fetchJson(`/api/quotes/context?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&_=${Date.now()}`);
-    currentQuoteContextKey = cacheKey;
     document.getElementById("quote-number").textContent = currentQuoteContext.proximo_orcamento || "";
     renderQuoteItems();
-    clearLoadingState(status);
     status.textContent = "Ambiente de orcamentos pronto.";
   } catch (error) {
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -2031,7 +1978,6 @@ function openSavedCommercialDocument(row, kind, input = null) {
   loadingSavedCommercialDocument = false;
   const status = document.getElementById("sent-quote-status");
   if (status) {
-    clearLoadingState(status);
     status.textContent = kind === "order"
       ? `Pedido ${row.numero || ""} aberto para edicao.`
       : `Orcamento ${row.numero || ""} aberto para edicao.`;
@@ -2050,7 +1996,7 @@ async function searchSavedCommercialDocuments(kind) {
     clearQuoteSuggestions(kind);
     return;
   }
-  suggestions.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Buscando registros...", { compact: true, rows: 2 })}</div>`;
+  suggestions.innerHTML = '<div class="table-status">Buscando registros...</div>';
   suggestions.classList.add("visible");
   const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
   try {
@@ -2088,21 +2034,19 @@ async function openSavedCommercialDocumentFromSearch(kind) {
     if (status) status.textContent = "Digite o numero, cliente ou CNPJ para abrir.";
     return;
   }
-  if (status) setLoadingState(status, "Abrindo registro salvo...", { compact: true, rows: 2 });
+  if (status) status.textContent = "Abrindo registro salvo...";
   const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
   try {
     const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=${encodeURIComponent(query)}&_=${Date.now()}`);
     const rows = payload.rows || [];
     const row = rows.find((item) => normalizeTextClient(item.numero) === normalizeTextClient(query)) || (rows.length === 1 ? rows[0] : null);
     if (!row) {
-      if (status) clearLoadingState(status);
       if (status) status.textContent = "Encontrei mais de um registro. Clique na opcao correta da lista para abrir.";
       await searchSavedCommercialDocuments(kind);
       return;
     }
     openSavedCommercialDocument(row, kind, input);
   } catch (error) {
-    if (status) clearLoadingState(status);
     if (status) status.textContent = error.message;
   }
 }
@@ -2146,7 +2090,7 @@ async function searchQuoteProducts() {
     clearQuoteSuggestions("product");
     return;
   }
-  suggestions.innerHTML = `<div class="table-status is-loading">${loadingMarkup("Buscando itens...", { compact: true, rows: 2 })}</div>`;
+  suggestions.innerHTML = '<div class="table-status">Buscando itens...</div>';
   suggestions.classList.add("visible");
   try {
     const payload = await fetchJson(`/api/quotes/product-search?company=${encodeURIComponent(route.company)}&q=${encodeURIComponent(query)}&_=${Date.now()}`);
@@ -2541,30 +2485,23 @@ async function saveOrder() {
   }
 }
 
-async function loadVendorAgenda(force = false) {
+async function loadVendorAgenda() {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-agenda-status");
   if (!route || !status) {
     return;
   }
-  const cacheKey = `${route.company}|${route.vendorId}`;
-  if (!force && currentVendorAgendaKey === cacheKey) {
-    return;
-  }
-  setLoadingState(status, "Carregando agenda...", { compact: true, rows: 2 });
+  status.textContent = "Carregando agenda...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force });
-    currentVendorAgendaKey = cacheKey;
+    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force: true });
     renderSimpleVendorTable(payload, "vendor-agenda-head", "vendor-agenda-body", "Nenhum contato agendado.");
-    clearLoadingState(status);
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} agendamento(s) encontrado(s).`;
   } catch (error) {
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
 
-async function loadVendorContactReport(force = false) {
+async function loadVendorContactReport() {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-contact-report-status");
   if (!route || !status) {
@@ -2577,24 +2514,17 @@ async function loadVendorContactReport(force = false) {
     end_date: document.getElementById("vendor-contact-report-end")?.value || "",
     q: document.getElementById("vendor-contact-report-client")?.value || "",
   });
-  const cacheKey = params.toString();
-  if (!force && currentVendorContactReportKey === cacheKey) {
-    return;
-  }
-  setLoadingState(status, "Carregando relatorio...", { compact: true, rows: 2 });
+  status.textContent = "Carregando relatorio...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/report?${params.toString()}`, { force });
-    currentVendorContactReportKey = cacheKey;
+    const payload = await fetchJson(`/api/vendor-day-by-day/report?${params.toString()}`, { force: true });
     renderSimpleVendorTable(payload, "vendor-contact-report-head", "vendor-contact-report-body", "Nenhum contato encontrado.");
-    clearLoadingState(status);
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} contato(s) encontrado(s).`;
   } catch (error) {
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
 
-async function loadVendorDayByDay(force = false) {
+async function loadVendorDayByDay() {
   const route = vendorPageRoute();
   if (!route) {
     return;
@@ -2605,21 +2535,19 @@ async function loadVendorDayByDay(force = false) {
   if (!status || !summary || !content) {
     return;
   }
-  setLoadingState(status, "Carregando rotina diária...", { compact: true, rows: 2 });
+  status.textContent = "Carregando rotina diária...";
   summary.innerHTML = "";
   content.innerHTML = "";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force });
+    const payload = await fetchJson(`/api/vendor-day-by-day?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`);
     currentVendorDayByDayPayload = payload;
     currentVendorDayByDayClient = null;
     renderVendorDayByDay();
-    clearLoadingState(status);
     status.textContent = payload.aviso_gravacao
       ? payload.aviso_gravacao
       : `${payload.empresa}: lista diária de ${payload.data_label} carregada.`;
   } catch (error) {
     currentVendorDayByDayPayload = null;
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -3264,9 +3192,6 @@ async function saveVendorDayByDayClient(event) {
       }),
     });
     currentVendorDayByDayClient = saved;
-    currentVendorAgendaKey = "";
-    currentVendorContactReportKey = "";
-    currentVendorDailyContactsKey = "";
     await loadVendorDayByDay();
     status.textContent = `${saved.message || "Atendimento salvo."} Contagem do dia: ${formatNumber.format(saved.contagem?.salvos || 0)} de ${formatNumber.format(saved.contagem?.meta_diaria || 50)}.`;
   } catch (error) {
@@ -3286,7 +3211,7 @@ function setupVendorPageGoalsMonthSelect() {
   select.value = String(new Date().getMonth() + 1);
 }
 
-async function loadVendorPageGoals(force = false) {
+async function loadVendorPageGoals() {
   const route = vendorPageRoute();
   if (!route) {
     return;
@@ -3294,24 +3219,16 @@ async function loadVendorPageGoals(force = false) {
   const status = document.getElementById("vendor-page-goals-status");
   const summary = document.getElementById("vendor-page-goals-summary");
   const list = document.getElementById("vendor-page-goals-list");
-  const cacheKey = `${route.company}|${route.vendorId}|${new Date().getFullYear()}`;
-  if (!force && currentVendorPageGoalsPayload && currentVendorGoalsKey === cacheKey) {
-    renderVendorPageGoals();
-    return;
-  }
-  setLoadingState(status, "Carregando metas e objetivos...", { compact: true, rows: 2 });
+  status.textContent = "Carregando metas e objetivos...";
   try {
-    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${new Date().getFullYear()}`, { force });
+    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${new Date().getFullYear()}`);
     currentVendorPageGoalsPayload = payload;
-    currentVendorGoalsKey = cacheKey;
     renderVendorPageGoals();
-    clearLoadingState(status);
     status.textContent = `${payload.empresa}: metas carregadas para ${payload.vendedor?.nome_completo || "vendedor"}.`;
   } catch (error) {
     currentVendorPageGoalsPayload = null;
     summary.innerHTML = "";
     list.innerHTML = "";
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -3525,7 +3442,7 @@ function renderVendorRegions(payload) {
   renderVendorRegionCharts();
 }
 
-async function loadVendorDailyContactsChart(force = false) {
+async function loadVendorDailyContactsChart() {
   const route = vendorPageRoute();
   const chart = document.getElementById("vendor-daily-contact-chart");
   const status = document.getElementById("vendor-daily-contact-status");
@@ -3538,29 +3455,21 @@ async function loadVendorDailyContactsChart(force = false) {
     monthInput.value = new Date().toISOString().slice(0, 7);
   }
   const selectedMonth = monthInput?.value || new Date().toISOString().slice(0, 7);
-  const cacheKey = `${route.company}|${route.vendorId}|${selectedMonth}`;
-  if (!force && currentVendorDailyContactsKey === cacheKey) {
-    return;
-  }
-  setLoadingState(status, "Carregando contatos diários...", { compact: true, rows: 2 });
+  status.textContent = "Carregando contatos diários...";
   chart.innerHTML = "";
-  total.textContent = "...";
+  total.textContent = "Carregando...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force });
-    currentVendorDailyContactsKey = cacheKey;
+    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force: true });
     renderVendorDailyContactsChart(payload);
   } catch (error) {
     try {
       const { start, end } = dailyContactsMonthRange(selectedMonth);
-      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force });
-      currentVendorDailyContactsKey = cacheKey;
+      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force: true });
       renderVendorDailyContactsChart(buildDailyContactsPayloadFromReport(report, selectedMonth));
-      clearLoadingState(status);
       status.textContent += " Dados carregados pelo relatório de contatos.";
     } catch (fallbackError) {
       chart.innerHTML = "";
       total.textContent = "Sem dados";
-      clearLoadingState(status);
       status.textContent = fallbackError.message || error.message;
     }
   }
@@ -3643,7 +3552,6 @@ function renderVendorDailyContactsChart(payload) {
   total.textContent = `${formatNumber.format(payload.totals?.total || 0)} contatos | Inativos ${formatNumber.format(payload.totals?.inativos || 0)} | Nunca Comprou ${formatNumber.format(payload.totals?.nunca_comprou || 0)}`;
   if (!rows.length) {
     chart.innerHTML = '<div class="empty-state">Nenhum contato diário encontrado para este vendedor.</div>';
-    clearLoadingState(status);
     status.textContent = "Nenhum contato diário encontrado.";
     return;
   }
@@ -3671,7 +3579,6 @@ function renderVendorDailyContactsChart(payload) {
       <span><i class="never"></i>Nunca Comprou</span>
     </div>
   `;
-  clearLoadingState(status);
   status.textContent = `${payload.empresa}: ${formatNumber.format(rows.length)} dia(s) com contatos no mês selecionado.`;
 }
 
@@ -3772,7 +3679,7 @@ async function loadVendorRegionClients(force = false) {
   if (!params) {
     return;
   }
-  setLoadingState(status, "Carregando clientes da região...", { compact: true, rows: 2 });
+  status.textContent = "Carregando clientes da região...";
   try {
     const payload = await fetchJson(`/api/vendor-region-clients?${params.toString()}`);
     fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
@@ -3802,13 +3709,11 @@ async function loadVendorRegionClients(force = false) {
     status.textContent = payload.total_resultado > payload.rows.length
       ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
       : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
-    clearLoadingState(status);
     vendorRegionClientsLoaded = true;
   } catch (error) {
     summary.innerHTML = "";
     head.innerHTML = "";
     body.innerHTML = "";
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -4381,7 +4286,7 @@ async function loadTable(tableName, force = false) {
     return;
   }
 
-  setLoadingState(elements.status, `Carregando ${label}...`, { compact: true, rows: 2 });
+  elements.status.textContent = `Carregando ${label}...`;
 
   try {
     const payload = await fetchJson(`/api/table/${tableName}?company=${encodeURIComponent(company)}&q=${encodeURIComponent(query)}&limit=200&sort_key=${encodeURIComponent(state.sortKey || "")}&sort_dir=${encodeURIComponent(state.sortDir || "asc")}`, { force });
@@ -4425,7 +4330,6 @@ async function loadTable(tableName, force = false) {
     const shown = formatNumber.format(payload.rows.length);
     const total = formatNumber.format(payload.total_filtrado);
     const all = formatNumber.format(payload.total_registros);
-    clearLoadingState(elements.status);
     elements.status.textContent = `${payload.empresa}: exibindo ${shown} de ${total} encontrados (${all} registros no cadastro).`;
     tableState[tableName].loaded = true;
     tableState[tableName].cacheKey = requestKey;
@@ -4433,7 +4337,6 @@ async function loadTable(tableName, force = false) {
       await loadStockSummary();
     }
   } catch (error) {
-    clearLoadingState(elements.status);
     elements.status.textContent = error.message;
     elements.head.innerHTML = "";
     elements.body.innerHTML = "";
@@ -8230,7 +8133,6 @@ function setRoutine(routineName) {
 function showLoginScreen(message = "") {
   document.getElementById("login-screen").classList.remove("auth-hidden");
   document.getElementById("password-change-screen").classList.add("auth-hidden");
-  document.getElementById("reset-password-screen").classList.add("auth-hidden");
   document.getElementById("app-shell").classList.add("auth-hidden");
   if (message) {
     document.getElementById("login-status").textContent = message;
@@ -8240,7 +8142,6 @@ function showLoginScreen(message = "") {
 function showPasswordChangeScreen(message = "") {
   document.getElementById("login-screen").classList.add("auth-hidden");
   document.getElementById("password-change-screen").classList.remove("auth-hidden");
-  document.getElementById("reset-password-screen").classList.add("auth-hidden");
   document.getElementById("app-shell").classList.add("auth-hidden");
   document.getElementById("password-change-new").value = "";
   document.getElementById("password-change-confirm").value = "";
@@ -8248,21 +8149,9 @@ function showPasswordChangeScreen(message = "") {
   setTimeout(() => document.getElementById("password-change-new")?.focus(), 50);
 }
 
-function showResetPasswordScreen(message = "") {
-  document.getElementById("login-screen").classList.add("auth-hidden");
-  document.getElementById("password-change-screen").classList.add("auth-hidden");
-  document.getElementById("reset-password-screen").classList.remove("auth-hidden");
-  document.getElementById("app-shell").classList.add("auth-hidden");
-  document.getElementById("reset-password-new").value = "";
-  document.getElementById("reset-password-confirm").value = "";
-  document.getElementById("reset-password-status").textContent = message || "A senha precisa ter pelo menos 6 caracteres.";
-  setTimeout(() => document.getElementById("reset-password-new")?.focus(), 50);
-}
-
 function showAppScreen() {
   document.getElementById("login-screen").classList.add("auth-hidden");
   document.getElementById("password-change-screen").classList.add("auth-hidden");
-  document.getElementById("reset-password-screen").classList.add("auth-hidden");
   document.getElementById("app-shell").classList.remove("auth-hidden");
 }
 
@@ -8302,70 +8191,6 @@ async function handleLogin(event) {
     }
     window.location.reload();
   } catch (error) {
-    status.textContent = error.message;
-  }
-}
-
-async function handleForgotPassword() {
-  const status = document.getElementById("login-status");
-  const loginInput = document.getElementById("login-user");
-  const typedLogin = loginInput.value.trim();
-  const identifier = typedLogin || window.prompt("Informe seu login ou e-mail de acesso:");
-  if (!identifier) {
-    status.textContent = "Informe o login ou e-mail para solicitar a redefinição.";
-    loginInput.focus();
-    return;
-  }
-  setLoadingState(status, "Solicitando link de redefinição...", { compact: true, rows: 2 });
-  try {
-    const payload = await fetchJson("/api/auth/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        login: identifier.trim(),
-        reset_url_base: `${window.location.origin}/reset-password`,
-      }),
-    });
-    clearLoadingState(status);
-    status.textContent = payload.message || "Se o usuario existir, enviaremos as instrucoes de redefinicao.";
-  } catch (error) {
-    clearLoadingState(status);
-    status.textContent = error.message;
-  }
-}
-
-function resetPasswordTokenFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  return window.location.pathname === "/reset-password" ? params.get("token") || "" : "";
-}
-
-async function handleResetPassword(event) {
-  event.preventDefault();
-  const status = document.getElementById("reset-password-status");
-  const token = resetPasswordTokenFromUrl();
-  const newPassword = document.getElementById("reset-password-new").value;
-  const confirmPassword = document.getElementById("reset-password-confirm").value;
-  if (!token) {
-    status.textContent = "Link de redefinição inválido ou expirado.";
-    return;
-  }
-  setLoadingState(status, "Redefinindo senha...", { compact: true, rows: 2 });
-  try {
-    const payload = await fetchJson("/api/auth/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        nova_senha: newPassword,
-        confirmar_senha: confirmPassword,
-      }),
-    });
-    localStorage.removeItem(authTokenKey);
-    window.history.replaceState({}, "", "/");
-    clearLoadingState(status);
-    showLoginScreen(payload.message || "Senha redefinida com sucesso. Entre com a nova senha.");
-  } catch (error) {
-    clearLoadingState(status);
     status.textContent = error.message;
   }
 }
@@ -8752,20 +8577,10 @@ function toggleFollowUpDetail(index) {
 
 async function init() {
   document.getElementById("login-form").addEventListener("submit", handleLogin);
-  document.getElementById("forgot-password-button").addEventListener("click", handleForgotPassword);
   document.getElementById("password-change-form").addEventListener("submit", handlePasswordChange);
   document.getElementById("password-change-logout").addEventListener("click", logout);
-  document.getElementById("reset-password-form").addEventListener("submit", handleResetPassword);
-  document.getElementById("reset-password-back").addEventListener("click", () => {
-    window.history.replaceState({}, "", "/");
-    showLoginScreen();
-  });
   document.getElementById("logout-button").addEventListener("click", logout);
   repairReconstructedLayout();
-  if (resetPasswordTokenFromUrl()) {
-    showResetPasswordScreen();
-    return;
-  }
   if (!await checkAuthSession()) {
     return;
   }
@@ -8909,10 +8724,10 @@ async function init() {
       }
     }
   });
-  document.getElementById("vendor-daybyday-refresh").addEventListener("click", () => loadVendorDayByDay(true));
-  document.getElementById("vendor-agenda-refresh").addEventListener("click", () => loadVendorAgenda(true));
-  document.getElementById("vendor-contact-report-load").addEventListener("click", () => loadVendorContactReport(true));
-  document.getElementById("vendor-daily-contact-month")?.addEventListener("change", () => loadVendorDailyContactsChart(true));
+  document.getElementById("vendor-daybyday-refresh").addEventListener("click", loadVendorDayByDay);
+  document.getElementById("vendor-agenda-refresh").addEventListener("click", loadVendorAgenda);
+  document.getElementById("vendor-contact-report-load").addEventListener("click", loadVendorContactReport);
+  document.getElementById("vendor-daily-contact-month")?.addEventListener("change", loadVendorDailyContactsChart);
   document.getElementById("vendor-page-goals-month").addEventListener("change", renderVendorPageGoals);
   document.querySelectorAll("[data-vendor-client-status]").forEach((button) => {
     button.addEventListener("click", () => setVendorClientStatus(button.dataset.vendorClientStatus));
