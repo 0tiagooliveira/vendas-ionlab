@@ -7,6 +7,7 @@ import math
 import re
 import sys
 import threading
+import time
 import traceback
 import unicodedata
 import hashlib
@@ -44,6 +45,7 @@ JSON_CACHE = {}
 PAYLOAD_CACHE = {}
 SHARED_PAYLOAD_CACHE = {}
 RUNTIME_AUTH_SESSIONS = {}
+SAVE_JSON_LOCK = threading.Lock()
 
 COMPANIES = {
     "ionlab": "Ionlab",
@@ -558,7 +560,34 @@ def load_json(path: Path, default):
 
 def save_json(path: Path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    with SAVE_JSON_LOCK:
+        last_error = None
+        for attempt in range(20):
+            temp_path = path.with_name(
+                f".{path.name}.{threading.get_ident()}.{int(time.time() * 1000)}.{attempt}.tmp"
+            )
+            try:
+                temp_path.write_text(content, encoding="utf-8")
+                temp_path.replace(path)
+                last_error = None
+                break
+            except PermissionError as exc:
+                last_error = exc
+                try:
+                    if temp_path.exists():
+                        temp_path.unlink()
+                except Exception:
+                    pass
+                try:
+                    path.write_text(content, encoding="utf-8")
+                    last_error = None
+                    break
+                except PermissionError as direct_exc:
+                    last_error = direct_exc
+                time.sleep(0.5)
+        if last_error:
+            raise last_error
     try:
         stat = path.stat()
         JSON_CACHE[str(path.resolve())] = {
@@ -2748,6 +2777,7 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
         for status_key in targets
     }
 
+    save_warning = ""
     if changed or list_key not in data.get("listas", {}) or not current_list.get("details") or not saved_schema_is_current:
         data.setdefault("listas", {})[list_key] = {
             "data": day_key,
@@ -2765,7 +2795,13 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
             "created_at": current_list.get("created_at") or datetime.now().isoformat(timespec="seconds"),
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         }
-        save_json(vendor_day_by_day_file(company_id), data)
+        try:
+            save_json(vendor_day_by_day_file(company_id), data)
+        except PermissionError:
+            save_warning = (
+                "A fila foi exibida, mas o Windows nao permitiu gravar o arquivo do Day by Day neste momento. "
+                "Feche outras janelas do CRM ou backups usando o arquivo e tente atualizar novamente."
+            )
 
     records = data.get("atendimentos", {})
 
@@ -2807,6 +2843,7 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
         "recontatos": recontact_rows,
         "contatos_anteriores": vendor_day_by_day_previous_contacts(data, vendor_id_value, day_key) if count_summary.get("faltam") == 0 else [],
         "agrp_options": vendor_agrp_options(company_id),
+        "aviso_gravacao": save_warning,
     }
 
 
@@ -3083,7 +3120,13 @@ def save_vendor_day_by_day_client_payload(payload: dict):
     counter["meta_diaria"] = DAY_BY_DAY_DAILY_TARGET
     counter["total_salvos"] = len(counter.get("eventos") or [])
     counter["updated_at"] = now
-    save_json(vendor_day_by_day_file(company_id), data)
+    try:
+        save_json(vendor_day_by_day_file(company_id), data)
+    except PermissionError as exc:
+        raise ValueError(
+            "Nao foi possivel salvar o atendimento porque o Windows bloqueou o arquivo do Day by Day. "
+            "Feche outras janelas do CRM, backup ou sincronizacao que possam estar usando o arquivo e tente novamente."
+        ) from exc
     response = {
         "message": "Atendimento salvo com sucesso.",
         "contagem": vendor_day_by_day_count_summary(data, vendor_id_value, day_key),
@@ -3173,6 +3216,208 @@ def vendor_day_by_day_daily_contacts_payload(company_id: str, vendor_id_value: s
         "vendor_id": vendor_id_value,
         "titulo": "Contatos diarios",
         "month": month_key,
+        "rows": rows,
+        "totals": totals,
+    }
+
+
+def month_business_days(year: int, month: int) -> list[date]:
+    last_day = (date(year + 1, 1, 1) - timedelta(days=1)).day if month == 12 else (date(year, month + 1, 1) - timedelta(days=1)).day
+    today_value = date.today()
+    days = []
+    for day_number in range(1, last_day + 1):
+        current = date(year, month, day_number)
+        if current > today_value:
+            break
+        if is_day_by_day_business_day(current):
+            days.append(current)
+    return days
+
+
+def month_business_day_count(year: int, month: int) -> int:
+    last_day = (date(year + 1, 1, 1) - timedelta(days=1)).day if month == 12 else (date(year, month + 1, 1) - timedelta(days=1)).day
+    return sum(
+        1
+        for day_number in range(1, last_day + 1)
+        if is_day_by_day_business_day(date(year, month, day_number))
+    )
+
+
+def current_user_vendor_context(token: str, company_id_value: str = "", vendor_id_value: str = "") -> tuple[str, dict, dict]:
+    user = current_user_from_token(token)
+    if not user:
+        raise ValueError("Sessao expirada. Entre novamente no CRM.")
+
+    if user.get("tipo") == "master" and company_id_value and vendor_id_value:
+        if company_id_value not in COMPANIES:
+            raise ValueError("Empresa invalida.")
+        vendors = load_json(vendors_file(company_id_value), [])
+        vendor = next(
+            (
+                item for item in vendors
+                if item.get("status") == "Ativo" and str(item.get("id") or "") == str(vendor_id_value or "")
+            ),
+            None,
+        )
+        if not vendor:
+            raise ValueError("Vendedor ativo nao encontrado.")
+        return company_id_value, vendor, user
+
+    for company_id in COMPANIES:
+        allowed_ids = vendor_ids_for_user(company_id, user)
+        if not allowed_ids:
+            continue
+        vendors = load_json(vendors_file(company_id), [])
+        for vendor in vendors:
+            if vendor.get("status") == "Ativo" and str(vendor.get("id") or "") in allowed_ids:
+                return company_id, vendor, user
+    raise ValueError("Nenhum vendedor ativo vinculado ao seu login para exibir indicadores.")
+
+
+def vendor_month_sales_goal_value(company_id: str, vendor_id_value: str, year: int, month: int) -> float:
+    try:
+        all_goals = load_json(vendor_goals_file(company_id), {})
+        stored = all_goals.get(vendor_goals_key(vendor_id_value, year), {})
+        record = normalize_vendor_goal_record(stored, company_id, vendor_id_value, year)
+        month_record = (record.get("months") or {}).get(str(month), {})
+        objectives = month_record.get("objetivos") if isinstance(month_record.get("objetivos"), dict) else {}
+        sales_goal = objectives.get("vendas_liquidas") if isinstance(objectives.get("vendas_liquidas"), dict) else {}
+        value = number_value(sales_goal.get("meta"))
+        if value > 0:
+            return value
+
+        payload = vendor_goals_payload(company_id, vendor_id_value, year)
+        month_record = ((payload.get("goals") or {}).get("months") or {}).get(str(month), {})
+        objectives = month_record.get("objetivos") if isinstance(month_record.get("objetivos"), dict) else {}
+        sales_goal = objectives.get("vendas_liquidas") if isinstance(objectives.get("vendas_liquidas"), dict) else {}
+        return number_value(sales_goal.get("meta"))
+    except Exception:
+        return 0.0
+
+
+def vendor_home_month_goals(company_id: str, vendor_id_value: str, year: int, month: int) -> dict:
+    goals = {
+        "vendas_liquidas_mes": 0.0,
+        "clientes_atendidos_mes": 0.0,
+        "reativacoes_mes": 0.0,
+        "contatos_diarios": 0.0,
+    }
+    try:
+        payload = vendor_goals_payload(company_id, vendor_id_value, year)
+        month_record = ((payload.get("goals") or {}).get("months") or {}).get(str(month), {})
+        objectives = month_record.get("objetivos") if isinstance(month_record.get("objetivos"), dict) else {}
+        goals["vendas_liquidas_mes"] = number_value((objectives.get("vendas_liquidas") or {}).get("meta"))
+        goals["clientes_atendidos_mes"] = number_value((objectives.get("clientes_com_vendas") or {}).get("meta"))
+        goals["reativacoes_mes"] = number_value((objectives.get("reativacao_inativos") or {}).get("meta"))
+        goals["contatos_diarios"] = number_value((objectives.get("contatos_inativos_nunca") or {}).get("meta"))
+    except Exception:
+        goals["vendas_liquidas_mes"] = vendor_month_sales_goal_value(company_id, vendor_id_value, year, month)
+        goals["contatos_diarios"] = DAY_BY_DAY_DAILY_TARGET
+    return goals
+
+
+def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
+    company_id, vendor, user = current_user_vendor_context(token, company_id_value, vendor_id_value)
+    vendor_id_value = str(vendor.get("id") or "")
+    today_value = date.today()
+    year = today_value.year
+    month = today_value.month
+    month_key = today_value.strftime("%Y-%m")
+    days = month_business_days(year, month)
+    business_days_in_month = month_business_day_count(year, month)
+    month_goals = vendor_home_month_goals(company_id, vendor_id_value, year, month)
+    monthly_sales_goal = number_value(month_goals.get("vendas_liquidas_mes"))
+    required_daily_sales_average = monthly_sales_goal / business_days_in_month if business_days_in_month else 0.0
+    day_rows = {
+        current.isoformat(): {
+            "data": current.isoformat(),
+            "data_label": display_date_br(current.isoformat()),
+            "vendas_liquidas": 0.0,
+            "clientes_atendidos": 0,
+            "reativacoes": 0,
+            "contatos_inativos": 0,
+            "contatos_nunca_comprou": 0,
+        }
+        for current in days
+    }
+
+    _vendor, _client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+    region_client_ids = set(region_client_ids)
+    sales_by_client_dates = defaultdict(list)
+    daily_clients = defaultdict(set)
+
+    for sale_company_id in vendor_sales_company_ids(company_id):
+        for sale in load_json(sales_file(sale_company_id), []):
+            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
+                continue
+            client_id = normalize_identifier(sale.get("ID_CL"))
+            if not client_id or client_id not in region_client_ids:
+                continue
+            sale_date = record_date_value(sale.get("NF_EMI"))
+            if not sale_date:
+                continue
+            sales_by_client_dates[client_id].append(sale_date)
+            if sale_date.year == year and sale_date.month == month and sale_date.isoformat() in day_rows:
+                day_rows[sale_date.isoformat()]["vendas_liquidas"] += sale_net_revenue(sale)
+                daily_clients[sale_date.isoformat()].add(client_id)
+
+    for day_key, clients in daily_clients.items():
+        day_rows[day_key]["clientes_atendidos"] = len(clients)
+
+    for client_id, dates in sales_by_client_dates.items():
+        sorted_dates = sorted(set(dates))
+        first_current_year = next((item for item in sorted_dates if item.year == year), None)
+        had_previous_year_purchase = any(item.year < year for item in sorted_dates)
+        if (
+            first_current_year
+            and had_previous_year_purchase
+            and first_current_year.month == month
+            and first_current_year.isoformat() in day_rows
+        ):
+            day_rows[first_current_year.isoformat()]["reativacoes"] += 1
+
+    contacts_payload = vendor_day_by_day_daily_contacts_payload(company_id, vendor_id_value, {"month": [month_key]})
+    for row in contacts_payload.get("rows") or []:
+        day_key = str(row.get("data") or "")
+        if day_key in day_rows:
+            day_rows[day_key]["contatos_inativos"] = int(row.get("inativos") or 0)
+            day_rows[day_key]["contatos_nunca_comprou"] = int(row.get("nunca_comprou") or 0)
+
+    rows = list(day_rows.values())
+    for row in rows:
+        row["vendas_liquidas"] = round(row["vendas_liquidas"], 2)
+        row["contatos_total"] = row["contatos_inativos"] + row["contatos_nunca_comprou"]
+        row["contatos_meta_atingida"] = (
+            number_value(month_goals.get("contatos_diarios")) > 0
+            and row["contatos_total"] >= number_value(month_goals.get("contatos_diarios"))
+        )
+
+    totals = {
+        "vendas_liquidas": round(sum(row["vendas_liquidas"] for row in rows), 2),
+        "clientes_atendidos": sum(row["clientes_atendidos"] for row in rows),
+        "reativacoes": sum(row["reativacoes"] for row in rows),
+        "contatos_inativos": sum(row["contatos_inativos"] for row in rows),
+        "contatos_nunca_comprou": sum(row["contatos_nunca_comprou"] for row in rows),
+    }
+    totals["contatos_total"] = totals["contatos_inativos"] + totals["contatos_nunca_comprou"]
+
+    return {
+        "empresa": COMPANIES.get(company_id, company_id),
+        "empresa_id": company_id,
+        "vendedor": vendor_public_record(vendor),
+        "usuario": user_public_record(user),
+        "selecionavel": user.get("tipo") == "master",
+        "vendedores": vendor_page_links_payload().get("rows", []) if user.get("tipo") == "master" else [],
+        "month": month_key,
+        "month_label": f"{today_value.month:02d}/{today_value.year}",
+        "meta": {
+            "vendas_liquidas_mes": round(monthly_sales_goal, 2),
+            "media_diaria_necessaria": round(required_daily_sales_average, 2),
+            "dias_uteis_mes": business_days_in_month,
+            "clientes_atendidos_mes": round(number_value(month_goals.get("clientes_atendidos_mes")), 2),
+            "reativacoes_mes": round(number_value(month_goals.get("reativacoes_mes")), 2),
+            "contatos_diarios": round(number_value(month_goals.get("contatos_diarios")), 2),
+        },
         "rows": rows,
         "totals": totals,
     }
@@ -3291,6 +3536,21 @@ def follow_up_access_context(company_id: str, token: str) -> tuple[dict, set[str
     if not is_admin and not allowed_vendor_ids:
         raise ValueError("Usuario sem vendedor vinculado para consultar Follow-UP.")
     return user, allowed_vendor_ids, is_admin
+
+
+def dashboard_vendor_access_context(company_id: str, vendor_id_value: str, token: str):
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    user = current_user_from_token(token)
+    if not user:
+        raise ValueError("Sessao expirada. Entre novamente no CRM.")
+    if user.get("tipo") == "master":
+        return
+    allowed_vendor_ids = vendor_ids_for_user(company_id, user)
+    if not allowed_vendor_ids:
+        raise ValueError("Usuario sem vendedor vinculado para consultar o Dashboard.")
+    if str(vendor_id_value or "").strip() not in allowed_vendor_ids:
+        raise ValueError("Usuario sem permissao para consultar este vendedor no Dashboard.")
 
 
 def follow_up_status_label(status_key: str, status_label: str = "") -> str:
@@ -5681,6 +5941,10 @@ def vendor_page_links_payload():
                 "id": vendor.get("id"),
                 "nome_completo": vendor.get("nome_completo") or "Vendedor",
                 "pagina_vendedor": page,
+                "usuario_vinculado_id": public.get("usuario_vinculado_id", ""),
+                "usuario_vinculado_nome": public.get("usuario_vinculado_nome", ""),
+                "login_acesso": public.get("login_acesso", ""),
+                "tipo_usuario": public.get("tipo_usuario", "Vendedor"),
             })
     links.sort(key=lambda item: (normalize_text(item.get("empresa")), normalize_text(item.get("nome_completo"))))
     return {
@@ -5758,7 +6022,12 @@ def save_vendor_payload(payload: dict):
         target["senha_hash"] = hashlib.sha256(password.encode("utf-8")).hexdigest()
 
     vendors.sort(key=lambda item: normalize_text(item.get("nome_completo")))
-    save_json(vendors_file(company_id), vendors)
+    try:
+        save_json(vendors_file(company_id), vendors)
+    except PermissionError as exc:
+        raise ValueError(
+            f"Nao foi possivel salvar o vendedor no banco. Feche planilhas, backups ou outro CRM que esteja usando o arquivo {vendors_file(company_id)} e tente novamente."
+        ) from exc
     return {
         "empresa": COMPANIES[company_id],
         "message": "Vendedor salvo com sucesso.",
@@ -5852,9 +6121,38 @@ def default_master_user() -> dict:
     }
 
 
+def operational_data_exists() -> bool:
+    if not DATA_DIR.exists():
+        return False
+    protected_names = {
+        "clientes.json",
+        "vendas.json",
+        "vendedores.json",
+        "day_by_day_vendedores.json",
+        "clientes_bloqueados.json",
+        "orcamentos.json",
+        "pedidos.json",
+    }
+    for path in DATA_DIR.rglob("*.json"):
+        if path.name not in protected_names:
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(payload, (list, dict)) and len(payload) > 0:
+            return True
+    return False
+
+
 def load_users() -> list[dict]:
     users = load_json(users_file(), [])
     if not users:
+        if operational_data_exists():
+            raise RuntimeError(
+                "Arquivo de usuarios ausente ou vazio em uma base com dados. "
+                "A atualizacao nao deve substituir a pasta data. Restaure data/usuarios.json do backup do site quente."
+            )
         users = [default_master_user()]
         save_json(users_file(), users)
     changed = False
@@ -6057,7 +6355,13 @@ def save_user_payload(payload: dict, token: str):
         raise ValueError("Informe uma senha para o novo usuario.")
 
     users.sort(key=lambda item: normalize_text(item.get("nome")))
-    save_json(users_file(), users)
+    try:
+        save_json(users_file(), users)
+    except PermissionError as exc:
+        raise ValueError(
+            "Nao foi possivel salvar o usuario porque o servidor local esta sem permissao para gravar "
+            "data/usuarios.json. Feche a janela do CRM e abra novamente pelo arquivo abrir_crm_atualizado.bat."
+        ) from exc
     return {"message": "Usuario salvo com sucesso.", "user": user_public_record(target), **user_catalog_payload()}
 
 
@@ -8684,10 +8988,19 @@ def import_sales(company_id: str, file_name: str, file_bytes: bytes):
         existing_keys.add(key)
 
     all_records = existing + inserted
-    save_json(sales_file(company_id), all_records)
-    classification_summary = refresh_sales_classification(company_id)
-    all_records = load_json(sales_file(company_id), [])
-    sync_vendors_from_sales(company_id)
+    if inserted:
+        try:
+            save_json(sales_file(company_id), all_records)
+        except PermissionError as exc:
+            raise ValueError(
+                "Nao foi possivel gravar as notas fiscais porque o Windows bloqueou o arquivo de vendas. "
+                "Feche outras janelas do CRM, planilhas, backups ou sincronizacao que possam estar usando a pasta data e tente importar novamente."
+            ) from exc
+        classification_summary = refresh_sales_classification(company_id)
+        all_records = load_json(sales_file(company_id), [])
+        sync_vendors_from_sales(company_id)
+    else:
+        classification_summary = {"atualizados": 0, "sem_classificacao": 0}
 
     notes = {
         str(item.get("ID_NF") or item.get("NF_NUM") or "")
@@ -8709,7 +9022,10 @@ def import_sales(company_id: str, file_name: str, file_bytes: bytes):
 
     logs = load_json(import_log_file(company_id), [])
     logs.append(summary)
-    save_json(import_log_file(company_id), logs)
+    try:
+        save_json(import_log_file(company_id), logs)
+    except PermissionError:
+        summary["aviso_log"] = "Importacao processada, mas o Windows bloqueou a gravacao do log de importacao."
 
     return summary
 
@@ -9175,6 +9491,16 @@ class CRMHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+        if path == "/api/home/vendor-panel":
+            token = self.headers.get("X-Auth-Token", "")
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", [""])[0]
+            vendor_id_value = params.get("vendor_id", [""])[0]
+            try:
+                return self.send_json(home_vendor_panel_payload(token, company_id, vendor_id_value))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
         if path == "/api/regions":
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["ionlab"])[0]
@@ -9403,7 +9729,9 @@ class CRMHandler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["ionlab"])[0]
             vendor_id_value = params.get("vendor_id", [""])[0]
+            token = self.headers.get("X-Auth-Token", "")
             try:
+                dashboard_vendor_access_context(company_id, vendor_id_value, token)
                 payload = cached_payload(
                     ("vendor_regions", company_id, vendor_id_value),
                     vendor_dashboard_dependencies(company_id),

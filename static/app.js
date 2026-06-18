@@ -39,6 +39,13 @@ const formatCurrency3 = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 3,
   maximumFractionDigits: 3,
 });
+const formatCompactNumber = new Intl.NumberFormat("pt-BR", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+const formatShortCurrencyThousands = new Intl.NumberFormat("pt-BR", {
+  maximumFractionDigits: 1,
+});
 const formatPercent2 = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -175,7 +182,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260617-vinculo-usuario-codigo1";
+const appAssetVersion = "20260618-botoes-home-ajuste1";
 const apiMemoryCache = new Map();
 const fastCacheMs = 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
@@ -671,29 +678,232 @@ function renderCompanies() {
   renderVendorAccessOptions();
 }
 
-async function renderStats() {
-  const grid = document.getElementById("stats-grid");
-  const cards = await Promise.all(companies.map(async (company) => {
-    const stats = await fetchJson(`/api/stats/${company.id}`);
-    return `
-      <article class="stat-card">
-        <p class="eyebrow">${stats.empresa}</p>
-        <strong>${formatNumber.format(stats.notas)}</strong>
-        <span class="muted">${formatNumber.format(stats.linhas)} linhas de vendas · ${formatNumber.format(stats.clientes)} clientes</span>
-      </article>
-    `;
-  }));
+function isMasterUser() {
+  return currentUser?.tipo === "master";
+}
 
-  grid.innerHTML = cards.join("");
+function currentUserMatchesVendor(vendor) {
+  const currentUserIdKey = normalizeSearchText(currentUser?.id || "");
+  const currentLoginKey = normalizeSearchText(currentUser?.login || "");
+  const linkedUserKey = normalizeSearchText(vendor?.usuario_vinculado_id || "");
+  const vendorLoginKey = normalizeSearchText(vendor?.login_acesso || vendor?.login || "");
+  const vendorIdKey = normalizeSearchText(vendor?.id || "");
+  return Boolean(
+    (currentUserIdKey && linkedUserKey === currentUserIdKey)
+    || (currentLoginKey && vendorLoginKey === currentLoginKey)
+    || (currentUserIdKey && vendorIdKey === currentUserIdKey)
+  );
+}
+
+function applyDashboardVendorMode() {
+  const restricted = currentUser && !isMasterUser();
+  document.querySelectorAll("[data-dashboard-chart]").forEach((button) => {
+    const allowed = !restricted || button.dataset.dashboardChart === "vendor-regions";
+    button.classList.toggle("hidden", !allowed);
+  });
+  if (restricted && currentDashboardChart !== "vendor-regions") {
+    currentDashboardChart = "vendor-regions";
+  }
+  document.querySelectorAll(".dashboard-chart-panel").forEach((panel) => {
+    panel.classList.toggle("visible", panel.id === `dashboard-chart-${currentDashboardChart}`);
+  });
+  document.querySelectorAll(".dashboard-chart-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.dashboardChart === currentDashboardChart);
+  });
+}
+
+async function renderStats(selection = {}) {
+  const grid = document.getElementById("stats-grid");
+  if (!grid) {
+    return;
+  }
+  grid.innerHTML = '<div class="table-status">Carregando indicadores do vendedor...</div>';
+  try {
+    const params = new URLSearchParams();
+    if (selection.company) {
+      params.set("company", selection.company);
+    }
+    if (selection.vendorId) {
+      params.set("vendor_id", selection.vendorId);
+    }
+    const query = params.toString();
+    const payload = await fetchJson(`/api/home/vendor-panel${query ? `?${query}` : ""}`, { force: true });
+    renderHomeVendorCharts(payload);
+  } catch (error) {
+    grid.innerHTML = `
+      <section class="home-vendor-insights-empty">
+        <p class="eyebrow">Indicadores do vendedor</p>
+        <h3>Nenhum painel individual vinculado</h3>
+        <p class="muted">${escapeHtml(error.message)}</p>
+      </section>
+    `;
+  }
+}
+
+function homeVendorChartCard(title, totalLabel, rows, valueKey, options = {}) {
+  const maxValue = Math.max(1, ...rows.map((row) => Number(row[valueKey] || 0)));
+  const formatter = options.currency ? formatCurrency : formatNumber;
+  const averageValue = Number(options.averageValue || 0);
+  const averageLabel = options.averageLabel || "";
+  const metaLabel = options.metaLabel || "";
+  const valueLabel = (value) => {
+    if (options.currency && Math.abs(value) >= 1000) {
+      return formatShortCurrencyThousands.format(value / 1000);
+    }
+    if (!options.currency && Math.abs(value) >= 1000) {
+      return formatCompactNumber.format(value);
+    }
+    return formatter.format(value);
+  };
+  return `
+    <article class="home-vendor-chart-card">
+      <div class="home-vendor-chart-head">
+        <div>
+          <p class="eyebrow">${escapeHtml(title)}</p>
+          <strong>${escapeHtml(totalLabel)}</strong>
+          ${metaLabel ? `<span class="home-chart-meta-line">${escapeHtml(metaLabel)}</span>` : ""}
+          ${averageLabel ? `<small>${escapeHtml(averageLabel)}</small>` : ""}
+        </div>
+      </div>
+      <div class="home-mini-bars">
+        ${rows.map((row) => {
+          const value = Number(row[valueKey] || 0);
+          const height = Math.max(value > 0 ? 8 : 0, Math.round((value / maxValue) * 84));
+          const belowAverage = averageValue > 0 && value < averageValue;
+          return `
+            <span class="home-mini-bar ${belowAverage ? "below-average" : ""}" title="${escapeHtml(row.data_label || row.data)}: ${escapeHtml(formatter.format(value))}">
+              <span class="home-mini-bar-plot">
+                ${value > 0 ? `<span class="home-mini-bar-value">${escapeHtml(valueLabel(value))}</span>` : ""}
+                <i style="height:${height}%"></i>
+              </span>
+              <em>${escapeHtml(String(row.data || "").slice(-2))}</em>
+            </span>
+          `;
+        }).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function homeVendorContactsCard(payload) {
+  const rows = payload.rows || [];
+  const maxValue = Math.max(1, ...rows.map((row) => Number(row.contatos_total || 0)));
+  const contactsGoal = Number(payload.meta?.contatos_diarios || 0);
+  return `
+    <article class="home-vendor-chart-card">
+      <div class="home-vendor-chart-head">
+        <div>
+          <p class="eyebrow">Contatos diários</p>
+          <strong>${formatNumber.format(payload.totals?.contatos_total || 0)} contatos</strong>
+          <small>Meta ${formatNumber.format(contactsGoal)} por dia · Inativos ${formatNumber.format(payload.totals?.contatos_inativos || 0)} · Nunca comprou ${formatNumber.format(payload.totals?.contatos_nunca_comprou || 0)}</small>
+        </div>
+      </div>
+      <div class="home-mini-bars stacked">
+        ${rows.map((row) => {
+          const inactive = Number(row.contatos_inativos || 0);
+          const never = Number(row.contatos_nunca_comprou || 0);
+          const total = inactive + never;
+          const inactiveHeight = Math.round((inactive / maxValue) * 84);
+          const neverHeight = Math.round((never / maxValue) * 84);
+          const goalReached = contactsGoal > 0 && total >= contactsGoal;
+          const mood = contactsGoal > 0 ? (goalReached ? "☺" : "☹") : "";
+          return `
+            <span class="home-mini-bar" title="${escapeHtml(row.data_label || row.data)}: ${formatNumber.format(total)} contatos · Meta ${formatNumber.format(contactsGoal)}">
+              <span class="home-mini-bar-plot">
+                ${total > 0 ? `<span class="home-mini-bar-value">${escapeHtml(formatNumber.format(total))}</span>` : ""}
+                <i class="inactive" style="height:${inactiveHeight}%"></i>
+                <i class="never" style="height:${neverHeight}%"></i>
+              </span>
+              ${mood ? `<span class="home-mini-bar-mood ${goalReached ? "happy" : "sad"}" title="${goalReached ? "Meta atingida" : "Meta nao atingida"}">${mood}</span>` : ""}
+              <em>${escapeHtml(String(row.data || "").slice(-2))}</em>
+            </span>
+          `;
+        }).join("")}
+      </div>
+      <div class="home-chart-legend">
+        <span><i class="inactive"></i>Inativos</span>
+        <span><i class="never"></i>Nunca comprou</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderHomeVendorCharts(payload) {
+  const grid = document.getElementById("stats-grid");
+  if (!grid) {
+    return;
+  }
+  const rows = payload.rows || [];
+  const vendorOptions = payload.vendedores || [];
+  const selectedVendorKey = `${payload.empresa_id || ""}|${payload.vendedor?.id || ""}`;
+  const salesGoal = Number(payload.meta?.vendas_liquidas_mes || 0);
+  const requiredSalesAverage = Number(payload.meta?.media_diaria_necessaria || 0);
+  const businessDays = Number(payload.meta?.dias_uteis_mes || 0);
+  const currentSalesAverage = rows.length ? Number(payload.totals?.vendas_liquidas || 0) / rows.length : 0;
+  const clientsGoal = Number(payload.meta?.clientes_atendidos_mes || 0);
+  const reactivationsGoal = Number(payload.meta?.reativacoes_mes || 0);
+  grid.innerHTML = `
+    <section class="home-vendor-insights-title">
+      <div>
+        <p class="eyebrow">Indicadores do vendedor</p>
+        <h2>${escapeHtml(payload.vendedor?.nome_completo || "Vendedor")}</h2>
+        <p class="muted">${escapeHtml(payload.empresa || "")} · Mês corrente ${escapeHtml(payload.month_label || "")}</p>
+      </div>
+      ${payload.selecionavel ? `
+        <label class="home-vendor-selector">
+          <span>Selecionar vendedor</span>
+          <select id="home-vendor-indicator-select">
+            ${vendorOptions.map((vendor) => {
+              const key = `${vendor.empresa_id || ""}|${vendor.id || ""}`;
+              return `<option value="${escapeHtml(key)}" ${key === selectedVendorKey ? "selected" : ""}>${escapeHtml(vendor.nome_completo || "Vendedor")} - ${escapeHtml(vendor.empresa || "")}</option>`;
+            }).join("")}
+          </select>
+        </label>
+      ` : ""}
+    </section>
+    <div class="home-vendor-insights-grid">
+      ${homeVendorChartCard("Vendas líquidas diárias", formatCurrency.format(payload.totals?.vendas_liquidas || 0), rows, "vendas_liquidas", {
+        currency: true,
+        averageValue: requiredSalesAverage,
+        metaLabel: `Meta ${formatCurrency.format(salesGoal)}`,
+        averageLabel: `Média atual ${formatCurrency.format(currentSalesAverage)} · Média necessária ${formatCurrency.format(requiredSalesAverage)} (${formatNumber.format(businessDays)} dias úteis)`,
+      })}
+      ${homeVendorChartCard("Clientes atendidos por dia", `${formatNumber.format(payload.totals?.clientes_atendidos || 0)} clientes`, rows, "clientes_atendidos", {
+        metaLabel: `Meta ${formatNumber.format(clientsGoal)} clientes no mês`,
+      })}
+      ${homeVendorChartCard("Reativação de inativos", `${formatNumber.format(payload.totals?.reativacoes || 0)} reativações`, rows, "reativacoes", {
+        metaLabel: `Meta ${formatNumber.format(reactivationsGoal)} reativações no mês`,
+      })}
+      ${homeVendorContactsCard(payload)}
+    </div>
+  `;
+  const selector = document.getElementById("home-vendor-indicator-select");
+  if (selector) {
+    selector.addEventListener("change", () => {
+      const [company, vendorId] = String(selector.value || "").split("|");
+      renderStats({ company, vendorId });
+    });
+  }
 }
 
 async function renderHomeVendorPages() {
   const grid = document.getElementById("home-vendor-grid");
-  if (!grid) {
+  const panelBox = document.getElementById("home-vendor-panel-box");
+  const panelList = document.getElementById("home-vendor-panel-list");
+  const panelSummary = document.getElementById("home-vendor-panel-summary");
+  if (!grid && !panelBox) {
     return;
   }
+  if (panelList) {
+    panelList.innerHTML = '<span class="vendor-panel-empty">Carregando...</span>';
+  }
+  if (panelSummary) {
+    panelSummary.textContent = "Carregando vendedores...";
+  }
 
-  grid.innerHTML = '<div class="table-status">Carregando vendedores ativos...</div>';
+  if (grid) {
+    grid.innerHTML = '<div class="table-status">Carregando vendedores ativos...</div>';
+  }
   let activeVendors = [];
   try {
     const payload = await fetchJson("/api/vendor-page-links");
@@ -739,12 +949,40 @@ async function renderHomeVendorPages() {
       <small>Entrar no painel individual</small>
     </a>
   `).join("");
+  if (panelList) {
+    if (activeVendors.length) {
+      panelSummary.textContent = isMaster
+        ? `${formatNumber.format(activeVendors.length)} vendedores ativos`
+        : activeVendors[0]?.nome_completo || "Vendedor vinculado";
+      panelList.innerHTML = activeVendors.map((vendor) => `
+        <button class="vendor-panel-pill" type="button" data-vendor-page="${escapeHtml(vendor.pagina_vendedor || "")}">
+          <span>${escapeHtml(vendor.nome_completo || "Vendedor")}</span>
+          <small>${escapeHtml(vendor.empresa || vendor.empresa_nome || "")}</small>
+        </button>
+      `).join("");
+      panelList.querySelectorAll("[data-vendor-page]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const page = button.dataset.vendorPage || "";
+          if (page) {
+            window.location.href = `${page}?v=${appAssetVersion}`;
+          }
+        });
+      });
+    } else {
+      panelSummary.textContent = "Nenhum painel vinculado";
+      panelList.innerHTML = '<span class="vendor-panel-empty">Sem vendedor disponível para este login.</span>';
+    }
+  }
   if (cards) {
-    grid.innerHTML = cards;
+    if (grid) {
+      grid.innerHTML = cards;
+    }
     return;
   }
   if (isMaster) {
-    grid.innerHTML = '<div class="table-status">Nenhum vendedor ativo encontrado.</div>';
+    if (grid) {
+      grid.innerHTML = '<div class="table-status">Nenhum vendedor ativo encontrado.</div>';
+    }
     return;
   }
   const diagnosticMessage = !currentLoginKey
@@ -754,7 +992,8 @@ async function renderHomeVendorPages() {
       : filledLoginVendors.length
       ? `existem ${formatNumber.format(filledLoginVendors.length)} vendedor(es) ativo(s) com Login de acesso preenchido, mas nenhum está igual ao login atual "${escapeHtml(currentLogin)}".`
       : "nenhum vendedor ativo está com Usuário vinculado ou Login de acesso preenchido.";
-  grid.innerHTML = `
+  if (grid) {
+    grid.innerHTML = `
     <div class="table-status vendor-link-warning">
       <strong>Nenhuma página de vendedor vinculada ao seu login.</strong>
       <p>Motivo: ${diagnosticMessage}</p>
@@ -762,6 +1001,7 @@ async function renderHomeVendorPages() {
       <p>Confirme se o vendedor está Ativo, se o usuário está Ativo e se o campo Usuário vinculado no cadastro do vendedor aponta para o código deste usuário. O Login de acesso fica apenas como compatibilidade. Depois clique em Sair e entre novamente.</p>
     </div>
   `;
+  }
 }
 
 function setupProspectPeriodControls() {
@@ -954,6 +1194,7 @@ function formatProspectCell(row, key) {
 }
 
 async function loadDashboard() {
+  applyDashboardVendorMode();
   const companySelect = document.getElementById("dashboard-company");
   const company = companySelect.value || "ionlab";
   const chart = document.getElementById("uf-chart");
@@ -987,6 +1228,9 @@ async function loadDashboard() {
 }
 
 function setDashboardChart(chartName) {
+  if (currentUser && !isMasterUser()) {
+    chartName = "vendor-regions";
+  }
   const permissionKey = dashboardPermissionMap[chartName];
   if (permissionKey && !canAccessPermission(permissionKey)) {
     alert("Usuario sem permissao para este indicador.");
@@ -1003,26 +1247,87 @@ function setDashboardChart(chartName) {
 }
 
 async function loadDashboardVendors() {
-  const company = document.getElementById("dashboard-company").value || "ionlab";
+  const companySelect = document.getElementById("dashboard-company");
+  let company = companySelect.value || "ionlab";
   const select = document.getElementById("dashboard-vendor-select");
   const previous = select.value;
+  const restricted = currentUser && !isMasterUser();
+  if (company === "agrupado" || company === "ionlab_cior") {
+    if (restricted) {
+      company = "ionlab";
+      companySelect.value = company;
+    } else {
+      select.innerHTML = '<option value="">Selecione uma empresa individual</option>';
+      select.disabled = false;
+      return;
+    }
+  }
+  if (restricted) {
+    companySelect.disabled = true;
+  } else {
+    companySelect.disabled = false;
+  }
+
+  async function moveToLinkedVendorCompany() {
+    if (!restricted) {
+      return false;
+    }
+    const linksPayload = await fetchJson("/api/vendor-page-links", { force: true });
+    const linked = (linksPayload.rows || []).filter(currentUserMatchesVendor);
+    if (linked.length && linked[0].empresa_id && linked[0].empresa_id !== company) {
+      companySelect.value = linked[0].empresa_id;
+      return true;
+    }
+    return false;
+  }
+
+  if (restricted && company === "ionlab") {
+    try {
+      const moved = await moveToLinkedVendorCompany();
+      if (moved) {
+        return loadDashboardVendors();
+      }
+    } catch (_error) {
+      // A lista de vendedores da empresa atual ainda será usada como fallback.
+    }
+  }
+
   if (company === "agrupado" || company === "ionlab_cior") {
     select.innerHTML = '<option value="">Selecione uma empresa individual</option>';
+    select.disabled = false;
     return;
   }
   select.innerHTML = '<option value="">Carregando vendedores...</option>';
 
   try {
     const payload = await fetchJson(`/api/vendors?company=${encodeURIComponent(company)}&q=`);
-    const activeVendors = payload.rows.filter((vendor) => vendor.status === "Ativo");
-    select.innerHTML = '<option value="">Selecione</option>' + activeVendors
+    let activeVendors = payload.rows.filter((vendor) => vendor.status === "Ativo");
+    if (restricted) {
+      activeVendors = activeVendors.filter(currentUserMatchesVendor);
+      if (!activeVendors.length) {
+        const moved = await moveToLinkedVendorCompany();
+        if (moved) {
+          return loadDashboardVendors();
+        }
+      }
+    }
+    select.innerHTML = (restricted ? "" : '<option value="">Selecione</option>') + activeVendors
       .map((vendor) => `<option value="${escapeHtml(vendor.id)}">${escapeHtml(vendor.nome_completo || "")}</option>`)
       .join("");
-    if (activeVendors.some((vendor) => vendor.id === previous)) {
+    select.disabled = restricted && activeVendors.length <= 1;
+    if (restricted && activeVendors.length) {
+      select.value = activeVendors[0].id;
+    } else if (activeVendors.some((vendor) => vendor.id === previous)) {
       select.value = previous;
+    } else if (!restricted) {
+      select.value = "";
+    }
+    if (restricted && !activeVendors.length) {
+      select.innerHTML = '<option value="">Nenhum vendedor vinculado ao seu login</option>';
     }
   } catch (error) {
     select.innerHTML = '<option value="">Nao foi possivel carregar</option>';
+    select.disabled = false;
   }
 }
 
@@ -2238,7 +2543,9 @@ async function loadVendorDayByDay() {
     currentVendorDayByDayPayload = payload;
     currentVendorDayByDayClient = null;
     renderVendorDayByDay();
-    status.textContent = `${payload.empresa}: lista diária de ${payload.data_label} carregada.`;
+    status.textContent = payload.aviso_gravacao
+      ? payload.aviso_gravacao
+      : `${payload.empresa}: lista diária de ${payload.data_label} carregada.`;
   } catch (error) {
     currentVendorDayByDayPayload = null;
     status.textContent = error.message;
@@ -6455,11 +6762,7 @@ async function persistVendorPayload(vendorPayload) {
     await loadVendors();
     return payload.message;
   } catch (error) {
-    const payload = saveLocalVendor(vendorPayload);
-    currentVendorAssignments = normalizeAssignments(vendorPayload.clientes_atendidos);
-    await loadVendorAssignmentOptions();
-    await loadVendors();
-    return `${payload.message} Base local ativa ate o servidor reiniciar a rota de vendedores.`;
+    throw new Error(`Vendedor nao foi salvo no banco: ${error.message}`);
   }
 }
 
@@ -8001,7 +8304,7 @@ function clearUserForm() {
   document.getElementById("user-name").focus();
 }
 
-function fillUserForm(user) {
+function fillUserForm(user, options = {}) {
   document.getElementById("user-id").value = user.id || "";
   document.getElementById("user-name").value = user.nome || "";
   document.getElementById("user-login").value = user.login || "";
@@ -8011,7 +8314,9 @@ function fillUserForm(user) {
   document.getElementById("user-type").value = user.tipo || "usuario";
   document.getElementById("user-force-password-change").checked = Boolean(user.trocar_senha_primeiro_acesso);
   renderUserPermissionGroups(user.permissions || {});
-  document.getElementById("user-form-status").textContent = `Editando ${user.nome || user.login}.`;
+  if (!options.keepStatus) {
+    document.getElementById("user-form-status").textContent = `Editando ${user.nome || user.login}.`;
+  }
 }
 
 async function loadUsers() {
@@ -8071,16 +8376,16 @@ async function saveUser(event) {
     permissions,
   };
   const status = document.getElementById("user-form-status");
-  status.textContent = "Salvando usuario...";
+  status.textContent = "Salvando...";
   try {
     const response = await fetchJson("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    status.textContent = response.message || "Usuario salvo.";
     await loadUsers();
-    fillUserForm(response.user);
+    fillUserForm(response.user, { keepStatus: true });
+    status.textContent = "Salvo.";
   } catch (error) {
     status.textContent = error.message;
   }

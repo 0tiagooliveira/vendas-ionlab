@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CRM Ionlab</title>
-    <link rel="stylesheet" href="/styles.css?v=20260617-vinculo-usuario-codigo1">
+    <link rel="stylesheet" href="/styles.css?v=20260618-botoes-home-ajuste1">
   </head>
   <body>
     <section class="login-screen auth-hidden" id="login-screen">
@@ -138,10 +138,17 @@
           <div class="hero">
             <div>
               <p class="eyebrow">Rotinas</p>
-              <h2>Central para administrar cada empresa de forma separada.</h2>
-              <p class="muted">As proximas funcionalidades serao adicionadas aqui conforme o CRM evoluir.</p>
+              <h2>Painel central de gestão comercial.</h2>
+              <p class="muted">Indicadores, acessos e rotinas organizados para uma operação mais clara e ágil.</p>
             </div>
             <div class="hero-actions">
+              <div class="vendor-panel-action" id="home-vendor-panel-box">
+                <div class="vendor-panel-action-head">
+                  <strong>Painel Individual</strong>
+                  <span id="home-vendor-panel-summary">Carregando vendedores...</span>
+                </div>
+                <div class="vendor-panel-button-list" id="home-vendor-panel-list"></div>
+              </div>
               <button class="primary-action" data-view="dashboard">Dashboard</button>
               <button class="primary-action" data-view="prospect">Prospect</button>
               <button class="primary-action" data-view="cadastros">Cadastros</button>
@@ -159,17 +166,6 @@
           </div>
 
           <div class="stats-grid" id="stats-grid"></div>
-
-          <section class="home-vendor-pages">
-            <div class="section-header">
-              <p class="eyebrow">Acesso dos vendedores</p>
-              <h2>Páginas individuais</h2>
-              <p class="muted">Cada vendedor ativo acessa somente o painel da sua própria carteira.</p>
-            </div>
-            <div class="home-vendor-grid" id="home-vendor-grid">
-              <div class="table-status">Carregando vendedores ativos...</div>
-            </div>
-          </section>
         </section>
 
         <section class="view" id="dashboard-view">
@@ -2171,7 +2167,7 @@
         document.body.appendChild(box);
       });
     </script>
-    <script src="/app.js?v=20260617-vinculo-usuario-codigo1"></script>
+    <script src="/app.js?v=20260618-botoes-home-ajuste1"></script>
   </body>
 </html>
 
