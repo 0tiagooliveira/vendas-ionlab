@@ -2167,6 +2167,24 @@
 </main>
     </div>
 
+    <div class="sent-document-modal hidden" id="sent-document-modal" role="dialog" aria-modal="true" aria-labelledby="sent-document-modal-title">
+      <div class="sent-document-modal-backdrop" data-sent-modal-close></div>
+      <section class="sent-document-modal-panel">
+        <header class="sent-document-modal-head">
+          <div>
+            <p class="eyebrow" id="sent-document-modal-kind">Documento enviado</p>
+            <h3 id="sent-document-modal-title">Documento</h3>
+          </div>
+          <button class="sent-document-modal-close" type="button" data-sent-modal-close aria-label="Fechar">×</button>
+        </header>
+        <div class="sent-document-modal-body" id="sent-document-modal-body"></div>
+        <footer class="sent-document-modal-actions">
+          <a class="secondary-action" id="sent-document-modal-pdf" href="#" target="_blank" rel="noopener">Baixar PDF</a>
+          <button class="primary-action" id="sent-document-modal-edit" type="button">Editar documento</button>
+        </footer>
+      </section>
+    </div>
+
     <script>
       window.addEventListener("error", (event) => {
         const message = event.message || "Erro desconhecido";
