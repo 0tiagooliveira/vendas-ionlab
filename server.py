@@ -4497,11 +4497,13 @@ def order_by_id(company_id: str, order_id: str) -> dict:
     raise ValueError("Pedido nao encontrado.")
 
 
-def commercial_document_search_payload(company_id: str, vendor_id_value: str, query: str, kind: str, limit: int = 20):
+def commercial_document_search_payload(company_id: str, vendor_id_value: str, query: str, kind: str, limit: int = 20, page: int = 1):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     source = orders_file(company_id) if kind == "pedido" else quotes_file(company_id)
     query_key = normalize_text(query)
+    page_size = max(1, min(int(optional_number_value(limit) or 20), 100))
+    page_number = max(1, int(optional_number_value(page) or 1))
     rows = []
     for document in load_json(source, []):
         if vendor_id_value and document.get("vendor_id") != vendor_id_value:
@@ -4510,20 +4512,31 @@ def commercial_document_search_payload(company_id: str, vendor_id_value: str, qu
         haystack = normalize_text(f"{document.get('numero')} {client.get('nome')} {client.get('documento')} {client.get('codigo')}")
         if query_key and not search_text_matches(query, haystack):
             continue
+        updated_at = document.get("atualizado_em") or document.get("revisado_em") or document.get("criado_em") or ""
         rows.append({
             "id": document.get("id"),
             "numero": document.get("numero"),
             "cliente": client.get("nome"),
             "cliente_documento": client.get("documento"),
             "total": (document.get("resumo") or {}).get("total_orcamento"),
-            "atualizado_em": document.get("atualizado_em") or document.get("criado_em"),
+            "atualizado_em": updated_at,
             "documento": document,
             "label": f"{document.get('numero')} - {client.get('nome') or ''}",
         })
-        if len(rows) >= limit:
-            break
-    rows.sort(key=lambda item: normalize_text(item.get("numero")), reverse=True)
-    return {"rows": rows, "kind": kind}
+    rows.sort(key=lambda item: (str(item.get("atualizado_em") or ""), normalize_text(item.get("numero"))), reverse=True)
+    total = len(rows)
+    total_pages = max(1, math.ceil(total / page_size))
+    page_number = min(page_number, total_pages)
+    start = (page_number - 1) * page_size
+    paged_rows = rows[start:start + page_size]
+    return {
+        "rows": paged_rows,
+        "kind": kind,
+        "page": page_number,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+    }
 
 
 def pdf_clean_text(value) -> str:
@@ -9596,7 +9609,9 @@ class CRMHandler(BaseHTTPRequestHandler):
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
             try:
-                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "orcamento"))
+                limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
+                page = int(optional_number_value(params.get("page", [1])[0]) or 1)
+                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "orcamento", limit, page))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -9606,7 +9621,9 @@ class CRMHandler(BaseHTTPRequestHandler):
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
             try:
-                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "pedido"))
+                limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
+                page = int(optional_number_value(params.get("page", [1])[0]) or 1)
+                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "pedido", limit, page))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 

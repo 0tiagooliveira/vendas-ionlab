@@ -1,4 +1,4 @@
-﻿const companies = [];
+const companies = [];
 
 const pageTitles = {
   home: "Pagina principal",
@@ -140,6 +140,8 @@ let quoteProductTimer = null;
 let quickConsultTimer = null;
 let quoteSavedTimer = null;
 let orderSavedTimer = null;
+const sentDocumentsPageSize = 20;
+const sentDocumentsState = { quote: { page: 1, payload: null }, order: { page: 1, payload: null } };
 let prospectOptionsLoaded = false;
 let prospectClientTimer = null;
 let vendorsTimer = null;
@@ -254,6 +256,8 @@ function clearVendorWorkspaceCache() {
   currentVendorPageGoalsPayload = null;
   currentVendorRegionClientsPayload = null;
   currentVendorRegionClientsCacheKey = "";
+  sentDocumentsState.quote = { page: 1, payload: null };
+  sentDocumentsState.order = { page: 1, payload: null };
   vendorRegionClientsLoaded = false;
 }
 
@@ -1795,8 +1799,10 @@ function setVendorWorkspaceSection(section) {
     moveQuoteEditorHome();
     const status = document.getElementById("sent-quote-status");
     if (status) {
-      status.textContent = "Busque um orcamento ou pedido salvo para abrir na tela de edicao.";
+      status.textContent = "Carregando últimos documentos enviados...";
     }
+    loadSentDocumentsList("quote");
+    loadSentDocumentsList("order");
   }
   if (section === "day") {
     if (!currentVendorDayByDayPayload) {
@@ -2079,6 +2085,75 @@ function scheduleSavedQuoteSearch() {
 function scheduleSavedOrderSearch() {
   clearTimeout(orderSavedTimer);
   orderSavedTimer = setTimeout(() => searchSavedCommercialDocuments("order"), 250);
+}
+
+
+function sentDocumentElements(kind) {
+  return {
+    list: document.getElementById(kind === "order" ? "sent-orders-list" : "sent-quotes-list"),
+    pages: document.getElementById(kind === "order" ? "sent-orders-pages" : "sent-quotes-pages"),
+    count: document.getElementById(kind === "order" ? "sent-orders-count" : "sent-quotes-count"),
+  };
+}
+
+function formatSentDocumentDate(value) {
+  if (!value) return "Sem data";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function renderSentDocumentsList(kind, payload) {
+  const { list, pages, count } = sentDocumentElements(kind);
+  if (!list || !pages || !count) return;
+  const rows = payload.rows || [];
+  const label = kind === "order" ? "pedido" : "orçamento";
+  count.textContent = `${formatNumber.format(payload.total || 0)} ${label}(s)`;
+  list.innerHTML = rows.map((row, index) => `
+    <article class="sent-document-row">
+      <div>
+        <strong>${escapeHtml(row.numero || "Sem número")} - ${escapeHtml(row.cliente || "Cliente não informado")}</strong>
+        <span>${escapeHtml(row.cliente_documento || "")} | ${escapeHtml(formatCurrency2.format(row.total || 0))}</span>
+        <small>Atualizado em ${escapeHtml(formatSentDocumentDate(row.atualizado_em || ""))}</small>
+      </div>
+      <button type="button" data-sent-kind="${kind}" data-sent-index="${index}">Abrir</button>
+    </article>
+  `).join("") || `<div class="table-status">Nenhum ${label} encontrado.</div>`;
+  list.querySelectorAll("[data-sent-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = rows[Number(button.dataset.sentIndex)];
+      openSavedCommercialDocument(row, kind);
+    });
+  });
+  const totalPages = Number(payload.total_pages || 1);
+  const currentPage = Number(payload.page || 1);
+  pages.innerHTML = totalPages > 1 ? Array.from({ length: totalPages }, (_, index) => {
+    const page = index + 1;
+    return `<button type="button" class="${page === currentPage ? "active" : ""}" data-sent-page="${page}" data-sent-kind="${kind}">${page}</button>`;
+  }).join("") : "";
+  pages.querySelectorAll("[data-sent-page]").forEach((button) => {
+    button.addEventListener("click", () => loadSentDocumentsList(kind, Number(button.dataset.sentPage), true));
+  });
+}
+
+async function loadSentDocumentsList(kind, page = null, force = false) {
+  const route = vendorPageRoute();
+  const state = sentDocumentsState[kind];
+  const { list } = sentDocumentElements(kind);
+  if (!route || !state || !list) return;
+  const nextPage = page || state.page || 1;
+  if (state.payload?.page === nextPage && !force) {
+    renderSentDocumentsList(kind, state.payload);
+    return;
+  }
+  list.innerHTML = '<div class="table-status">Carregando documentos...</div>';
+  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
+  const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=&page=${encodeURIComponent(nextPage)}&limit=${sentDocumentsPageSize}`);
+  state.page = payload.page || nextPage;
+  state.payload = payload;
+  renderSentDocumentsList(kind, payload);
+  const status = document.getElementById("sent-quote-status");
+  if (status) status.textContent = "Últimos documentos enviados carregados.";
 }
 
 function selectQuoteProduct(product) {
