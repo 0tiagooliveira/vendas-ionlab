@@ -113,12 +113,17 @@ let currentVendorRegionPayload = null;
 let currentVendorPageGoalsPayload = null;
 let currentVendorDayByDayPayload = null;
 let currentVendorDayByDayClient = null;
+let currentVendorAgendaPayload = null;
+let currentVendorContactReportPayload = null;
+let currentVendorDailyContactsPayload = null;
 let currentVendorRegionDimension = "ufs";
 let currentVendorRegionIndicator = "quant";
 let currentVendorRegionTarget = "dashboard";
 let currentVendorClientStatus = "all";
 let currentVendorClientFilters = { uf: "", ddd: "", city: "" };
 let vendorRegionClientsLoaded = false;
+let currentVendorRegionClientsPayload = null;
+let currentVendorRegionClientsCacheKey = "";
 let currentVendorWorkspace = "day";
 let currentQuoteContext = null;
 let currentQuoteClient = null;
@@ -242,6 +247,16 @@ function clearApiCache() {
   apiMemoryCache.clear();
 }
 
+function clearVendorWorkspaceCache() {
+  currentVendorAgendaPayload = null;
+  currentVendorContactReportPayload = null;
+  currentVendorDailyContactsPayload = null;
+  currentVendorPageGoalsPayload = null;
+  currentVendorRegionClientsPayload = null;
+  currentVendorRegionClientsCacheKey = "";
+  vendorRegionClientsLoaded = false;
+}
+
 function invalidateLoadedViews() {
   Object.values(tableState).forEach((state) => {
     state.loaded = false;
@@ -250,6 +265,7 @@ function invalidateLoadedViews() {
   dashboardLoaded = false;
   mercadoLivreOverview = { companies: [] };
   currentUsersPayload = null;
+  clearVendorWorkspaceCache();
 }
 
 const viewPermissionMap = {
@@ -1746,7 +1762,7 @@ function setVendorWorkspaceSection(section) {
     panel.classList.toggle("active", panel.id === `vendor-workspace-${section}`);
   });
   if (section === "clients") {
-    loadVendorRegionClients(true);
+    loadVendorRegionClients(false);
   }
   if (section === "indicators") {
     loadVendorPageIndicators();
@@ -1759,7 +1775,11 @@ function setVendorWorkspaceSection(section) {
     loadVendorContactReport();
   }
   if (section === "goals") {
-    loadVendorPageGoals();
+    if (currentVendorPageGoalsPayload) {
+      renderVendorPageGoals();
+    } else {
+      loadVendorPageGoals();
+    }
   }
   if (section === "quick-consult") {
     setTimeout(() => document.getElementById("quick-consult-search")?.focus(), 50);
@@ -2391,6 +2411,7 @@ async function closeQuote() {
     document.getElementById("quote-number").textContent = quote.numero;
     link.href = `/api/quotes/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(quote.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
+    clearVendorWorkspaceCache();
     status.textContent = `Orcamento ${quote.numero} gerado com sucesso. Use o botao Baixar PDF para enviar ao cliente.`;
     if (currentQuoteLoadedFromSent) {
       loadCommercialDocument(quote, "quote", true);
@@ -2443,6 +2464,7 @@ async function convertQuoteToOrder() {
     const link = document.getElementById("quote-pdf-link");
     link.href = `/api/orders/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(order.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
+    clearVendorWorkspaceCache();
     status.textContent = `Pedido ${order.numero} salvo com sucesso.`;
   } catch (error) {
     status.textContent = error.message;
@@ -2479,21 +2501,28 @@ async function saveOrder() {
     const link = document.getElementById("quote-pdf-link");
     link.href = `/api/orders/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(order.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
+    clearVendorWorkspaceCache();
     status.textContent = `Pedido ${order.numero} salvo com sucesso.`;
   } catch (error) {
     status.textContent = error.message;
   }
 }
 
-async function loadVendorAgenda() {
+async function loadVendorAgenda(force = false) {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-agenda-status");
   if (!route || !status) {
     return;
   }
+  if (currentVendorAgendaPayload && !force) {
+    renderSimpleVendorTable(currentVendorAgendaPayload, "vendor-agenda-head", "vendor-agenda-body", "Nenhum contato agendado.");
+    status.textContent = `${currentVendorAgendaPayload.empresa}: ${formatNumber.format(currentVendorAgendaPayload.total || 0)} agendamento(s) encontrado(s).`;
+    return;
+  }
   status.textContent = "Carregando agenda...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force: true });
+    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force });
+    currentVendorAgendaPayload = payload;
     renderSimpleVendorTable(payload, "vendor-agenda-head", "vendor-agenda-body", "Nenhum contato agendado.");
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} agendamento(s) encontrado(s).`;
   } catch (error) {
@@ -2501,7 +2530,7 @@ async function loadVendorAgenda() {
   }
 }
 
-async function loadVendorContactReport() {
+async function loadVendorContactReport(force = false) {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-contact-report-status");
   if (!route || !status) {
@@ -2514,9 +2543,17 @@ async function loadVendorContactReport() {
     end_date: document.getElementById("vendor-contact-report-end")?.value || "",
     q: document.getElementById("vendor-contact-report-client")?.value || "",
   });
+  const cacheKey = params.toString();
+  if (currentVendorContactReportPayload?.cacheKey === cacheKey && !force) {
+    const cached = currentVendorContactReportPayload.payload;
+    renderSimpleVendorTable(cached, "vendor-contact-report-head", "vendor-contact-report-body", "Nenhum contato encontrado.");
+    status.textContent = `${cached.empresa}: ${formatNumber.format(cached.total || 0)} contato(s) encontrado(s).`;
+    return;
+  }
   status.textContent = "Carregando relatorio...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/report?${params.toString()}`, { force: true });
+    const payload = await fetchJson(`/api/vendor-day-by-day/report?${cacheKey}`, { force });
+    currentVendorContactReportPayload = { cacheKey, payload };
     renderSimpleVendorTable(payload, "vendor-contact-report-head", "vendor-contact-report-body", "Nenhum contato encontrado.");
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} contato(s) encontrado(s).`;
   } catch (error) {
@@ -3192,6 +3229,8 @@ async function saveVendorDayByDayClient(event) {
       }),
     });
     currentVendorDayByDayClient = saved;
+    currentVendorDayByDayPayload = null;
+    clearVendorWorkspaceCache();
     await loadVendorDayByDay();
     status.textContent = `${saved.message || "Atendimento salvo."} Contagem do dia: ${formatNumber.format(saved.contagem?.salvos || 0)} de ${formatNumber.format(saved.contagem?.meta_diaria || 50)}.`;
   } catch (error) {
@@ -3442,7 +3481,7 @@ function renderVendorRegions(payload) {
   renderVendorRegionCharts();
 }
 
-async function loadVendorDailyContactsChart() {
+async function loadVendorDailyContactsChart(force = false) {
   const route = vendorPageRoute();
   const chart = document.getElementById("vendor-daily-contact-chart");
   const status = document.getElementById("vendor-daily-contact-status");
@@ -3455,17 +3494,25 @@ async function loadVendorDailyContactsChart() {
     monthInput.value = new Date().toISOString().slice(0, 7);
   }
   const selectedMonth = monthInput?.value || new Date().toISOString().slice(0, 7);
+  const cacheKey = `${route.company}|${route.vendorId}|${selectedMonth}`;
+  if (currentVendorDailyContactsPayload?.cacheKey === cacheKey && !force) {
+    renderVendorDailyContactsChart(currentVendorDailyContactsPayload.payload);
+    return;
+  }
   status.textContent = "Carregando contatos diários...";
   chart.innerHTML = "";
   total.textContent = "Carregando...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force: true });
+    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force });
+    currentVendorDailyContactsPayload = { cacheKey, payload };
     renderVendorDailyContactsChart(payload);
   } catch (error) {
     try {
       const { start, end } = dailyContactsMonthRange(selectedMonth);
-      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force: true });
-      renderVendorDailyContactsChart(buildDailyContactsPayloadFromReport(report, selectedMonth));
+      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force });
+      const fallbackPayload = buildDailyContactsPayloadFromReport(report, selectedMonth);
+      currentVendorDailyContactsPayload = { cacheKey, payload: fallbackPayload };
+      renderVendorDailyContactsChart(fallbackPayload);
       status.textContent += " Dados carregados pelo relatório de contatos.";
     } catch (fallbackError) {
       chart.innerHTML = "";
@@ -3663,12 +3710,46 @@ function fillVendorClientFilter(selectId, values, selectedValue, labelKey = null
   }
 }
 
+function renderVendorRegionClientsPayload(payload) {
+  const status = document.getElementById("vendor-region-clients-status");
+  const summary = document.getElementById("vendor-region-clients-summary");
+  const head = document.getElementById("vendor-region-clients-head");
+  const body = document.getElementById("vendor-region-clients-body");
+  if (!status || !summary || !head || !body) {
+    return;
+  }
+  fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
+  fillVendorClientFilter("vendor-client-filter-ddd", payload.options.ddds || [], currentVendorClientFilters.ddd);
+  fillVendorClientFilter(
+    "vendor-client-filter-city",
+    (payload.options.cities || []).map((city) => ({ value: city.city, label: city.label })),
+    currentVendorClientFilters.city,
+    "label"
+  );
+  summary.innerHTML = `
+    <article><span>Total carteira</span><strong>${formatNumber.format(payload.total_carteira || 0)}</strong></article>
+    <article><span>Ativos</span><strong>${formatNumber.format(payload.counts.active || 0)}</strong></article>
+    <article><span>Inativos</span><strong>${formatNumber.format(payload.counts.inactive || 0)}</strong></article>
+    <article><span>Nunca Comprou</span><strong>${formatNumber.format(payload.counts.never || 0)}</strong></article>
+    <article><span>Resultado</span><strong>${formatNumber.format(payload.total_resultado || 0)}</strong></article>
+  `;
+  head.innerHTML = `<tr>${payload.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr>`;
+  body.innerHTML = payload.rows.map((row) => `
+    <tr>
+      ${payload.columns.map((column) => {
+        const value = column.key === "faturamento_liquido" ? formatCurrency.format(row[column.key] || 0) : formatCell(row[column.key]);
+        return `<td>${escapeHtml(value)}</td>`;
+      }).join("")}
+    </tr>
+  `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta seleção.</td></tr>`;
+  status.textContent = payload.total_resultado > payload.rows.length
+    ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
+    : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
+}
+
 async function loadVendorRegionClients(force = false) {
   const panel = document.getElementById("vendor-region-clients-panel");
   if (!panel || currentVendorWorkspace !== "clients") {
-    return;
-  }
-  if (vendorRegionClientsLoaded && !force) {
     return;
   }
   const status = document.getElementById("vendor-region-clients-status");
@@ -3679,36 +3760,17 @@ async function loadVendorRegionClients(force = false) {
   if (!params) {
     return;
   }
+  const cacheKey = params.toString();
+  if (vendorRegionClientsLoaded && currentVendorRegionClientsCacheKey === cacheKey && currentVendorRegionClientsPayload && !force) {
+    renderVendorRegionClientsPayload(currentVendorRegionClientsPayload);
+    return;
+  }
   status.textContent = "Carregando clientes da região...";
   try {
-    const payload = await fetchJson(`/api/vendor-region-clients?${params.toString()}`);
-    fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
-    fillVendorClientFilter("vendor-client-filter-ddd", payload.options.ddds || [], currentVendorClientFilters.ddd);
-    fillVendorClientFilter(
-      "vendor-client-filter-city",
-      (payload.options.cities || []).map((city) => ({ value: city.city, label: city.label })),
-      currentVendorClientFilters.city,
-      "label"
-    );
-    summary.innerHTML = `
-      <article><span>Total carteira</span><strong>${formatNumber.format(payload.total_carteira || 0)}</strong></article>
-      <article><span>Ativos</span><strong>${formatNumber.format(payload.counts.active || 0)}</strong></article>
-      <article><span>Inativos</span><strong>${formatNumber.format(payload.counts.inactive || 0)}</strong></article>
-      <article><span>Nunca Comprou</span><strong>${formatNumber.format(payload.counts.never || 0)}</strong></article>
-      <article><span>Resultado</span><strong>${formatNumber.format(payload.total_resultado || 0)}</strong></article>
-    `;
-    head.innerHTML = `<tr>${payload.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr>`;
-    body.innerHTML = payload.rows.map((row) => `
-      <tr>
-        ${payload.columns.map((column) => {
-          const value = column.key === "faturamento_liquido" ? formatCurrency.format(row[column.key] || 0) : formatCell(row[column.key]);
-          return `<td>${escapeHtml(value)}</td>`;
-        }).join("")}
-      </tr>
-    `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta seleção.</td></tr>`;
-    status.textContent = payload.total_resultado > payload.rows.length
-      ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
-      : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
+    const payload = await fetchJson(`/api/vendor-region-clients?${cacheKey}`, { force });
+    currentVendorRegionClientsPayload = payload;
+    currentVendorRegionClientsCacheKey = cacheKey;
+    renderVendorRegionClientsPayload(payload);
     vendorRegionClientsLoaded = true;
   } catch (error) {
     summary.innerHTML = "";
