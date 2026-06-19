@@ -3316,7 +3316,7 @@ def vendor_home_month_goals(company_id: str, vendor_id_value: str, year: int, mo
     return goals
 
 
-def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
+def build_home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
     company_id, vendor, user = current_user_vendor_context(token, company_id_value, vendor_id_value)
     vendor_id_value = str(vendor.get("id") or "")
     today_value = date.today()
@@ -3421,6 +3421,24 @@ def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_
         "rows": rows,
         "totals": totals,
     }
+
+
+def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
+    company_id, vendor, user = current_user_vendor_context(token, company_id_value, vendor_id_value)
+    resolved_vendor_id = str(vendor.get("id") or "")
+    cache_key = (
+        "home_vendor_panel",
+        str(user.get("id") or user.get("login") or token or "anon"),
+        company_id,
+        resolved_vendor_id,
+        date.today().strftime("%Y-%m-%d"),
+    )
+    dependencies = vendor_dashboard_dependencies(company_id) + [users_file(), auth_sessions_file()]
+    return cached_payload(
+        cache_key,
+        dependencies,
+        lambda: build_home_vendor_panel_payload(token, company_id, resolved_vendor_id),
+    )
 
 
 def vendor_day_by_day_agenda_payload(company_id: str, vendor_id_value: str):
@@ -5936,13 +5954,12 @@ def vendors_payload(company_id: str, query: str = ""):
     }
 
 
-def vendor_page_links_payload():
+def build_vendor_page_links_payload():
     links = []
     for company_id, company_name in COMPANIES.items():
-        try:
-            vendors, _inserted = sync_vendors_from_sales(company_id)
-        except Exception:
-            continue
+        vendors = load_json(vendors_file(company_id), [])
+        if not isinstance(vendors, list):
+            vendors = []
         for vendor in vendors:
             if vendor.get("status") != "Ativo":
                 continue
@@ -5964,6 +5981,13 @@ def vendor_page_links_payload():
         "total": len(links),
         "rows": links,
     }
+
+
+def vendor_page_links_payload():
+    dependencies = []
+    for company_id in COMPANIES:
+        dependencies.append(vendors_file(company_id))
+    return cached_payload(("vendor_page_links",), dependencies, build_vendor_page_links_payload)
 
 
 def save_vendor_payload(payload: dict):

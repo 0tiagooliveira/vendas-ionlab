@@ -116,6 +116,8 @@ let currentVendorDayByDayClient = null;
 let currentVendorAgendaPayload = null;
 let currentVendorContactReportPayload = null;
 let currentVendorDailyContactsPayload = null;
+let homeVendorPanelCache = new Map();
+let homeVendorPanelInFlight = new Map();
 let currentVendorRegionDimension = "ufs";
 let currentVendorRegionIndicator = "quant";
 let currentVendorRegionTarget = "dashboard";
@@ -733,24 +735,66 @@ function applyDashboardVendorMode() {
   });
 }
 
+function homeVendorStatsSkeleton() {
+  return `
+    <section class="home-vendor-insights-title home-loading-panel">
+      <div>
+        <p class="eyebrow">Painel individual</p>
+        <h2>Carregando indicadores do vendedor</h2>
+        <p class="muted"><span class="loading-dot"></span>Preparando vendas, contatos e metas do mês.</p>
+      </div>
+    </section>
+    <div class="home-vendor-insights-grid home-skeleton-grid">
+      ${Array.from({ length: 4 }, () => `
+        <article class="home-vendor-chart-card skeleton-card">
+          <span></span><strong></strong><div></div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 async function renderStats(selection = {}) {
   const grid = document.getElementById("stats-grid");
   if (!grid) {
     return;
   }
-  grid.innerHTML = '<div class="table-status">Carregando indicadores do vendedor...</div>';
+  const params = new URLSearchParams();
+  if (selection.company) {
+    params.set("company", selection.company);
+  }
+  if (selection.vendorId) {
+    params.set("vendor_id", selection.vendorId);
+  }
+  const query = params.toString();
+  const cacheKey = query || "current-user";
+  const cached = homeVendorPanelCache.get(cacheKey);
+  if (cached) {
+    renderHomeVendorCharts(cached);
+  } else {
+    grid.innerHTML = homeVendorStatsSkeleton();
+  }
   try {
-    const params = new URLSearchParams();
-    if (selection.company) {
-      params.set("company", selection.company);
+    let request = homeVendorPanelInFlight.get(cacheKey);
+    if (!request) {
+      request = fetchJson(`/api/home/vendor-panel${query ? `?${query}` : ""}`);
+      homeVendorPanelInFlight.set(cacheKey, request);
     }
-    if (selection.vendorId) {
-      params.set("vendor_id", selection.vendorId);
+    const payload = await request;
+    homeVendorPanelCache.set(cacheKey, payload);
+    if (homeVendorPanelInFlight.get(cacheKey) === request) {
+      homeVendorPanelInFlight.delete(cacheKey);
     }
-    const query = params.toString();
-    const payload = await fetchJson(`/api/home/vendor-panel${query ? `?${query}` : ""}`, { force: true });
     renderHomeVendorCharts(payload);
   } catch (error) {
+    homeVendorPanelInFlight.delete(cacheKey);
+    if (cached) {
+      const status = document.createElement("p");
+      status.className = "table-status home-cache-warning";
+      status.textContent = `Mostrando dados em memória. Atualização falhou: ${error.message}`;
+      grid.appendChild(status);
+      return;
+    }
     grid.innerHTML = `
       <section class="home-vendor-insights-empty">
         <p class="eyebrow">Indicadores do vendedor</p>
@@ -907,6 +951,20 @@ function renderHomeVendorCharts(payload) {
   }
 }
 
+function homeVendorCardsSkeleton() {
+  return `
+    <div class="home-vendor-card-skeleton-grid">
+      ${Array.from({ length: 6 }, () => `
+        <article class="home-vendor-card home-vendor-card-skeleton">
+          <span></span>
+          <strong></strong>
+          <small></small>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 async function renderHomeVendorPages() {
   const grid = document.getElementById("home-vendor-grid");
   const panelBox = document.getElementById("home-vendor-panel-box");
@@ -916,14 +974,14 @@ async function renderHomeVendorPages() {
     return;
   }
   if (panelList) {
-    panelList.innerHTML = '<span class="vendor-panel-empty">Carregando...</span>';
+    panelList.innerHTML = '<span class="vendor-panel-empty vendor-panel-loading"><span class="loading-dot"></span> Carregando painéis...</span>';
   }
   if (panelSummary) {
-    panelSummary.textContent = "Carregando vendedores...";
+    panelSummary.innerHTML = '<span class="loading-dot"></span> Carregando vendedores ativos...';
   }
 
   if (grid) {
-    grid.innerHTML = '<div class="table-status">Carregando vendedores ativos...</div>';
+    grid.innerHTML = homeVendorCardsSkeleton();
   }
   let activeVendors = [];
   try {
@@ -2120,7 +2178,7 @@ function editFocusedSentDocument() {
   moveQuoteEditorToModal();
   if (modalKind) modalKind.textContent = kind === "order" ? "Editando pedido" : "Editando orçamento";
   if (modalTitle) modalTitle.textContent = `${kind === "order" ? "Pedido" : "Orçamento"} ${row.numero || ""}`;
-  if (editButton) editButton.textContent = "Editando no modal";
+  if (editButton) editButton.textContent = kind === "order" ? "Editar pedido" : "Editar orçamento";
 }
 
 async function searchSavedCommercialDocuments(kind) {
@@ -3446,9 +3504,17 @@ async function loadVendorPageGoals() {
   const status = document.getElementById("vendor-page-goals-status");
   const summary = document.getElementById("vendor-page-goals-summary");
   const list = document.getElementById("vendor-page-goals-list");
-  status.textContent = "Carregando metas e objetivos...";
+  const year = new Date().getFullYear();
+  const cacheKey = `${route.company}|${route.vendorId}|${year}`;
+  if (currentVendorPageGoalsPayload?.cacheKey === cacheKey) {
+    renderVendorPageGoals();
+    status.textContent = "Metas e objetivos reaproveitados da memoria local.";
+    return;
+  }
+  status.innerHTML = '<span class="loading-dot"></span> Carregando metas e objetivos...';
   try {
-    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${new Date().getFullYear()}`);
+    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${year}`);
+    payload.cacheKey = cacheKey;
     currentVendorPageGoalsPayload = payload;
     renderVendorPageGoals();
     status.textContent = `${payload.empresa}: metas carregadas para ${payload.vendedor?.nome_completo || "vendedor"}.`;
@@ -3509,7 +3575,7 @@ function renderVendorPageGoals() {
     return `
       <div class="goal-name-with-help">
         <strong>${escapeHtml(objective.label)}</strong>
-        <span class="goal-help-icon" title="${escapeHtml(help)}" tabindex="0" aria-label="${escapeHtml(help)}">?</span>
+        <button class="goal-help-icon" type="button" data-goal-help="${escapeHtml(help)}" aria-label="${escapeHtml(help)}">?</button>
       </div>
     `;
   };
@@ -3574,7 +3640,7 @@ function renderVendorPageGoals() {
         <td>
           <div class="goal-name-with-help">
             <strong>Vendas Liquidas outras regioes</strong>
-            <span class="goal-help-icon" title="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele." tabindex="0">?</span>
+            <button class="goal-help-icon" type="button" data-goal-help="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele." aria-label="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele.">?</button>
           </div>
         </td>
         <td>-</td>
@@ -3791,20 +3857,32 @@ function renderVendorDailyContactsChart(payload) {
     return;
   }
   chart.innerHTML = `
-    <div class="vendor-daily-contact-bars">
+    <div class="vendor-daily-contact-list">
       ${rows.map((row) => {
         const inactive = Number(row.inativos || 0);
         const never = Number(row.nunca_comprou || 0);
-        const inactivePct = Math.max(0, (inactive / maxValue) * 100);
-        const neverPct = Math.max(0, (never / maxValue) * 100);
+        const rowTotal = Number(row.total || 0);
+        const totalPct = Math.max(4, (rowTotal / maxValue) * 100);
+        const inactiveShare = rowTotal ? Math.max(0, (inactive / rowTotal) * 100) : 0;
+        const neverShare = rowTotal ? Math.max(0, (never / rowTotal) * 100) : 0;
+        const dateLabel = escapeHtml(row.data_label || row.data || "");
+        const tooltip = `${dateLabel}: ${formatNumber.format(rowTotal)} contatos | Inativos ${formatNumber.format(inactive)} | Nunca Comprou ${formatNumber.format(never)}`;
         return `
-          <article class="vendor-daily-contact-day">
-            <div class="vendor-daily-contact-stack" title="${escapeHtml(row.data_label || row.data || "")}: ${formatNumber.format(row.total || 0)} contatos">
-              <i class="inactive" style="height:${inactivePct}%"><span>${inactive ? formatNumber.format(inactive) : ""}</span></i>
-              <i class="never" style="height:${neverPct}%"><span>${never ? formatNumber.format(never) : ""}</span></i>
+          <article class="vendor-daily-contact-row" data-tooltip="${tooltip}" title="${tooltip}">
+            <div class="vendor-daily-contact-date">
+              <strong>${dateLabel}</strong>
+              <span>${formatNumber.format(rowTotal)} contato(s)</span>
             </div>
-            <strong>${escapeHtml(row.data_label || row.data || "")}</strong>
-            <span>${formatNumber.format(row.total || 0)}</span>
+            <div class="vendor-daily-contact-meter" aria-label="${tooltip}">
+              <div class="vendor-daily-contact-track" style="--total-width:${totalPct}%;">
+                <i class="inactive" style="--segment-width:${inactiveShare}%;"><span>${inactive ? formatNumber.format(inactive) : ""}</span></i>
+                <i class="never" style="--segment-width:${neverShare}%;"><span>${never ? formatNumber.format(never) : ""}</span></i>
+              </div>
+            </div>
+            <div class="vendor-daily-contact-breakdown">
+              <span><i class="inactive"></i>${formatNumber.format(inactive)} inativos</span>
+              <span><i class="never"></i>${formatNumber.format(never)} nunca comprou</span>
+            </div>
           </article>
         `;
       }).join("")}
@@ -4067,7 +4145,7 @@ function vendorQuantChart(row, closedYears, closedMonths) {
           const inactiveDeg = Math.min(360, activeDeg + ((inativos / total) * 360));
           const neverDeg = Math.min(360, inactiveDeg + ((nunca / total) * 360));
           return `
-            <div class="period-donut-item">
+            <div class="period-donut-item" title="${escapeHtml(row.label)} | ${escapeHtml(item.label)}: Ativos ${formatNumber.format(Math.round(ativos))}, Inativos ${formatNumber.format(Math.round(inativos))}, Nunca comprou ${formatNumber.format(Math.round(nunca))}, Total ${formatNumber.format(totalClients)}">
               <div class="period-donut ${item.media ? "average" : ""}" style="--active-deg:${activeDeg}deg;--inactive-deg:${inactiveDeg}deg;--never-deg:${neverDeg}deg;">
                 <strong>${formatNumber.format(totalClients)}</strong>
                 <span>${escapeHtml(item.label)}</span>
@@ -4149,7 +4227,7 @@ function vendorSalesChart(row, closedYears, months, closedMonths) {
         ${bars.map((bar) => {
           const barHeight = Math.max(0, (bar.value / scaleMax) * 100);
           return `
-          <div class="bar-column ${bar.type}">
+          <div class="bar-column ${bar.type}" title="${escapeHtml(row.label)} | ${escapeHtml(bar.label)}: ${formatCurrency.format(bar.value)}">
             <div class="bar-shape ${barHeight < 12 ? "tiny-bar" : ""}" style="--bar-height:${barHeight}%">
               ${bar.value > 0 ? `<div class="bar-value">${formatCurrency.format(bar.value)}</div>` : ""}
             </div>
@@ -9251,8 +9329,51 @@ async function init() {
   showAppScreen();
 }
 
+
+function closeGoalHelpPopovers() {
+  document.querySelectorAll(".goal-help-popover").forEach((popover) => popover.remove());
+  document.querySelectorAll(".goal-help-icon.active").forEach((button) => {
+    button.classList.remove("active");
+    button.setAttribute("aria-expanded", "false");
+  });
+}
+
+function toggleGoalHelpPopover(button) {
+  const text = button?.dataset.goalHelp || button?.getAttribute("aria-label") || "";
+  if (!button || !text) {
+    return;
+  }
+  const existing = button.parentElement?.querySelector(".goal-help-popover");
+  if (existing) {
+    closeGoalHelpPopovers();
+    return;
+  }
+  closeGoalHelpPopovers();
+  const popover = document.createElement("span");
+  popover.className = "goal-help-popover";
+  popover.textContent = text;
+  button.insertAdjacentElement("afterend", popover);
+  button.classList.add("active");
+  button.setAttribute("aria-expanded", "true");
+}
+
+function handleGoalHelpClick(event) {
+  const button = event.target.closest(".goal-help-icon[data-goal-help]");
+  if (button) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleGoalHelpPopover(button);
+    return;
+  }
+  if (!event.target.closest(".goal-help-popover")) {
+    closeGoalHelpPopovers();
+  }
+}
+
+document.addEventListener("click", handleGoalHelpClick);
 document.addEventListener("click", handleGlobalNavigationClick);
 
 init();
+
 
 
