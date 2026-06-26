@@ -4328,7 +4328,7 @@ def vendor_about_goal_payload(company_id: str, vendor_id_value: str, year_value=
     year = int(optional_number_value(year_value) or CURRENT_YEAR)
     month = int(optional_number_value(month_value) or date.today().month)
     month = max(1, min(12, month))
-    goals = vendor_goals_payload(company_id, vendor_id_value, year)
+    goals = vendor_goals_payload(company_id, vendor_id_value, year, month, "1")
     month_data = (goals.get("goals", {}).get("months") or {}).get(str(month), {})
     sales_base = goals.get("sales_base") or {}
     increase_percent = number_value(month_data.get("percentual_aumento"))
@@ -10222,6 +10222,7 @@ class CRMHandler(BaseHTTPRequestHandler):
     server_version = "CRM/0.1"
 
     def do_GET(self):
+        self._request_started_at = time.perf_counter()
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -11342,12 +11343,19 @@ class CRMHandler(BaseHTTPRequestHandler):
 
     def send_json(self, payload, status=HTTPStatus.OK):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        elapsed_ms = 0
+        started_at = getattr(self, "_request_started_at", None)
+        if started_at:
+            elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Response-Time-Ms", str(elapsed_ms))
         self.end_headers()
         self.wfile.write(body)
+        if elapsed_ms >= 2000:
+            server_log(f"API lenta {elapsed_ms}ms {self.command} {self.path}")
 
     def log_message(self, format, *args):
         return

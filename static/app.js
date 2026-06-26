@@ -219,7 +219,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260626-metas-mes-rapido1";
+const appAssetVersion = "20260626-metas-fast2";
 const apiMemoryCache = new Map();
 const fastCacheMs = 30 * 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
