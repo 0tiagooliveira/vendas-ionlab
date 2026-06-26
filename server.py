@@ -1077,6 +1077,20 @@ def economic_group_display_client(
     return normalized_id, client or {}
 
 
+def economic_group_display_client_for_region(
+    group_index: dict,
+    client_id: str,
+    client: dict | None,
+    client_index: dict,
+    region_client_ids: set,
+) -> tuple[str, dict]:
+    display_client_id, display_client = economic_group_display_client(group_index, client_id, client, client_index)
+    if display_client_id in region_client_ids:
+        return display_client_id, display_client
+    normalized_id = normalize_identifier(client_id)
+    return normalized_id, client or {}
+
+
 def vendor_can_manage(role: str) -> bool:
     return role in ("master", "supervisor")
 
@@ -2440,7 +2454,7 @@ def vendor_regions_payload(company_id: str, vendor_id_value: str):
         if group_key in region_group_keys:
             continue
         region_group_keys.add(group_key)
-        _display_client_id, client = economic_group_display_client(group_index, client_id, client, all_clients)
+        _display_client_id, client = economic_group_display_client_for_region(group_index, client_id, client, all_clients, region_client_ids)
         uf = str(client.get("UF") or "").strip().upper() or "Sem UF"
         city = str(client.get("CID") or "").strip() or "Sem cidade"
         city_key = normalize_text(city)
@@ -2531,7 +2545,7 @@ def vendor_region_clients_payload(company_id: str, vendor_id_value: str, params)
         if stats_key in seen_group_keys:
             continue
         seen_group_keys.add(stats_key)
-        display_client_id, display_client = economic_group_display_client(group_index, client_id, client, all_clients)
+        display_client_id, display_client = economic_group_display_client_for_region(group_index, client_id, client, all_clients, region_client_ids)
         client = display_client or client
         uf = str(client.get("UF") or "").strip().upper()
         city = str(client.get("CID") or "").strip()
@@ -2831,7 +2845,7 @@ def vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str
         if stats_key in seen_group_keys:
             continue
         seen_group_keys.add(stats_key)
-        display_client_id, display_client = economic_group_display_client(group_index, client_id, client, all_clients)
+        display_client_id, display_client = economic_group_display_client_for_region(group_index, client_id, client, all_clients, region_client_ids)
         stats = sales_stats.get(stats_key, {})
         row = vendor_day_by_day_client_row(display_client_id, display_client or client, stats, "recontact")
         form = record.get("form") or {}
@@ -2867,7 +2881,7 @@ def vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
         if stats_key in seen_group_keys:
             continue
         seen_group_keys.add(stats_key)
-        display_client_id, display_client = economic_group_display_client(group_index, client_id, client, all_clients)
+        display_client_id, display_client = economic_group_display_client_for_region(group_index, client_id, client, all_clients, region_client_ids)
         if display_client_id in blocked_clients:
             continue
         stats = sales_stats.get(stats_key, {})
@@ -3061,12 +3075,30 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
     saved_schema_is_current = saved_schema_is_current or (bool(saved_details) and saved_has_today_attendance)
     if saved_details and saved_schema_is_current:
         records = data.get("atendimentos", {})
+        _vendor_for_filter, current_candidates = vendor_day_by_day_candidates(company_id, vendor_id_value)
+        current_recontacts = vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data)
+        allowed_saved_ids = {
+            status_key: {
+                normalize_identifier(row.get("id"))
+                for row in rows
+                if normalize_identifier(row.get("id"))
+            }
+            for status_key, rows in current_candidates.items()
+        }
+        allowed_saved_ids["recontact"] = {
+            normalize_identifier(row.get("id"))
+            for row in current_recontacts
+            if normalize_identifier(row.get("id"))
+        }
 
         def saved_rows_for(status_key: str) -> list[dict]:
             result = []
             for row in saved_details.get(status_key, []) or []:
                 client_id = row.get("id")
-                if normalize_identifier(client_id) in blocked_clients:
+                normalized_client_id = normalize_identifier(client_id)
+                if normalized_client_id in blocked_clients:
+                    continue
+                if normalized_client_id not in allowed_saved_ids.get(status_key, set()):
                     continue
                 record_key = f"{day_key}|{vendor_id_value}|{client_id}"
                 result.append({**row, "atendimento_salvo": bool(records.get(record_key))})
