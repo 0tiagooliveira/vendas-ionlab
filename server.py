@@ -4497,7 +4497,7 @@ def order_by_id(company_id: str, order_id: str) -> dict:
     raise ValueError("Pedido nao encontrado.")
 
 
-def commercial_document_search_payload(company_id: str, vendor_id_value: str, query: str, kind: str, limit: int = 20):
+def commercial_document_search_payload(company_id: str, vendor_id_value: str, query: str, kind: str, limit: int = 20, page: int = 1):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     source = orders_file(company_id) if kind == "pedido" else quotes_file(company_id)
@@ -4520,10 +4520,21 @@ def commercial_document_search_payload(company_id: str, vendor_id_value: str, qu
             "documento": document,
             "label": f"{document.get('numero')} - {client.get('nome') or ''}",
         })
-        if len(rows) >= limit:
-            break
-    rows.sort(key=lambda item: normalize_text(item.get("numero")), reverse=True)
-    return {"rows": rows, "kind": kind}
+    rows.sort(key=lambda item: (str(item.get("atualizado_em") or ""), normalize_text(item.get("numero"))), reverse=True)
+    total = len(rows)
+    page_size = max(1, min(int(optional_number_value(limit) or 20), 100))
+    total_pages = max(1, math.ceil(total / page_size))
+    page_number = max(1, min(int(optional_number_value(page) or 1), total_pages))
+    start = (page_number - 1) * page_size
+    paged_rows = rows[start:start + page_size]
+    return {
+        "rows": paged_rows,
+        "kind": kind,
+        "page": page_number,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+    }
 
 
 def pdf_clean_text(value) -> str:
@@ -9595,8 +9606,10 @@ class CRMHandler(BaseHTTPRequestHandler):
             company_id = params.get("company", ["ionlab"])[0]
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
+            limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
+            page = int(optional_number_value(params.get("page", [1])[0]) or 1)
             try:
-                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "orcamento"))
+                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "orcamento", limit, page))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -9605,8 +9618,10 @@ class CRMHandler(BaseHTTPRequestHandler):
             company_id = params.get("company", ["ionlab"])[0]
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
+            limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
+            page = int(optional_number_value(params.get("page", [1])[0]) or 1)
             try:
-                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "pedido"))
+                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "pedido", limit, page))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 

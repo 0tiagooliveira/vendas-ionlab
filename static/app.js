@@ -135,6 +135,9 @@ let quoteProductTimer = null;
 let quickConsultTimer = null;
 let quoteSavedTimer = null;
 let orderSavedTimer = null;
+const sentDocumentsPageSize = 20;
+const sentDocumentsState = { quote: { page: 1, payload: null }, order: { page: 1, payload: null } };
+let currentSentDocumentFocus = null;
 let prospectOptionsLoaded = false;
 let prospectClientTimer = null;
 let vendorsTimer = null;
@@ -1777,6 +1780,8 @@ function setVendorWorkspaceSection(section) {
     if (status) {
       status.textContent = "Busque um orcamento ou pedido salvo para abrir na tela de edicao.";
     }
+    loadSentDocumentsList("quote");
+    loadSentDocumentsList("order");
   }
   if (section === "day") {
     if (!currentVendorDayByDayPayload) {
@@ -2049,6 +2054,185 @@ async function openSavedCommercialDocumentFromSearch(kind) {
   } catch (error) {
     if (status) status.textContent = error.message;
   }
+}
+
+function sentDocumentPdfUrl(row, kind) {
+  const route = vendorPageRoute();
+  const document = row?.documento || {};
+  if (!route || !document.id) return "#";
+  const path = kind === "order" ? "/api/orders/pdf" : "/api/quotes/pdf";
+  return `${path}?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(document.id)}&_=${Date.now()}`;
+}
+
+function sentDocumentItemsRows(commercialDocument) {
+  const items = commercialDocument.itens || [];
+  return items.map((item, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(item.referencia || "")}</td>
+      <td>${escapeHtml(item.descricao_resumida || item.descricao_detalhada || "")}</td>
+      <td>${escapeHtml(formatNumber.format(item.quantidade || 0))}</td>
+      <td>${escapeHtml(formatCurrency2.format(item.valor_unitario || 0))}</td>
+      <td>${escapeHtml(formatCurrency2.format(item.valor_ipi || 0))}</td>
+      <td>${escapeHtml(formatCurrency2.format(item.total_item || 0))}</td>
+      <td>${escapeHtml(item.disponibilidade || "")}</td>
+    </tr>
+  `).join("") || '<tr><td colspan="8">Nenhum item cadastrado.</td></tr>';
+}
+
+function formatSentDocumentDate(value) {
+  if (!value) return "Sem data";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function sentDocumentElements(kind) {
+  return {
+    list: document.getElementById(kind === "order" ? "sent-orders-list" : "sent-quotes-list"),
+    pages: document.getElementById(kind === "order" ? "sent-orders-pages" : "sent-quotes-pages"),
+    count: document.getElementById(kind === "order" ? "sent-orders-count" : "sent-quotes-count"),
+  };
+}
+
+function renderSentDocumentsList(kind, payload) {
+  const { list, pages, count } = sentDocumentElements(kind);
+  if (!list || !pages || !count) return;
+  const rows = payload.rows || [];
+  const label = kind === "order" ? "pedido" : "orcamento";
+  count.textContent = `${formatNumber.format(payload.total || 0)} ${label}(s)`;
+  list.innerHTML = rows.map((row, index) => `
+    <article class="sent-document-row">
+      <div>
+        <strong>${escapeHtml(row.numero || "Sem número")} - ${escapeHtml(row.cliente || "Cliente não informado")}</strong>
+        <span>${escapeHtml(row.cliente_documento || "")} | ${escapeHtml(formatCurrency2.format(row.total || 0))}</span>
+        <small>Atualizado em ${escapeHtml(formatSentDocumentDate(row.atualizado_em || ""))}</small>
+      </div>
+      <button type="button" data-sent-kind="${kind}" data-sent-index="${index}">Ver</button>
+    </article>
+  `).join("") || `<div class="table-status">Nenhum ${label} encontrado.</div>`;
+  list.querySelectorAll("[data-sent-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = rows[Number(button.dataset.sentIndex)];
+      openSentDocumentModal(row, kind);
+    });
+  });
+  const totalPages = Number(payload.total_pages || 1);
+  const currentPage = Number(payload.page || 1);
+  pages.innerHTML = totalPages > 1 ? Array.from({ length: totalPages }, (_, index) => {
+    const page = index + 1;
+    return `<button type="button" class="${page === currentPage ? "active" : ""}" data-sent-page="${page}" data-sent-kind="${kind}">${page}</button>`;
+  }).join("") : "";
+  pages.querySelectorAll("[data-sent-page]").forEach((button) => {
+    button.addEventListener("click", () => loadSentDocumentsList(kind, Number(button.dataset.sentPage), true));
+  });
+}
+
+async function loadSentDocumentsList(kind, page = null, force = false) {
+  const route = vendorPageRoute();
+  const state = sentDocumentsState[kind];
+  const { list } = sentDocumentElements(kind);
+  if (!route || !state || !list) return;
+  const nextPage = page || state.page || 1;
+  if (state.payload?.page === nextPage && !force) {
+    renderSentDocumentsList(kind, state.payload);
+    return;
+  }
+  list.innerHTML = '<div class="table-status">Carregando documentos...</div>';
+  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
+  const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=&page=${encodeURIComponent(nextPage)}&limit=${sentDocumentsPageSize}`);
+  state.page = payload.page || nextPage;
+  state.payload = payload;
+  renderSentDocumentsList(kind, payload);
+  const status = document.getElementById("sent-quote-status");
+  if (status) status.textContent = "Últimos documentos enviados carregados.";
+}
+
+function closeSentDocumentModal() {
+  const modal = document.getElementById("sent-document-modal");
+  const quotePanel = document.getElementById("vendor-workspace-quotes");
+  if (quotePanel?.classList.contains("sent-modal-editor")) {
+    quotePanel.classList.remove("sent-modal-editor");
+    moveQuoteEditorHome();
+  }
+  if (modal) modal.classList.add("hidden");
+  currentSentDocumentFocus = null;
+}
+
+function openSentDocumentModal(row, kind) {
+  if (!row?.documento) return;
+  currentSentDocumentFocus = { row, kind };
+  const modal = document.getElementById("sent-document-modal");
+  const title = document.getElementById("sent-document-modal-title");
+  const kindLabel = document.getElementById("sent-document-modal-kind");
+  const body = document.getElementById("sent-document-modal-body");
+  const pdf = document.getElementById("sent-document-modal-pdf");
+  if (!modal || !title || !kindLabel || !body || !pdf) return;
+  moveQuoteEditorHome();
+  const commercialDocument = row.documento || {};
+  const client = commercialDocument.cliente || {};
+  const summary = commercialDocument.resumo || {};
+  const label = kind === "order" ? "Pedido" : "Orçamento";
+  kindLabel.textContent = label;
+  title.textContent = `${label} ${commercialDocument.numero || row.numero || ""}`;
+  pdf.href = sentDocumentPdfUrl(row, kind);
+  body.innerHTML = `
+    <div class="sent-document-focus-summary">
+      <article><span>Número</span><strong>${escapeHtml(commercialDocument.numero || row.numero || "")}</strong></article>
+      <article><span>Total</span><strong>${escapeHtml(formatCurrency2.format(summary.total_orcamento || row.total || 0))}</strong></article>
+      <article><span>Atualizado</span><strong>${escapeHtml(formatSentDocumentDate(row.atualizado_em || commercialDocument.atualizado_em || commercialDocument.criado_em || ""))}</strong></article>
+      <article><span>Itens</span><strong>${formatNumber.format((commercialDocument.itens || []).length)}</strong></article>
+    </div>
+    <div class="sent-document-client-box">
+      <strong>${escapeHtml(client.nome || row.cliente || "Cliente não informado")}</strong>
+      <span>${escapeHtml(client.documento || row.cliente_documento || "")} ${escapeHtml(client.cidade || "")} ${escapeHtml(client.uf || "")}</span>
+      <span>${escapeHtml(client.telefone || "")} ${escapeHtml(client.whatsapp || "")} ${escapeHtml(client.email || "")}</span>
+    </div>
+    <div class="table-scroll">
+      <table class="sent-document-items-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Referência</th>
+            <th>Descrição</th>
+            <th>Qtd.</th>
+            <th>Unitário</th>
+            <th>IPI</th>
+            <th>Total</th>
+            <th>Disponibilidade</th>
+          </tr>
+        </thead>
+        <tbody>${sentDocumentItemsRows(commercialDocument)}</tbody>
+      </table>
+    </div>
+  `;
+  modal.classList.remove("hidden");
+}
+
+function moveQuoteEditorToModal() {
+  const body = document.getElementById("sent-document-modal-body");
+  const quotePanel = document.getElementById("vendor-workspace-quotes");
+  if (!body || !quotePanel) return;
+  body.innerHTML = "";
+  body.appendChild(quotePanel);
+  quotePanel.classList.add("active", "sent-commercial-editor", "sent-modal-editor");
+  const title = document.getElementById("quote-workspace-title");
+  const subtitle = document.getElementById("quote-workspace-subtitle");
+  if (title) title.textContent = "Editar documento enviado";
+  if (subtitle) subtitle.textContent = "Edite este orçamento ou pedido em uma janela focada, sem sair da lista de enviados.";
+}
+
+function editFocusedSentDocument() {
+  if (!currentSentDocumentFocus) return;
+  const { row, kind } = currentSentDocumentFocus;
+  const modalTitle = document.getElementById("sent-document-modal-title");
+  const modalKind = document.getElementById("sent-document-modal-kind");
+  const editButton = document.getElementById("sent-document-modal-edit");
+  loadCommercialDocument(row.documento, kind, true);
+  moveQuoteEditorToModal();
+  if (modalKind) modalKind.textContent = kind === "order" ? "Editando pedido" : "Editando orçamento";
+  if (modalTitle) modalTitle.textContent = `${kind === "order" ? "Pedido" : "Orçamento"} ${row.numero || ""}`;
+  if (editButton) editButton.textContent = kind === "order" ? "Editar pedido" : "Editar orçamento";
 }
 
 function scheduleSavedQuoteSearch() {
@@ -8696,6 +8880,11 @@ async function init() {
   document.getElementById("order-saved-search").addEventListener("input", scheduleSavedOrderSearch);
   document.getElementById("quote-saved-open").addEventListener("click", () => openSavedCommercialDocumentFromSearch("quote"));
   document.getElementById("order-saved-open").addEventListener("click", () => openSavedCommercialDocumentFromSearch("order"));
+  document.getElementById("sent-document-modal-edit")?.addEventListener("click", editFocusedSentDocument);
+  document.querySelectorAll("[data-sent-modal-close]").forEach((button) => button.addEventListener("click", closeSentDocumentModal));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSentDocumentModal();
+  });
   document.getElementById("quote-saved-search").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();

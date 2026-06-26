@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CRM Ionlab</title>
-    <link rel="stylesheet" href="/styles.css?v=20260618-botoes-home-ajuste1">
+    <link rel="stylesheet" href="/styles.css?v=20260626-vendedor-documentos">
   </head>
   <body>
     <section class="login-screen auth-hidden" id="login-screen">
@@ -1439,6 +1439,24 @@
               <button class="secondary-action" id="order-saved-open" type="button">Abrir pedido</button>
             </div>
             <p class="muted" id="sent-quote-status">Busque um orcamento ou pedido salvo para abrir na tela de edicao.</p>
+            <div class="sent-documents-grid">
+              <section class="sent-documents-panel">
+                <div class="sent-documents-head">
+                  <h4>Últimos orçamentos</h4>
+                  <span id="sent-quotes-count"></span>
+                </div>
+                <div class="sent-documents-list" id="sent-quotes-list"></div>
+                <div class="sent-documents-pages" id="sent-quotes-pages"></div>
+              </section>
+              <section class="sent-documents-panel">
+                <div class="sent-documents-head">
+                  <h4>Últimos pedidos</h4>
+                  <span id="sent-orders-count"></span>
+                </div>
+                <div class="sent-documents-list" id="sent-orders-list"></div>
+                <div class="sent-documents-pages" id="sent-orders-pages"></div>
+              </section>
+            </div>
           </section>
 
           <section class="ml-panel" id="ml-sales-panel">
@@ -2149,6 +2167,24 @@
 </main>
     </div>
 
+    <div class="sent-document-modal hidden" id="sent-document-modal" role="dialog" aria-modal="true" aria-labelledby="sent-document-modal-title">
+      <div class="sent-document-modal-backdrop" data-sent-modal-close></div>
+      <section class="sent-document-modal-panel">
+        <header class="sent-document-modal-head">
+          <div>
+            <p class="eyebrow" id="sent-document-modal-kind">Documento enviado</p>
+            <h3 id="sent-document-modal-title">Documento</h3>
+          </div>
+          <button class="sent-document-modal-close" type="button" data-sent-modal-close aria-label="Fechar">×</button>
+        </header>
+        <div class="sent-document-modal-body" id="sent-document-modal-body"></div>
+        <footer class="sent-document-modal-actions">
+          <a class="secondary-action" id="sent-document-modal-pdf" href="#" target="_blank" rel="noopener">Baixar PDF</a>
+          <button class="primary-action" id="sent-document-modal-edit" type="button">Editar documento</button>
+        </footer>
+      </section>
+    </div>
+
     <script>
       window.addEventListener("error", (event) => {
         const message = event.message || "Erro desconhecido";
@@ -2167,7 +2203,7 @@
         document.body.appendChild(box);
       });
     </script>
-    <script src="/app.js?v=20260618-botoes-home-ajuste1"></script>
+    <script src="/app.js?v=20260626-vendedor-documentos"></script>
   </body>
 </html>
 
