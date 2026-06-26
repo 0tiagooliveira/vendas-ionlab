@@ -5661,6 +5661,102 @@ def vendor_client_sales_goal_base(company_id: str, vendor_id_value: str, target_
     }
 
 
+def fast_vendor_goal_bases(company_id: str, vendor_id_value: str, target_year=None):
+    year = int(optional_number_value(target_year) or CURRENT_YEAR)
+    sales_empty = {
+        "media_ultimos_2_anos": 0.0,
+        "media_ano_corrente": 0.0,
+        "media_base": 0.0,
+        "anos_historicos": [],
+        "meses_fechados": [],
+        "criterio": "media_top_3_meses_ultimos_2_anos_fechados_fast",
+        "meses_base": [],
+        "fast_mode": True,
+    }
+    clients_empty = {
+        "criterio": "maior_quantidade_clientes_mes_ultimos_2_anos_fechados_fast",
+        "anos_historicos": [],
+        "maior_mes": None,
+        "quantidade_sugerida": 0,
+        "meses_base": [],
+        "fast_mode": True,
+    }
+    try:
+        _vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+    except Exception:
+        return sales_empty, clients_empty
+
+    last_two_years = [base_year for base_year in (year - 2, year - 1) if base_year >= START_YEAR]
+    if not last_two_years:
+        return sales_empty, clients_empty
+
+    group_index = economic_group_index(company_id)
+    region_group_keys = {
+        economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
+        for client_id in region_client_ids
+    }
+    sales_by_month = {
+        (base_year, month): 0.0
+        for base_year in last_two_years
+        for month in range(1, 13)
+    }
+    clients_by_month = {
+        (base_year, month): set()
+        for base_year in last_two_years
+        for month in range(1, 13)
+    }
+
+    for sale_company_id in vendor_sales_company_ids(company_id):
+        for sale in load_json(sales_file(sale_company_id), []):
+            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
+                continue
+            sale_year = record_year(sale.get("NF_EMI"))
+            sale_month = record_month(sale.get("NF_EMI"))
+            if sale_year not in last_two_years or not sale_month or not (1 <= sale_month <= 12):
+                continue
+            client_id = normalize_identifier(sale.get("ID_CL"))
+            client = client_index.get(client_id)
+            group_key = economic_group_key_from_index(group_index, client_id, client, sale)
+            if group_key not in region_group_keys:
+                continue
+            month_key = (sale_year, sale_month)
+            sales_by_month[month_key] += sale_net_revenue(sale)
+            clients_by_month[month_key].add(group_key)
+
+    monthly_values = [
+        {"year": base_year, "month": month, "value": value}
+        for (base_year, month), value in sales_by_month.items()
+    ]
+    selected_months = sorted(monthly_values, key=lambda item: item["value"], reverse=True)[:3]
+    base_average = (
+        sum(item["value"] for item in selected_months) / len(selected_months)
+        if selected_months else 0.0
+    )
+    month_rows = [
+        {"ano": base_year, "mes": month, "clientes": len(client_ids)}
+        for (base_year, month), client_ids in clients_by_month.items()
+    ]
+    best_clients = max(month_rows, key=lambda item: (item["clientes"], item["ano"], item["mes"]), default=None)
+    sales_base = {
+        **sales_empty,
+        "media_ultimos_2_anos": round(base_average, 2),
+        "media_base": round(base_average, 2),
+        "anos_historicos": last_two_years,
+        "meses_base": [
+            {"ano": item["year"], "mes": item["month"], "valor": round(item["value"], 2)}
+            for item in selected_months
+        ],
+    }
+    client_sales_base = {
+        **clients_empty,
+        "anos_historicos": last_two_years,
+        "maior_mes": best_clients,
+        "quantidade_sugerida": int(best_clients.get("clientes") or 0) if best_clients else 0,
+        "meses_base": sorted(month_rows, key=lambda item: (item["ano"], item["mes"])),
+    }
+    return sales_base, client_sales_base
+
+
 def vendor_items_key(year: int, month: int) -> str:
     return f"{int(year):04d}-{int(month):02d}"
 
@@ -6063,28 +6159,26 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
     all_goals = load_json(vendor_goals_file(company_id), {})
     stored = all_goals.get(vendor_goals_key(vendor_id_value, year), {}) if vendor_id_value else {}
     record = normalize_vendor_goal_record(stored, company_id, vendor_id_value, year) if vendor_id_value else default_vendor_goal_record(company_id, "", year)
-    sales_base = (
-        {"media_base": 0.0, "fast_mode": True}
-        if fast_mode
-        else (vendor_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_sales_goal_base(company_id, "", year))
-    )
-    client_sales_base = (
-        {"quantidade_sugerida": 0, "fast_mode": True}
-        if fast_mode
-        else (vendor_client_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_client_sales_goal_base(company_id, "", year))
-    )
+    if fast_mode and vendor_id_value:
+        sales_base, client_sales_base = fast_vendor_goal_bases(company_id, vendor_id_value, year)
+    else:
+        sales_base = vendor_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_sales_goal_base(company_id, "", year)
+        client_sales_base = vendor_client_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_client_sales_goal_base(company_id, "", year)
     for month in range(1, 13):
         month_record = record["months"][str(month)]
         increase = optional_number_value(month_record.get("percentual_aumento")) or 0.0
         saved_sales_goal = number_value(month_record["objetivos"]["vendas_liquidas"].get("meta"))
-        suggested_goal = round(sales_base["media_base"] * (1 + increase / 100), 2) if not fast_mode else saved_sales_goal
+        suggested_goal = round(sales_base["media_base"] * (1 + increase / 100), 2)
+        if fast_mode and suggested_goal <= 0:
+            suggested_goal = saved_sales_goal
         month_record["objetivos"]["vendas_liquidas"]["meta"] = suggested_goal
         month_record["meta_vendas_liquidas_sugerida"] = suggested_goal
         suggested_clients = int(client_sales_base.get("quantidade_sugerida") or 0)
         current_clients_goal = number_value(month_record["objetivos"]["clientes_com_vendas"].get("meta"))
-        if not fast_mode and current_clients_goal <= 0 and suggested_clients > 0:
+        if current_clients_goal <= 0 and suggested_clients > 0:
             month_record["objetivos"]["clientes_com_vendas"]["meta"] = suggested_clients
-        month_record["meta_clientes_com_vendas_sugerida"] = suggested_clients if not fast_mode else current_clients_goal
+            current_clients_goal = suggested_clients
+        month_record["meta_clientes_com_vendas_sugerida"] = suggested_clients if suggested_clients > 0 else current_clients_goal
     selected_month = int(optional_number_value(month_value) or 0)
     target_months = [selected_month] if 1 <= selected_month <= 12 else None
     achievements = vendor_goal_achievements(company_id, vendor_id_value, year, record, target_months, fast_mode) if vendor_id_value else {}
