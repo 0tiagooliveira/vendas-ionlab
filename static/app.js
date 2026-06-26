@@ -218,7 +218,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260626-ajuste-carregamento1";
+const appAssetVersion = "20260626-metas-mes-rapido1";
 const apiMemoryCache = new Map();
 const fastCacheMs = 30 * 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
@@ -3629,7 +3629,8 @@ async function loadVendorPageGoals() {
   const summary = document.getElementById("vendor-page-goals-summary");
   const list = document.getElementById("vendor-page-goals-list");
   const year = new Date().getFullYear();
-  const cacheKey = `${route.company}|${route.vendorId}|${year}`;
+  const selectedMonth = document.getElementById("vendor-page-goals-month")?.value || String(new Date().getMonth() + 1);
+  const cacheKey = `${route.company}|${route.vendorId}|${year}|${selectedMonth}`;
   if (currentVendorPageGoalsPayload?.cacheKey === cacheKey) {
     renderVendorPageGoals();
     status.classList.add("hidden");
@@ -3639,7 +3640,7 @@ async function loadVendorPageGoals() {
   status.classList.remove("hidden");
   status.innerHTML = '<span class="loading-dot"></span> Carregando metas e objetivos...';
   try {
-    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${year}`);
+    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${year}&month=${encodeURIComponent(selectedMonth)}`);
     payload.cacheKey = cacheKey;
     currentVendorPageGoalsPayload = payload;
     renderVendorPageGoals();
@@ -10780,7 +10781,7 @@ async function init() {
   document.getElementById("vendor-agenda-refresh").addEventListener("click", loadVendorAgenda);
   document.getElementById("vendor-contact-report-load").addEventListener("click", loadVendorContactReport);
   document.getElementById("vendor-daily-contact-month")?.addEventListener("change", loadVendorDailyContactsChart);
-  document.getElementById("vendor-page-goals-month").addEventListener("change", renderVendorPageGoals);
+  document.getElementById("vendor-page-goals-month").addEventListener("change", loadVendorPageGoals);
   document.getElementById("vendor-page-goals-print")?.addEventListener("click", printVendorGoalsReport);
   document.getElementById("vendor-about-goal-refresh")?.addEventListener("click", () => loadVendorAboutGoal(true));
   document.querySelectorAll("[data-vendor-client-status]").forEach((button) => {
