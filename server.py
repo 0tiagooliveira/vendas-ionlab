@@ -3316,7 +3316,7 @@ def vendor_home_month_goals(company_id: str, vendor_id_value: str, year: int, mo
     return goals
 
 
-def build_home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
+def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
     company_id, vendor, user = current_user_vendor_context(token, company_id_value, vendor_id_value)
     vendor_id_value = str(vendor.get("id") or "")
     today_value = date.today()
@@ -3421,24 +3421,6 @@ def build_home_vendor_panel_payload(token: str, company_id_value: str = "", vend
         "rows": rows,
         "totals": totals,
     }
-
-
-def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
-    company_id, vendor, user = current_user_vendor_context(token, company_id_value, vendor_id_value)
-    resolved_vendor_id = str(vendor.get("id") or "")
-    cache_key = (
-        "home_vendor_panel",
-        str(user.get("id") or user.get("login") or token or "anon"),
-        company_id,
-        resolved_vendor_id,
-        date.today().strftime("%Y-%m-%d"),
-    )
-    dependencies = vendor_dashboard_dependencies(company_id) + [users_file(), auth_sessions_file()]
-    return cached_payload(
-        cache_key,
-        dependencies,
-        lambda: build_home_vendor_panel_payload(token, company_id, resolved_vendor_id),
-    )
 
 
 def vendor_day_by_day_agenda_payload(company_id: str, vendor_id_value: str):
@@ -4515,13 +4497,11 @@ def order_by_id(company_id: str, order_id: str) -> dict:
     raise ValueError("Pedido nao encontrado.")
 
 
-def commercial_document_search_payload(company_id: str, vendor_id_value: str, query: str, kind: str, limit: int = 20, page: int = 1):
+def commercial_document_search_payload(company_id: str, vendor_id_value: str, query: str, kind: str, limit: int = 20):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     source = orders_file(company_id) if kind == "pedido" else quotes_file(company_id)
     query_key = normalize_text(query)
-    page_size = max(1, min(int(optional_number_value(limit) or 20), 100))
-    page_number = max(1, int(optional_number_value(page) or 1))
     rows = []
     for document in load_json(source, []):
         if vendor_id_value and document.get("vendor_id") != vendor_id_value:
@@ -4530,31 +4510,20 @@ def commercial_document_search_payload(company_id: str, vendor_id_value: str, qu
         haystack = normalize_text(f"{document.get('numero')} {client.get('nome')} {client.get('documento')} {client.get('codigo')}")
         if query_key and not search_text_matches(query, haystack):
             continue
-        updated_at = document.get("atualizado_em") or document.get("revisado_em") or document.get("criado_em") or ""
         rows.append({
             "id": document.get("id"),
             "numero": document.get("numero"),
             "cliente": client.get("nome"),
             "cliente_documento": client.get("documento"),
             "total": (document.get("resumo") or {}).get("total_orcamento"),
-            "atualizado_em": updated_at,
+            "atualizado_em": document.get("atualizado_em") or document.get("criado_em"),
             "documento": document,
             "label": f"{document.get('numero')} - {client.get('nome') or ''}",
         })
-    rows.sort(key=lambda item: (str(item.get("atualizado_em") or ""), normalize_text(item.get("numero"))), reverse=True)
-    total = len(rows)
-    total_pages = max(1, math.ceil(total / page_size))
-    page_number = min(page_number, total_pages)
-    start = (page_number - 1) * page_size
-    paged_rows = rows[start:start + page_size]
-    return {
-        "rows": paged_rows,
-        "kind": kind,
-        "page": page_number,
-        "page_size": page_size,
-        "total": total,
-        "total_pages": total_pages,
-    }
+        if len(rows) >= limit:
+            break
+    rows.sort(key=lambda item: normalize_text(item.get("numero")), reverse=True)
+    return {"rows": rows, "kind": kind}
 
 
 def pdf_clean_text(value) -> str:
@@ -5954,12 +5923,13 @@ def vendors_payload(company_id: str, query: str = ""):
     }
 
 
-def build_vendor_page_links_payload():
+def vendor_page_links_payload():
     links = []
     for company_id, company_name in COMPANIES.items():
-        vendors = load_json(vendors_file(company_id), [])
-        if not isinstance(vendors, list):
-            vendors = []
+        try:
+            vendors, _inserted = sync_vendors_from_sales(company_id)
+        except Exception:
+            continue
         for vendor in vendors:
             if vendor.get("status") != "Ativo":
                 continue
@@ -5981,13 +5951,6 @@ def build_vendor_page_links_payload():
         "total": len(links),
         "rows": links,
     }
-
-
-def vendor_page_links_payload():
-    dependencies = []
-    for company_id in COMPANIES:
-        dependencies.append(vendors_file(company_id))
-    return cached_payload(("vendor_page_links",), dependencies, build_vendor_page_links_payload)
 
 
 def save_vendor_payload(payload: dict):
@@ -9633,9 +9596,7 @@ class CRMHandler(BaseHTTPRequestHandler):
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
             try:
-                limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
-                page = int(optional_number_value(params.get("page", [1])[0]) or 1)
-                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "orcamento", limit, page))
+                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "orcamento"))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -9645,9 +9606,7 @@ class CRMHandler(BaseHTTPRequestHandler):
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
             try:
-                limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
-                page = int(optional_number_value(params.get("page", [1])[0]) or 1)
-                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "pedido", limit, page))
+                return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "pedido"))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 

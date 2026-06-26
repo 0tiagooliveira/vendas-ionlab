@@ -1,4 +1,4 @@
-const companies = [];
+﻿const companies = [];
 
 const pageTitles = {
   home: "Pagina principal",
@@ -113,19 +113,12 @@ let currentVendorRegionPayload = null;
 let currentVendorPageGoalsPayload = null;
 let currentVendorDayByDayPayload = null;
 let currentVendorDayByDayClient = null;
-let currentVendorAgendaPayload = null;
-let currentVendorContactReportPayload = null;
-let currentVendorDailyContactsPayload = null;
-let homeVendorPanelCache = new Map();
-let homeVendorPanelInFlight = new Map();
 let currentVendorRegionDimension = "ufs";
 let currentVendorRegionIndicator = "quant";
 let currentVendorRegionTarget = "dashboard";
 let currentVendorClientStatus = "all";
 let currentVendorClientFilters = { uf: "", ddd: "", city: "" };
 let vendorRegionClientsLoaded = false;
-let currentVendorRegionClientsPayload = null;
-let currentVendorRegionClientsCacheKey = "";
 let currentVendorWorkspace = "day";
 let currentQuoteContext = null;
 let currentQuoteClient = null;
@@ -133,7 +126,6 @@ let currentQuoteProduct = null;
 let currentQuoteItems = [];
 let currentLoadedQuote = null;
 let currentLoadedOrder = null;
-let currentSentDocumentFocus = null;
 let currentQuoteMode = "quote";
 let loadingSavedCommercialDocument = false;
 let currentQuoteLoadedFromSent = false;
@@ -143,8 +135,6 @@ let quoteProductTimer = null;
 let quickConsultTimer = null;
 let quoteSavedTimer = null;
 let orderSavedTimer = null;
-const sentDocumentsPageSize = 20;
-const sentDocumentsState = { quote: { page: 1, payload: null }, order: { page: 1, payload: null } };
 let prospectOptionsLoaded = false;
 let prospectClientTimer = null;
 let vendorsTimer = null;
@@ -252,18 +242,6 @@ function clearApiCache() {
   apiMemoryCache.clear();
 }
 
-function clearVendorWorkspaceCache() {
-  currentVendorAgendaPayload = null;
-  currentVendorContactReportPayload = null;
-  currentVendorDailyContactsPayload = null;
-  currentVendorPageGoalsPayload = null;
-  currentVendorRegionClientsPayload = null;
-  currentVendorRegionClientsCacheKey = "";
-  sentDocumentsState.quote = { page: 1, payload: null };
-  sentDocumentsState.order = { page: 1, payload: null };
-  vendorRegionClientsLoaded = false;
-}
-
 function invalidateLoadedViews() {
   Object.values(tableState).forEach((state) => {
     state.loaded = false;
@@ -272,7 +250,6 @@ function invalidateLoadedViews() {
   dashboardLoaded = false;
   mercadoLivreOverview = { companies: [] };
   currentUsersPayload = null;
-  clearVendorWorkspaceCache();
 }
 
 const viewPermissionMap = {
@@ -735,66 +712,24 @@ function applyDashboardVendorMode() {
   });
 }
 
-function homeVendorStatsSkeleton() {
-  return `
-    <section class="home-vendor-insights-title home-loading-panel">
-      <div>
-        <p class="eyebrow">Painel individual</p>
-        <h2>Carregando indicadores do vendedor</h2>
-        <p class="muted"><span class="loading-dot"></span>Preparando vendas, contatos e metas do mês.</p>
-      </div>
-    </section>
-    <div class="home-vendor-insights-grid home-skeleton-grid">
-      ${Array.from({ length: 4 }, () => `
-        <article class="home-vendor-chart-card skeleton-card">
-          <span></span><strong></strong><div></div>
-        </article>
-      `).join("")}
-    </div>
-  `;
-}
-
 async function renderStats(selection = {}) {
   const grid = document.getElementById("stats-grid");
   if (!grid) {
     return;
   }
-  const params = new URLSearchParams();
-  if (selection.company) {
-    params.set("company", selection.company);
-  }
-  if (selection.vendorId) {
-    params.set("vendor_id", selection.vendorId);
-  }
-  const query = params.toString();
-  const cacheKey = query || "current-user";
-  const cached = homeVendorPanelCache.get(cacheKey);
-  if (cached) {
-    renderHomeVendorCharts(cached);
-  } else {
-    grid.innerHTML = homeVendorStatsSkeleton();
-  }
+  grid.innerHTML = '<div class="table-status">Carregando indicadores do vendedor...</div>';
   try {
-    let request = homeVendorPanelInFlight.get(cacheKey);
-    if (!request) {
-      request = fetchJson(`/api/home/vendor-panel${query ? `?${query}` : ""}`);
-      homeVendorPanelInFlight.set(cacheKey, request);
+    const params = new URLSearchParams();
+    if (selection.company) {
+      params.set("company", selection.company);
     }
-    const payload = await request;
-    homeVendorPanelCache.set(cacheKey, payload);
-    if (homeVendorPanelInFlight.get(cacheKey) === request) {
-      homeVendorPanelInFlight.delete(cacheKey);
+    if (selection.vendorId) {
+      params.set("vendor_id", selection.vendorId);
     }
+    const query = params.toString();
+    const payload = await fetchJson(`/api/home/vendor-panel${query ? `?${query}` : ""}`, { force: true });
     renderHomeVendorCharts(payload);
   } catch (error) {
-    homeVendorPanelInFlight.delete(cacheKey);
-    if (cached) {
-      const status = document.createElement("p");
-      status.className = "table-status home-cache-warning";
-      status.textContent = `Mostrando dados em memória. Atualização falhou: ${error.message}`;
-      grid.appendChild(status);
-      return;
-    }
     grid.innerHTML = `
       <section class="home-vendor-insights-empty">
         <p class="eyebrow">Indicadores do vendedor</p>
@@ -951,20 +886,6 @@ function renderHomeVendorCharts(payload) {
   }
 }
 
-function homeVendorCardsSkeleton() {
-  return `
-    <div class="home-vendor-card-skeleton-grid">
-      ${Array.from({ length: 6 }, () => `
-        <article class="home-vendor-card home-vendor-card-skeleton">
-          <span></span>
-          <strong></strong>
-          <small></small>
-        </article>
-      `).join("")}
-    </div>
-  `;
-}
-
 async function renderHomeVendorPages() {
   const grid = document.getElementById("home-vendor-grid");
   const panelBox = document.getElementById("home-vendor-panel-box");
@@ -974,14 +895,14 @@ async function renderHomeVendorPages() {
     return;
   }
   if (panelList) {
-    panelList.innerHTML = '<span class="vendor-panel-empty vendor-panel-loading"><span class="loading-dot"></span> Carregando painéis...</span>';
+    panelList.innerHTML = '<span class="vendor-panel-empty">Carregando...</span>';
   }
   if (panelSummary) {
-    panelSummary.innerHTML = '<span class="loading-dot"></span> Carregando vendedores ativos...';
+    panelSummary.textContent = "Carregando vendedores...";
   }
 
   if (grid) {
-    grid.innerHTML = homeVendorCardsSkeleton();
+    grid.innerHTML = '<div class="table-status">Carregando vendedores ativos...</div>';
   }
   let activeVendors = [];
   try {
@@ -1825,7 +1746,7 @@ function setVendorWorkspaceSection(section) {
     panel.classList.toggle("active", panel.id === `vendor-workspace-${section}`);
   });
   if (section === "clients") {
-    loadVendorRegionClients(false);
+    loadVendorRegionClients(true);
   }
   if (section === "indicators") {
     loadVendorPageIndicators();
@@ -1838,11 +1759,7 @@ function setVendorWorkspaceSection(section) {
     loadVendorContactReport();
   }
   if (section === "goals") {
-    if (currentVendorPageGoalsPayload) {
-      renderVendorPageGoals();
-    } else {
-      loadVendorPageGoals();
-    }
+    loadVendorPageGoals();
   }
   if (section === "quick-consult") {
     setTimeout(() => document.getElementById("quick-consult-search")?.focus(), 50);
@@ -1858,10 +1775,8 @@ function setVendorWorkspaceSection(section) {
     moveQuoteEditorHome();
     const status = document.getElementById("sent-quote-status");
     if (status) {
-      status.textContent = "Carregando últimos documentos enviados...";
+      status.textContent = "Busque um orcamento ou pedido salvo para abrir na tela de edicao.";
     }
-    loadSentDocumentsList("quote");
-    loadSentDocumentsList("order");
   }
   if (section === "day") {
     if (!currentVendorDayByDayPayload) {
@@ -2069,118 +1984,6 @@ function openSavedCommercialDocument(row, kind, input = null) {
   }
 }
 
-
-function sentDocumentPdfUrl(row, kind) {
-  const route = vendorPageRoute();
-  const document = row?.documento || {};
-  if (!route || !document.id) return "#";
-  const path = kind === "order" ? "/api/orders/pdf" : "/api/quotes/pdf";
-  return `${path}?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(document.id)}&_=${Date.now()}`;
-}
-
-function sentDocumentItemsRows(commercialDocument) {
-  const items = commercialDocument.itens || [];
-  return items.map((item, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td>${escapeHtml(item.referencia || "")}</td>
-      <td>${escapeHtml(item.descricao_resumida || item.descricao_detalhada || "")}</td>
-      <td>${escapeHtml(formatNumber.format(item.quantidade || 0))}</td>
-      <td>${escapeHtml(formatCurrency2.format(item.valor_unitario || 0))}</td>
-      <td>${escapeHtml(formatCurrency2.format(item.valor_ipi || 0))}</td>
-      <td>${escapeHtml(formatCurrency2.format(item.total_item || 0))}</td>
-      <td>${escapeHtml(item.disponibilidade || "")}</td>
-    </tr>
-  `).join("") || '<tr><td colspan="8">Nenhum item cadastrado.</td></tr>';
-}
-
-function closeSentDocumentModal() {
-  const modal = document.getElementById("sent-document-modal");
-  const quotePanel = document.getElementById("vendor-workspace-quotes");
-  if (quotePanel?.classList.contains("sent-modal-editor")) {
-    quotePanel.classList.remove("sent-modal-editor");
-    moveQuoteEditorHome();
-  }
-  if (modal) modal.classList.add("hidden");
-  currentSentDocumentFocus = null;
-}
-
-function openSentDocumentModal(row, kind) {
-  if (!row?.documento) return;
-  currentSentDocumentFocus = { row, kind };
-  const modal = document.getElementById("sent-document-modal");
-  const title = document.getElementById("sent-document-modal-title");
-  const kindLabel = document.getElementById("sent-document-modal-kind");
-  const body = document.getElementById("sent-document-modal-body");
-  const pdf = document.getElementById("sent-document-modal-pdf");
-  if (!modal || !title || !kindLabel || !body || !pdf) return;
-  moveQuoteEditorHome();
-  const commercialDocument = row.documento || {};
-  const client = commercialDocument.cliente || {};
-  const summary = commercialDocument.resumo || {};
-  const label = kind === "order" ? "Pedido" : "Orçamento";
-  kindLabel.textContent = label;
-  title.textContent = `${label} ${commercialDocument.numero || row.numero || ""}`;
-  pdf.href = sentDocumentPdfUrl(row, kind);
-  body.innerHTML = `
-    <div class="sent-document-focus-summary">
-      <article><span>Número</span><strong>${escapeHtml(commercialDocument.numero || row.numero || "")}</strong></article>
-      <article><span>Total</span><strong>${escapeHtml(formatCurrency2.format(summary.total_orcamento || row.total || 0))}</strong></article>
-      <article><span>Atualizado</span><strong>${escapeHtml(formatSentDocumentDate(row.atualizado_em || commercialDocument.atualizado_em || commercialDocument.criado_em || ""))}</strong></article>
-      <article><span>Itens</span><strong>${formatNumber.format((commercialDocument.itens || []).length)}</strong></article>
-    </div>
-    <div class="sent-document-client-box">
-      <strong>${escapeHtml(client.nome || row.cliente || "Cliente não informado")}</strong>
-      <span>${escapeHtml(client.documento || row.cliente_documento || "")} ${escapeHtml(client.cidade || "")} ${escapeHtml(client.uf || "")}</span>
-      <span>${escapeHtml(client.telefone || "")} ${escapeHtml(client.whatsapp || "")} ${escapeHtml(client.email || "")}</span>
-    </div>
-    <div class="table-scroll">
-      <table class="sent-document-items-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Referência</th>
-            <th>Descrição</th>
-            <th>Qtd.</th>
-            <th>Unitário</th>
-            <th>IPI</th>
-            <th>Total</th>
-            <th>Disponibilidade</th>
-          </tr>
-        </thead>
-        <tbody>${sentDocumentItemsRows(commercialDocument)}</tbody>
-      </table>
-    </div>
-  `;
-  modal.classList.remove("hidden");
-}
-
-function moveQuoteEditorToModal() {
-  const body = document.getElementById("sent-document-modal-body");
-  const quotePanel = document.getElementById("vendor-workspace-quotes");
-  if (!body || !quotePanel) return;
-  body.innerHTML = "";
-  body.appendChild(quotePanel);
-  quotePanel.classList.add("active", "sent-commercial-editor", "sent-modal-editor");
-  const title = document.getElementById("quote-workspace-title");
-  const subtitle = document.getElementById("quote-workspace-subtitle");
-  if (title) title.textContent = "Editar documento enviado";
-  if (subtitle) subtitle.textContent = "Edite este orçamento ou pedido em uma janela focada, sem sair da lista de enviados.";
-}
-
-function editFocusedSentDocument() {
-  if (!currentSentDocumentFocus) return;
-  const { row, kind } = currentSentDocumentFocus;
-  const modalTitle = document.getElementById("sent-document-modal-title");
-  const modalKind = document.getElementById("sent-document-modal-kind");
-  const editButton = document.getElementById("sent-document-modal-edit");
-  loadCommercialDocument(row.documento, kind, true);
-  moveQuoteEditorToModal();
-  if (modalKind) modalKind.textContent = kind === "order" ? "Editando pedido" : "Editando orçamento";
-  if (modalTitle) modalTitle.textContent = `${kind === "order" ? "Pedido" : "Orçamento"} ${row.numero || ""}`;
-  if (editButton) editButton.textContent = kind === "order" ? "Editar pedido" : "Editar orçamento";
-}
-
 async function searchSavedCommercialDocuments(kind) {
   const route = vendorPageRoute();
   const input = document.getElementById(kind === "order" ? "order-saved-search" : "quote-saved-search");
@@ -2256,75 +2059,6 @@ function scheduleSavedQuoteSearch() {
 function scheduleSavedOrderSearch() {
   clearTimeout(orderSavedTimer);
   orderSavedTimer = setTimeout(() => searchSavedCommercialDocuments("order"), 250);
-}
-
-
-function sentDocumentElements(kind) {
-  return {
-    list: document.getElementById(kind === "order" ? "sent-orders-list" : "sent-quotes-list"),
-    pages: document.getElementById(kind === "order" ? "sent-orders-pages" : "sent-quotes-pages"),
-    count: document.getElementById(kind === "order" ? "sent-orders-count" : "sent-quotes-count"),
-  };
-}
-
-function formatSentDocumentDate(value) {
-  if (!value) return "Sem data";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
-
-function renderSentDocumentsList(kind, payload) {
-  const { list, pages, count } = sentDocumentElements(kind);
-  if (!list || !pages || !count) return;
-  const rows = payload.rows || [];
-  const label = kind === "order" ? "pedido" : "orçamento";
-  count.textContent = `${formatNumber.format(payload.total || 0)} ${label}(s)`;
-  list.innerHTML = rows.map((row, index) => `
-    <article class="sent-document-row">
-      <div>
-        <strong>${escapeHtml(row.numero || "Sem número")} - ${escapeHtml(row.cliente || "Cliente não informado")}</strong>
-        <span>${escapeHtml(row.cliente_documento || "")} | ${escapeHtml(formatCurrency2.format(row.total || 0))}</span>
-        <small>Atualizado em ${escapeHtml(formatSentDocumentDate(row.atualizado_em || ""))}</small>
-      </div>
-      <button type="button" data-sent-kind="${kind}" data-sent-index="${index}">Ver</button>
-    </article>
-  `).join("") || `<div class="table-status">Nenhum ${label} encontrado.</div>`;
-  list.querySelectorAll("[data-sent-kind]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const row = rows[Number(button.dataset.sentIndex)];
-      openSentDocumentModal(row, kind);
-    });
-  });
-  const totalPages = Number(payload.total_pages || 1);
-  const currentPage = Number(payload.page || 1);
-  pages.innerHTML = totalPages > 1 ? Array.from({ length: totalPages }, (_, index) => {
-    const page = index + 1;
-    return `<button type="button" class="${page === currentPage ? "active" : ""}" data-sent-page="${page}" data-sent-kind="${kind}">${page}</button>`;
-  }).join("") : "";
-  pages.querySelectorAll("[data-sent-page]").forEach((button) => {
-    button.addEventListener("click", () => loadSentDocumentsList(kind, Number(button.dataset.sentPage), true));
-  });
-}
-
-async function loadSentDocumentsList(kind, page = null, force = false) {
-  const route = vendorPageRoute();
-  const state = sentDocumentsState[kind];
-  const { list } = sentDocumentElements(kind);
-  if (!route || !state || !list) return;
-  const nextPage = page || state.page || 1;
-  if (state.payload?.page === nextPage && !force) {
-    renderSentDocumentsList(kind, state.payload);
-    return;
-  }
-  list.innerHTML = '<div class="table-status">Carregando documentos...</div>';
-  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
-  const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=&page=${encodeURIComponent(nextPage)}&limit=${sentDocumentsPageSize}`);
-  state.page = payload.page || nextPage;
-  state.payload = payload;
-  renderSentDocumentsList(kind, payload);
-  const status = document.getElementById("sent-quote-status");
-  if (status) status.textContent = "Últimos documentos enviados carregados.";
 }
 
 function selectQuoteProduct(product) {
@@ -2657,7 +2391,6 @@ async function closeQuote() {
     document.getElementById("quote-number").textContent = quote.numero;
     link.href = `/api/quotes/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(quote.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
-    clearVendorWorkspaceCache();
     status.textContent = `Orcamento ${quote.numero} gerado com sucesso. Use o botao Baixar PDF para enviar ao cliente.`;
     if (currentQuoteLoadedFromSent) {
       loadCommercialDocument(quote, "quote", true);
@@ -2710,7 +2443,6 @@ async function convertQuoteToOrder() {
     const link = document.getElementById("quote-pdf-link");
     link.href = `/api/orders/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(order.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
-    clearVendorWorkspaceCache();
     status.textContent = `Pedido ${order.numero} salvo com sucesso.`;
   } catch (error) {
     status.textContent = error.message;
@@ -2747,28 +2479,21 @@ async function saveOrder() {
     const link = document.getElementById("quote-pdf-link");
     link.href = `/api/orders/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(order.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
-    clearVendorWorkspaceCache();
     status.textContent = `Pedido ${order.numero} salvo com sucesso.`;
   } catch (error) {
     status.textContent = error.message;
   }
 }
 
-async function loadVendorAgenda(force = false) {
+async function loadVendorAgenda() {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-agenda-status");
   if (!route || !status) {
     return;
   }
-  if (currentVendorAgendaPayload && !force) {
-    renderSimpleVendorTable(currentVendorAgendaPayload, "vendor-agenda-head", "vendor-agenda-body", "Nenhum contato agendado.");
-    status.textContent = `${currentVendorAgendaPayload.empresa}: ${formatNumber.format(currentVendorAgendaPayload.total || 0)} agendamento(s) encontrado(s).`;
-    return;
-  }
   status.textContent = "Carregando agenda...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force });
-    currentVendorAgendaPayload = payload;
+    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force: true });
     renderSimpleVendorTable(payload, "vendor-agenda-head", "vendor-agenda-body", "Nenhum contato agendado.");
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} agendamento(s) encontrado(s).`;
   } catch (error) {
@@ -2776,7 +2501,7 @@ async function loadVendorAgenda(force = false) {
   }
 }
 
-async function loadVendorContactReport(force = false) {
+async function loadVendorContactReport() {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-contact-report-status");
   if (!route || !status) {
@@ -2789,17 +2514,9 @@ async function loadVendorContactReport(force = false) {
     end_date: document.getElementById("vendor-contact-report-end")?.value || "",
     q: document.getElementById("vendor-contact-report-client")?.value || "",
   });
-  const cacheKey = params.toString();
-  if (currentVendorContactReportPayload?.cacheKey === cacheKey && !force) {
-    const cached = currentVendorContactReportPayload.payload;
-    renderSimpleVendorTable(cached, "vendor-contact-report-head", "vendor-contact-report-body", "Nenhum contato encontrado.");
-    status.textContent = `${cached.empresa}: ${formatNumber.format(cached.total || 0)} contato(s) encontrado(s).`;
-    return;
-  }
   status.textContent = "Carregando relatorio...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/report?${cacheKey}`, { force });
-    currentVendorContactReportPayload = { cacheKey, payload };
+    const payload = await fetchJson(`/api/vendor-day-by-day/report?${params.toString()}`, { force: true });
     renderSimpleVendorTable(payload, "vendor-contact-report-head", "vendor-contact-report-body", "Nenhum contato encontrado.");
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} contato(s) encontrado(s).`;
   } catch (error) {
@@ -3475,8 +3192,6 @@ async function saveVendorDayByDayClient(event) {
       }),
     });
     currentVendorDayByDayClient = saved;
-    currentVendorDayByDayPayload = null;
-    clearVendorWorkspaceCache();
     await loadVendorDayByDay();
     status.textContent = `${saved.message || "Atendimento salvo."} Contagem do dia: ${formatNumber.format(saved.contagem?.salvos || 0)} de ${formatNumber.format(saved.contagem?.meta_diaria || 50)}.`;
   } catch (error) {
@@ -3504,17 +3219,9 @@ async function loadVendorPageGoals() {
   const status = document.getElementById("vendor-page-goals-status");
   const summary = document.getElementById("vendor-page-goals-summary");
   const list = document.getElementById("vendor-page-goals-list");
-  const year = new Date().getFullYear();
-  const cacheKey = `${route.company}|${route.vendorId}|${year}`;
-  if (currentVendorPageGoalsPayload?.cacheKey === cacheKey) {
-    renderVendorPageGoals();
-    status.textContent = "Metas e objetivos reaproveitados da memoria local.";
-    return;
-  }
-  status.innerHTML = '<span class="loading-dot"></span> Carregando metas e objetivos...';
+  status.textContent = "Carregando metas e objetivos...";
   try {
-    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${year}`);
-    payload.cacheKey = cacheKey;
+    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${new Date().getFullYear()}`);
     currentVendorPageGoalsPayload = payload;
     renderVendorPageGoals();
     status.textContent = `${payload.empresa}: metas carregadas para ${payload.vendedor?.nome_completo || "vendedor"}.`;
@@ -3575,7 +3282,7 @@ function renderVendorPageGoals() {
     return `
       <div class="goal-name-with-help">
         <strong>${escapeHtml(objective.label)}</strong>
-        <button class="goal-help-icon" type="button" data-goal-help="${escapeHtml(help)}" aria-label="${escapeHtml(help)}">?</button>
+        <span class="goal-help-icon" title="${escapeHtml(help)}" tabindex="0" aria-label="${escapeHtml(help)}">?</span>
       </div>
     `;
   };
@@ -3640,7 +3347,7 @@ function renderVendorPageGoals() {
         <td>
           <div class="goal-name-with-help">
             <strong>Vendas Liquidas outras regioes</strong>
-            <button class="goal-help-icon" type="button" data-goal-help="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele." aria-label="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele.">?</button>
+            <span class="goal-help-icon" title="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele." tabindex="0">?</span>
           </div>
         </td>
         <td>-</td>
@@ -3735,7 +3442,7 @@ function renderVendorRegions(payload) {
   renderVendorRegionCharts();
 }
 
-async function loadVendorDailyContactsChart(force = false) {
+async function loadVendorDailyContactsChart() {
   const route = vendorPageRoute();
   const chart = document.getElementById("vendor-daily-contact-chart");
   const status = document.getElementById("vendor-daily-contact-status");
@@ -3748,25 +3455,17 @@ async function loadVendorDailyContactsChart(force = false) {
     monthInput.value = new Date().toISOString().slice(0, 7);
   }
   const selectedMonth = monthInput?.value || new Date().toISOString().slice(0, 7);
-  const cacheKey = `${route.company}|${route.vendorId}|${selectedMonth}`;
-  if (currentVendorDailyContactsPayload?.cacheKey === cacheKey && !force) {
-    renderVendorDailyContactsChart(currentVendorDailyContactsPayload.payload);
-    return;
-  }
   status.textContent = "Carregando contatos diários...";
   chart.innerHTML = "";
   total.textContent = "Carregando...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force });
-    currentVendorDailyContactsPayload = { cacheKey, payload };
+    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force: true });
     renderVendorDailyContactsChart(payload);
   } catch (error) {
     try {
       const { start, end } = dailyContactsMonthRange(selectedMonth);
-      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force });
-      const fallbackPayload = buildDailyContactsPayloadFromReport(report, selectedMonth);
-      currentVendorDailyContactsPayload = { cacheKey, payload: fallbackPayload };
-      renderVendorDailyContactsChart(fallbackPayload);
+      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force: true });
+      renderVendorDailyContactsChart(buildDailyContactsPayloadFromReport(report, selectedMonth));
       status.textContent += " Dados carregados pelo relatório de contatos.";
     } catch (fallbackError) {
       chart.innerHTML = "";
@@ -3857,32 +3556,20 @@ function renderVendorDailyContactsChart(payload) {
     return;
   }
   chart.innerHTML = `
-    <div class="vendor-daily-contact-list">
+    <div class="vendor-daily-contact-bars">
       ${rows.map((row) => {
         const inactive = Number(row.inativos || 0);
         const never = Number(row.nunca_comprou || 0);
-        const rowTotal = Number(row.total || 0);
-        const totalPct = Math.max(4, (rowTotal / maxValue) * 100);
-        const inactiveShare = rowTotal ? Math.max(0, (inactive / rowTotal) * 100) : 0;
-        const neverShare = rowTotal ? Math.max(0, (never / rowTotal) * 100) : 0;
-        const dateLabel = escapeHtml(row.data_label || row.data || "");
-        const tooltip = `${dateLabel}: ${formatNumber.format(rowTotal)} contatos | Inativos ${formatNumber.format(inactive)} | Nunca Comprou ${formatNumber.format(never)}`;
+        const inactivePct = Math.max(0, (inactive / maxValue) * 100);
+        const neverPct = Math.max(0, (never / maxValue) * 100);
         return `
-          <article class="vendor-daily-contact-row" data-tooltip="${tooltip}" title="${tooltip}">
-            <div class="vendor-daily-contact-date">
-              <strong>${dateLabel}</strong>
-              <span>${formatNumber.format(rowTotal)} contato(s)</span>
+          <article class="vendor-daily-contact-day">
+            <div class="vendor-daily-contact-stack" title="${escapeHtml(row.data_label || row.data || "")}: ${formatNumber.format(row.total || 0)} contatos">
+              <i class="inactive" style="height:${inactivePct}%"><span>${inactive ? formatNumber.format(inactive) : ""}</span></i>
+              <i class="never" style="height:${neverPct}%"><span>${never ? formatNumber.format(never) : ""}</span></i>
             </div>
-            <div class="vendor-daily-contact-meter" aria-label="${tooltip}">
-              <div class="vendor-daily-contact-track" style="--total-width:${totalPct}%;">
-                <i class="inactive" style="--segment-width:${inactiveShare}%;"><span>${inactive ? formatNumber.format(inactive) : ""}</span></i>
-                <i class="never" style="--segment-width:${neverShare}%;"><span>${never ? formatNumber.format(never) : ""}</span></i>
-              </div>
-            </div>
-            <div class="vendor-daily-contact-breakdown">
-              <span><i class="inactive"></i>${formatNumber.format(inactive)} inativos</span>
-              <span><i class="never"></i>${formatNumber.format(never)} nunca comprou</span>
-            </div>
+            <strong>${escapeHtml(row.data_label || row.data || "")}</strong>
+            <span>${formatNumber.format(row.total || 0)}</span>
           </article>
         `;
       }).join("")}
@@ -3976,46 +3663,12 @@ function fillVendorClientFilter(selectId, values, selectedValue, labelKey = null
   }
 }
 
-function renderVendorRegionClientsPayload(payload) {
-  const status = document.getElementById("vendor-region-clients-status");
-  const summary = document.getElementById("vendor-region-clients-summary");
-  const head = document.getElementById("vendor-region-clients-head");
-  const body = document.getElementById("vendor-region-clients-body");
-  if (!status || !summary || !head || !body) {
-    return;
-  }
-  fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
-  fillVendorClientFilter("vendor-client-filter-ddd", payload.options.ddds || [], currentVendorClientFilters.ddd);
-  fillVendorClientFilter(
-    "vendor-client-filter-city",
-    (payload.options.cities || []).map((city) => ({ value: city.city, label: city.label })),
-    currentVendorClientFilters.city,
-    "label"
-  );
-  summary.innerHTML = `
-    <article><span>Total carteira</span><strong>${formatNumber.format(payload.total_carteira || 0)}</strong></article>
-    <article><span>Ativos</span><strong>${formatNumber.format(payload.counts.active || 0)}</strong></article>
-    <article><span>Inativos</span><strong>${formatNumber.format(payload.counts.inactive || 0)}</strong></article>
-    <article><span>Nunca Comprou</span><strong>${formatNumber.format(payload.counts.never || 0)}</strong></article>
-    <article><span>Resultado</span><strong>${formatNumber.format(payload.total_resultado || 0)}</strong></article>
-  `;
-  head.innerHTML = `<tr>${payload.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr>`;
-  body.innerHTML = payload.rows.map((row) => `
-    <tr>
-      ${payload.columns.map((column) => {
-        const value = column.key === "faturamento_liquido" ? formatCurrency.format(row[column.key] || 0) : formatCell(row[column.key]);
-        return `<td>${escapeHtml(value)}</td>`;
-      }).join("")}
-    </tr>
-  `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta seleção.</td></tr>`;
-  status.textContent = payload.total_resultado > payload.rows.length
-    ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
-    : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
-}
-
 async function loadVendorRegionClients(force = false) {
   const panel = document.getElementById("vendor-region-clients-panel");
   if (!panel || currentVendorWorkspace !== "clients") {
+    return;
+  }
+  if (vendorRegionClientsLoaded && !force) {
     return;
   }
   const status = document.getElementById("vendor-region-clients-status");
@@ -4026,17 +3679,36 @@ async function loadVendorRegionClients(force = false) {
   if (!params) {
     return;
   }
-  const cacheKey = params.toString();
-  if (vendorRegionClientsLoaded && currentVendorRegionClientsCacheKey === cacheKey && currentVendorRegionClientsPayload && !force) {
-    renderVendorRegionClientsPayload(currentVendorRegionClientsPayload);
-    return;
-  }
   status.textContent = "Carregando clientes da região...";
   try {
-    const payload = await fetchJson(`/api/vendor-region-clients?${cacheKey}`, { force });
-    currentVendorRegionClientsPayload = payload;
-    currentVendorRegionClientsCacheKey = cacheKey;
-    renderVendorRegionClientsPayload(payload);
+    const payload = await fetchJson(`/api/vendor-region-clients?${params.toString()}`);
+    fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
+    fillVendorClientFilter("vendor-client-filter-ddd", payload.options.ddds || [], currentVendorClientFilters.ddd);
+    fillVendorClientFilter(
+      "vendor-client-filter-city",
+      (payload.options.cities || []).map((city) => ({ value: city.city, label: city.label })),
+      currentVendorClientFilters.city,
+      "label"
+    );
+    summary.innerHTML = `
+      <article><span>Total carteira</span><strong>${formatNumber.format(payload.total_carteira || 0)}</strong></article>
+      <article><span>Ativos</span><strong>${formatNumber.format(payload.counts.active || 0)}</strong></article>
+      <article><span>Inativos</span><strong>${formatNumber.format(payload.counts.inactive || 0)}</strong></article>
+      <article><span>Nunca Comprou</span><strong>${formatNumber.format(payload.counts.never || 0)}</strong></article>
+      <article><span>Resultado</span><strong>${formatNumber.format(payload.total_resultado || 0)}</strong></article>
+    `;
+    head.innerHTML = `<tr>${payload.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr>`;
+    body.innerHTML = payload.rows.map((row) => `
+      <tr>
+        ${payload.columns.map((column) => {
+          const value = column.key === "faturamento_liquido" ? formatCurrency.format(row[column.key] || 0) : formatCell(row[column.key]);
+          return `<td>${escapeHtml(value)}</td>`;
+        }).join("")}
+      </tr>
+    `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta seleção.</td></tr>`;
+    status.textContent = payload.total_resultado > payload.rows.length
+      ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
+      : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
     vendorRegionClientsLoaded = true;
   } catch (error) {
     summary.innerHTML = "";
@@ -4145,7 +3817,7 @@ function vendorQuantChart(row, closedYears, closedMonths) {
           const inactiveDeg = Math.min(360, activeDeg + ((inativos / total) * 360));
           const neverDeg = Math.min(360, inactiveDeg + ((nunca / total) * 360));
           return `
-            <div class="period-donut-item" title="${escapeHtml(row.label)} | ${escapeHtml(item.label)}: Ativos ${formatNumber.format(Math.round(ativos))}, Inativos ${formatNumber.format(Math.round(inativos))}, Nunca comprou ${formatNumber.format(Math.round(nunca))}, Total ${formatNumber.format(totalClients)}">
+            <div class="period-donut-item">
               <div class="period-donut ${item.media ? "average" : ""}" style="--active-deg:${activeDeg}deg;--inactive-deg:${inactiveDeg}deg;--never-deg:${neverDeg}deg;">
                 <strong>${formatNumber.format(totalClients)}</strong>
                 <span>${escapeHtml(item.label)}</span>
@@ -4227,7 +3899,7 @@ function vendorSalesChart(row, closedYears, months, closedMonths) {
         ${bars.map((bar) => {
           const barHeight = Math.max(0, (bar.value / scaleMax) * 100);
           return `
-          <div class="bar-column ${bar.type}" title="${escapeHtml(row.label)} | ${escapeHtml(bar.label)}: ${formatCurrency.format(bar.value)}">
+          <div class="bar-column ${bar.type}">
             <div class="bar-shape ${barHeight < 12 ? "tiny-bar" : ""}" style="--bar-height:${barHeight}%">
               ${bar.value > 0 ? `<div class="bar-value">${formatCurrency.format(bar.value)}</div>` : ""}
             </div>
@@ -9024,11 +8696,6 @@ async function init() {
   document.getElementById("order-saved-search").addEventListener("input", scheduleSavedOrderSearch);
   document.getElementById("quote-saved-open").addEventListener("click", () => openSavedCommercialDocumentFromSearch("quote"));
   document.getElementById("order-saved-open").addEventListener("click", () => openSavedCommercialDocumentFromSearch("order"));
-  document.getElementById("sent-document-modal-edit")?.addEventListener("click", editFocusedSentDocument);
-  document.querySelectorAll("[data-sent-modal-close]").forEach((button) => button.addEventListener("click", closeSentDocumentModal));
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeSentDocumentModal();
-  });
   document.getElementById("quote-saved-search").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -9329,51 +8996,7 @@ async function init() {
   showAppScreen();
 }
 
-
-function closeGoalHelpPopovers() {
-  document.querySelectorAll(".goal-help-popover").forEach((popover) => popover.remove());
-  document.querySelectorAll(".goal-help-icon.active").forEach((button) => {
-    button.classList.remove("active");
-    button.setAttribute("aria-expanded", "false");
-  });
-}
-
-function toggleGoalHelpPopover(button) {
-  const text = button?.dataset.goalHelp || button?.getAttribute("aria-label") || "";
-  if (!button || !text) {
-    return;
-  }
-  const existing = button.parentElement?.querySelector(".goal-help-popover");
-  if (existing) {
-    closeGoalHelpPopovers();
-    return;
-  }
-  closeGoalHelpPopovers();
-  const popover = document.createElement("span");
-  popover.className = "goal-help-popover";
-  popover.textContent = text;
-  button.insertAdjacentElement("afterend", popover);
-  button.classList.add("active");
-  button.setAttribute("aria-expanded", "true");
-}
-
-function handleGoalHelpClick(event) {
-  const button = event.target.closest(".goal-help-icon[data-goal-help]");
-  if (button) {
-    event.preventDefault();
-    event.stopPropagation();
-    toggleGoalHelpPopover(button);
-    return;
-  }
-  if (!event.target.closest(".goal-help-popover")) {
-    closeGoalHelpPopovers();
-  }
-}
-
-document.addEventListener("click", handleGoalHelpClick);
 document.addEventListener("click", handleGlobalNavigationClick);
 
 init();
-
-
 
