@@ -116,6 +116,7 @@ let currentDashboardCacheKey = "";
 let currentDashboardChart = "uf";
 let currentVendorRegionPayload = null;
 let currentVendorPageGoalsPayload = null;
+let currentVendorPageGoalsRequestId = 0;
 let currentVendorCommissionMemory = new Map();
 let currentVendorAboutGoalPayload = null;
 let currentVendorDayByDayPayload = null;
@@ -3637,10 +3638,14 @@ async function loadVendorPageGoals() {
     status.textContent = "";
     return currentVendorPageGoalsPayload;
   }
+  const requestId = ++currentVendorPageGoalsRequestId;
   status.classList.remove("hidden");
   status.innerHTML = '<span class="loading-dot"></span> Carregando metas e objetivos...';
   try {
-    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${year}&month=${encodeURIComponent(selectedMonth)}`);
+    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${year}&month=${encodeURIComponent(selectedMonth)}&fast=1`);
+    if (requestId !== currentVendorPageGoalsRequestId) {
+      return null;
+    }
     payload.cacheKey = cacheKey;
     currentVendorPageGoalsPayload = payload;
     renderVendorPageGoals();
@@ -3648,6 +3653,9 @@ async function loadVendorPageGoals() {
     status.textContent = "";
     return payload;
   } catch (error) {
+    if (requestId !== currentVendorPageGoalsRequestId) {
+      return null;
+    }
     currentVendorPageGoalsPayload = null;
     summary.innerHTML = "";
     list.innerHTML = "";

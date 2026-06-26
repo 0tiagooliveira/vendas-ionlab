@@ -5786,6 +5786,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     if not month_filter:
         month_filter = set(range(1, 13))
     month_filter_keys = {str(month) for month in month_filter}
+    max_month_needed = max(month_filter)
 
     group_index = economic_group_index(company_id)
     region_group_keys = {
@@ -5793,7 +5794,6 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
         for client_id in region_client_ids
     }
     achievements = {str(month): {key: 0.0 for key, _label, _kind in VENDOR_GOAL_OBJECTIVES} for month in range(1, 13)}
-    _stock_by_ref, _costing_by_ref, last_sale_by_ref = product_info_maps(company_id)
     sales = []
     other_region_sales = []
     vendor_name_key = normalize_text(vendor.get("nome_completo"))
@@ -5809,6 +5809,8 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             sale_month = record_month(sale.get("NF_EMI"))
             if not sale_date or not sale_year or not sale_month:
                 continue
+            if sale_year > year or (sale_year == year and sale_month > max_month_needed):
+                continue
             if group_key in region_group_keys:
                 sales.append((sale_date, client_id, sale_year, sale_month, sale_company_id, sale))
                 continue
@@ -5820,29 +5822,6 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     reactivated_by_month = {str(month): set() for month in range(1, 13)}
     active_clients_by_month = {str(month): set() for month in range(1, 13)}
     new_clients_by_month = {str(month): set() for month in range(1, 13)}
-    stock_bonus_by_company = {
-        sale_company_id: {
-            normalize_text(record.get("Referencia")): number_value(record.get("Bonus"))
-            for record in stock_records_with_last_exit(sale_company_id)
-            if normalize_text(record.get("Referencia"))
-        }
-        for sale_company_id in vendor_sales_company_ids(company_id)
-        if sale_company_id in COMPANIES
-    }
-    product_sale_dates_by_company = {}
-    for sale_company_id in vendor_sales_company_ids(company_id):
-        if sale_company_id not in COMPANIES:
-            continue
-        dates_by_ref = defaultdict(list)
-        for product_sale in load_json(sales_file(sale_company_id), []):
-            ref_key = normalize_text(product_sale.get("PR_COD"))
-            sale_date_value = record_date_value(product_sale.get("NF_EMI"))
-            if ref_key and sale_date_value:
-                dates_by_ref[ref_key].append(sale_date_value)
-        product_sale_dates_by_company[sale_company_id] = {
-            ref_key: sorted(values)
-            for ref_key, values in dates_by_ref.items()
-        }
     sem_giro_commission_by_month = {str(month): 0.0 for month in range(1, 13)}
 
     for _sale_date, _client_id, sale_year, sale_month, _sale_company_id, sale in other_region_sales:
@@ -5857,6 +5836,53 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
         item for item in sales + other_region_sales
         if item[2] == year and item[3] in month_filter
     ]
+    target_refs_by_company = defaultdict(set)
+    month_start_by_company_ref = {}
+    for _sale_date, _client_id, sale_year, sale_month, sale_company_id, sale in target_sales_for_sem_giro:
+        ref_key = normalize_text(sale.get("PR_COD"))
+        if not ref_key:
+            continue
+        target_refs_by_company[sale_company_id].add(ref_key)
+        month_start = date(sale_year, sale_month, 1)
+        key = (sale_company_id, ref_key)
+        current_start = month_start_by_company_ref.get(key)
+        if current_start is None or month_start < current_start:
+            month_start_by_company_ref[key] = month_start
+
+    previous_product_sale_by_company_ref = {}
+    for sale_company_id, ref_keys in target_refs_by_company.items():
+        if sale_company_id not in COMPANIES:
+            continue
+        for product_sale in load_json(sales_file(sale_company_id), []):
+            ref_key = normalize_text(product_sale.get("PR_COD"))
+            if ref_key not in ref_keys:
+                continue
+            sale_date_value = record_date_value(product_sale.get("NF_EMI"))
+            month_start = month_start_by_company_ref.get((sale_company_id, ref_key))
+            if not sale_date_value or not month_start or sale_date_value >= month_start:
+                continue
+            key = (sale_company_id, ref_key)
+            current_date = previous_product_sale_by_company_ref.get(key)
+            if current_date is None or sale_date_value > current_date:
+                previous_product_sale_by_company_ref[key] = sale_date_value
+
+    stock_bonus_by_company = {}
+    for sale_company_id, ref_keys in target_refs_by_company.items():
+        bonus_map = load_json(stock_bonus_file(sale_company_id), {})
+        if not isinstance(bonus_map, dict):
+            bonus_map = {}
+        values = {
+            ref_key: number_value(bonus_map.get(ref_key))
+            for ref_key in ref_keys
+        }
+        missing_refs = {ref_key for ref_key in ref_keys if ref_key not in values or values[ref_key] <= 0}
+        if missing_refs:
+            for record in load_json(stock_file(sale_company_id), []):
+                ref_key = normalize_text(record.get("Referencia"))
+                if ref_key in missing_refs:
+                    values[ref_key] = number_value(record.get("Bonus"))
+        stock_bonus_by_company[sale_company_id] = values
+
     for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(
         target_sales_for_sem_giro,
         key=lambda item: (item[0], normalize_text(item[5].get("PR_COD")), item[1]),
@@ -5866,13 +5892,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             continue
         month_start = date(sale_year, sale_month, 1) if sale_year and sale_month else None
         previous_month_end = month_start - timedelta(days=1) if month_start else None
-        previous_product_sale = None
-        if month_start:
-            for candidate_date in product_sale_dates_by_company.get(sale_company_id, {}).get(ref_key, []):
-                if candidate_date < month_start:
-                    previous_product_sale = candidate_date
-                else:
-                    break
+        previous_product_sale = previous_product_sale_by_company_ref.get((sale_company_id, ref_key))
         days_without_movement_base = (previous_month_end - previous_product_sale).days if previous_product_sale and previous_month_end else 0
         if previous_product_sale and days_without_movement_base > 180:
             month_key = str(sale_month)
@@ -6020,7 +6040,7 @@ def normalize_vendor_goal_record(record: dict, company_id: str, vendor_id_value:
     return normalized
 
 
-def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=None, month_value=None):
+def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=None, month_value=None, fast_value=None):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     year = int(optional_number_value(year_value) or CURRENT_YEAR)
@@ -6036,19 +6056,29 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
     all_goals = load_json(vendor_goals_file(company_id), {})
     stored = all_goals.get(vendor_goals_key(vendor_id_value, year), {}) if vendor_id_value else {}
     record = normalize_vendor_goal_record(stored, company_id, vendor_id_value, year) if vendor_id_value else default_vendor_goal_record(company_id, "", year)
-    sales_base = vendor_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_sales_goal_base(company_id, "", year)
-    client_sales_base = vendor_client_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_client_sales_goal_base(company_id, "", year)
+    fast_mode = str(fast_value or "").strip().lower() in {"1", "true", "sim", "yes"}
+    sales_base = (
+        {"media_base": 0.0, "fast_mode": True}
+        if fast_mode
+        else (vendor_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_sales_goal_base(company_id, "", year))
+    )
+    client_sales_base = (
+        {"quantidade_sugerida": 0, "fast_mode": True}
+        if fast_mode
+        else (vendor_client_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_client_sales_goal_base(company_id, "", year))
+    )
     for month in range(1, 13):
         month_record = record["months"][str(month)]
         increase = optional_number_value(month_record.get("percentual_aumento")) or 0.0
-        suggested_goal = round(sales_base["media_base"] * (1 + increase / 100), 2)
+        saved_sales_goal = number_value(month_record["objetivos"]["vendas_liquidas"].get("meta"))
+        suggested_goal = round(sales_base["media_base"] * (1 + increase / 100), 2) if not fast_mode else saved_sales_goal
         month_record["objetivos"]["vendas_liquidas"]["meta"] = suggested_goal
         month_record["meta_vendas_liquidas_sugerida"] = suggested_goal
         suggested_clients = int(client_sales_base.get("quantidade_sugerida") or 0)
         current_clients_goal = number_value(month_record["objetivos"]["clientes_com_vendas"].get("meta"))
-        if current_clients_goal <= 0 and suggested_clients > 0:
+        if not fast_mode and current_clients_goal <= 0 and suggested_clients > 0:
             month_record["objetivos"]["clientes_com_vendas"]["meta"] = suggested_clients
-        month_record["meta_clientes_com_vendas_sugerida"] = suggested_clients
+        month_record["meta_clientes_com_vendas_sugerida"] = suggested_clients if not fast_mode else current_clients_goal
     selected_month = int(optional_number_value(month_value) or 0)
     target_months = [selected_month] if 1 <= selected_month <= 12 else None
     achievements = vendor_goal_achievements(company_id, vendor_id_value, year, record, target_months) if vendor_id_value else {}
@@ -10642,11 +10672,12 @@ class CRMHandler(BaseHTTPRequestHandler):
             vendor_id_value = params.get("vendor_id", [""])[0]
             year = params.get("year", [CURRENT_YEAR])[0]
             month = params.get("month", [""])[0]
+            fast = params.get("fast", [""])[0]
             try:
                 payload = cached_payload(
-                    ("vendor_goals", company_id, vendor_id_value, str(year), str(month)),
+                    ("vendor_goals", company_id, vendor_id_value, str(year), str(month), str(fast)),
                     vendor_dashboard_dependencies(company_id),
-                    lambda: vendor_goals_payload(company_id, vendor_id_value, year, month),
+                    lambda: vendor_goals_payload(company_id, vendor_id_value, year, month, fast),
                 )
                 return self.send_json(payload)
             except Exception as exc:
