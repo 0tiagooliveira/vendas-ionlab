@@ -2219,8 +2219,11 @@ def vendor_region_client_context(company_id: str, vendor_id_value: str):
     if not vendor_id_value:
         raise ValueError("Selecione um vendedor.")
 
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors = load_json(vendors_file(company_id), [])
     vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
+    if not vendor:
+        vendors, _inserted = sync_vendors_from_sales(company_id)
+        vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
         raise ValueError("Vendedor nao encontrado.")
 
@@ -5769,7 +5772,7 @@ def save_vendor_monthly_items_payload(payload: dict):
     return {"message": "Itens/Equipamentos do mes salvos com sucesso.", "items": items, "total": len(items)}
 
 
-def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, goal_record: dict, target_months=None):
+def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, goal_record: dict, target_months=None, fast_mode=False):
     try:
         vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
     except Exception:
@@ -5832,103 +5835,104 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             )
 
     sem_giro_details_by_month = {str(month): [] for month in range(1, 13)}
-    target_sales_for_sem_giro = [
-        item for item in sales + other_region_sales
-        if item[2] == year and item[3] in month_filter
-    ]
-    target_refs_by_company = defaultdict(set)
-    month_start_by_company_ref = {}
-    for _sale_date, _client_id, sale_year, sale_month, sale_company_id, sale in target_sales_for_sem_giro:
-        ref_key = normalize_text(sale.get("PR_COD"))
-        if not ref_key:
-            continue
-        target_refs_by_company[sale_company_id].add(ref_key)
-        month_start = date(sale_year, sale_month, 1)
-        key = (sale_company_id, ref_key)
-        current_start = month_start_by_company_ref.get(key)
-        if current_start is None or month_start < current_start:
-            month_start_by_company_ref[key] = month_start
-
-    previous_product_sale_by_company_ref = {}
-    for sale_company_id, ref_keys in target_refs_by_company.items():
-        if sale_company_id not in COMPANIES:
-            continue
-        for product_sale in load_json(sales_file(sale_company_id), []):
-            ref_key = normalize_text(product_sale.get("PR_COD"))
-            if ref_key not in ref_keys:
+    if not fast_mode:
+        target_sales_for_sem_giro = [
+            item for item in sales + other_region_sales
+            if item[2] == year and item[3] in month_filter
+        ]
+        target_refs_by_company = defaultdict(set)
+        month_start_by_company_ref = {}
+        for _sale_date, _client_id, sale_year, sale_month, sale_company_id, sale in target_sales_for_sem_giro:
+            ref_key = normalize_text(sale.get("PR_COD"))
+            if not ref_key:
                 continue
-            sale_date_value = record_date_value(product_sale.get("NF_EMI"))
-            month_start = month_start_by_company_ref.get((sale_company_id, ref_key))
-            if not sale_date_value or not month_start or sale_date_value >= month_start:
-                continue
+            target_refs_by_company[sale_company_id].add(ref_key)
+            month_start = date(sale_year, sale_month, 1)
             key = (sale_company_id, ref_key)
-            current_date = previous_product_sale_by_company_ref.get(key)
-            if current_date is None or sale_date_value > current_date:
-                previous_product_sale_by_company_ref[key] = sale_date_value
+            current_start = month_start_by_company_ref.get(key)
+            if current_start is None or month_start < current_start:
+                month_start_by_company_ref[key] = month_start
 
-    stock_bonus_by_company = {}
-    for sale_company_id, ref_keys in target_refs_by_company.items():
-        bonus_map = load_json(stock_bonus_file(sale_company_id), {})
-        if not isinstance(bonus_map, dict):
-            bonus_map = {}
-        values = {
-            ref_key: number_value(bonus_map.get(ref_key))
-            for ref_key in ref_keys
-        }
-        missing_refs = {ref_key for ref_key in ref_keys if ref_key not in values or values[ref_key] <= 0}
-        if missing_refs:
-            for record in load_json(stock_file(sale_company_id), []):
-                ref_key = normalize_text(record.get("Referencia"))
-                if ref_key in missing_refs:
-                    values[ref_key] = number_value(record.get("Bonus"))
-        stock_bonus_by_company[sale_company_id] = values
+        previous_product_sale_by_company_ref = {}
+        for sale_company_id, ref_keys in target_refs_by_company.items():
+            if sale_company_id not in COMPANIES:
+                continue
+            for product_sale in load_json(sales_file(sale_company_id), []):
+                ref_key = normalize_text(product_sale.get("PR_COD"))
+                if ref_key not in ref_keys:
+                    continue
+                sale_date_value = record_date_value(product_sale.get("NF_EMI"))
+                month_start = month_start_by_company_ref.get((sale_company_id, ref_key))
+                if not sale_date_value or not month_start or sale_date_value >= month_start:
+                    continue
+                key = (sale_company_id, ref_key)
+                current_date = previous_product_sale_by_company_ref.get(key)
+                if current_date is None or sale_date_value > current_date:
+                    previous_product_sale_by_company_ref[key] = sale_date_value
 
-    for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(
-        target_sales_for_sem_giro,
-        key=lambda item: (item[0], normalize_text(item[5].get("PR_COD")), item[1]),
-    ):
-        ref_key = normalize_text(sale.get("PR_COD"))
-        if not ref_key:
-            continue
-        month_start = date(sale_year, sale_month, 1) if sale_year and sale_month else None
-        previous_month_end = month_start - timedelta(days=1) if month_start else None
-        previous_product_sale = previous_product_sale_by_company_ref.get((sale_company_id, ref_key))
-        days_without_movement_base = (previous_month_end - previous_product_sale).days if previous_product_sale and previous_month_end else 0
-        if previous_product_sale and days_without_movement_base > 180:
-            month_key = str(sale_month)
-            net_revenue = sale_net_revenue(sale)
-            month_objectives = ((goal_record.get("months") or {}).get(month_key) or {}).get("objetivos") or {}
-            sem_giro_goal = month_objectives.get("sem_giro") if isinstance(month_objectives.get("sem_giro"), dict) else {}
-            sale_qty = number_value(sale.get("PR_QTD"))
-            min_qty = number_value(sem_giro_goal.get("qty_minima"))
-            min_value = number_value(sem_giro_goal.get("valor_minimo"))
-            if (not min_qty or sale_qty >= min_qty) and (not min_value or net_revenue >= min_value):
-                bonus_percent = max(0.0, number_value(stock_bonus_by_company.get(sale_company_id, {}).get(ref_key)))
-                if bonus_percent <= 0:
-                    bonus_percent = max(0.0, number_value(sem_giro_goal.get("meta")))
-                if bonus_percent <= 0:
-                    bonus_percent = 1.5
-                gross_total = number_value(sale.get("PR_SBT"))
-                unit_value = gross_total / sale_qty if sale_qty else 0.0
-                bonus_value = net_revenue * bonus_percent / 100
-                achievements[month_key]["sem_giro"] += net_revenue
-                sem_giro_commission_by_month[month_key] += bonus_value
-                sem_giro_details_by_month[month_key].append({
-                    "nota_fiscal": normalize_record(sale.get("NF_NUM") or sale.get("ID_NF")),
-                    "data_emissao": format_date_br(sale_date),
-                    "codigo_cliente": normalize_record(client_id),
-                    "nome_cliente": normalize_record(sale.get("CL_NOM")),
-                    "referencia_produto": normalize_record(sale.get("PR_COD")),
-                    "descricao_produto": normalize_record(sale.get("PR_DES")),
-                    "dias_sem_movimento": format_days_without_movement(days_without_movement_base),
-                    "dias_sem_movimento_numero": days_without_movement_base,
-                    "quantidade": round(sale_qty, 3),
-                    "valor_unitario": round(unit_value, 4),
-                    "valor_total": round(gross_total, 2),
-                    "base_calculo": round(net_revenue, 2),
-                    "percentual_bonificacao": round(bonus_percent, 4),
-                    "bonificacao": round(bonus_value, 2),
-                })
+        stock_bonus_by_company = {}
+        for sale_company_id, ref_keys in target_refs_by_company.items():
+            bonus_map = load_json(stock_bonus_file(sale_company_id), {})
+            if not isinstance(bonus_map, dict):
+                bonus_map = {}
+            values = {
+                ref_key: number_value(bonus_map.get(ref_key))
+                for ref_key in ref_keys
+            }
+            missing_refs = {ref_key for ref_key in ref_keys if ref_key not in values or values[ref_key] <= 0}
+            if missing_refs:
+                for record in load_json(stock_file(sale_company_id), []):
+                    ref_key = normalize_text(record.get("Referencia"))
+                    if ref_key in missing_refs:
+                        values[ref_key] = number_value(record.get("Bonus"))
+            stock_bonus_by_company[sale_company_id] = values
+
+        for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(
+            target_sales_for_sem_giro,
+            key=lambda item: (item[0], normalize_text(item[5].get("PR_COD")), item[1]),
+        ):
+            ref_key = normalize_text(sale.get("PR_COD"))
+            if not ref_key:
+                continue
+            month_start = date(sale_year, sale_month, 1) if sale_year and sale_month else None
+            previous_month_end = month_start - timedelta(days=1) if month_start else None
+            previous_product_sale = previous_product_sale_by_company_ref.get((sale_company_id, ref_key))
+            days_without_movement_base = (previous_month_end - previous_product_sale).days if previous_product_sale and previous_month_end else 0
+            if previous_product_sale and days_without_movement_base > 180:
+                month_key = str(sale_month)
+                net_revenue = sale_net_revenue(sale)
+                month_objectives = ((goal_record.get("months") or {}).get(month_key) or {}).get("objetivos") or {}
+                sem_giro_goal = month_objectives.get("sem_giro") if isinstance(month_objectives.get("sem_giro"), dict) else {}
+                sale_qty = number_value(sale.get("PR_QTD"))
+                min_qty = number_value(sem_giro_goal.get("qty_minima"))
+                min_value = number_value(sem_giro_goal.get("valor_minimo"))
+                if (not min_qty or sale_qty >= min_qty) and (not min_value or net_revenue >= min_value):
+                    bonus_percent = max(0.0, number_value(stock_bonus_by_company.get(sale_company_id, {}).get(ref_key)))
+                    if bonus_percent <= 0:
+                        bonus_percent = max(0.0, number_value(sem_giro_goal.get("meta")))
+                    if bonus_percent <= 0:
+                        bonus_percent = 1.5
+                    gross_total = number_value(sale.get("PR_SBT"))
+                    unit_value = gross_total / sale_qty if sale_qty else 0.0
+                    bonus_value = net_revenue * bonus_percent / 100
+                    achievements[month_key]["sem_giro"] += net_revenue
+                    sem_giro_commission_by_month[month_key] += bonus_value
+                    sem_giro_details_by_month[month_key].append({
+                        "nota_fiscal": normalize_record(sale.get("NF_NUM") or sale.get("ID_NF")),
+                        "data_emissao": format_date_br(sale_date),
+                        "codigo_cliente": normalize_record(client_id),
+                        "nome_cliente": normalize_record(sale.get("CL_NOM")),
+                        "referencia_produto": normalize_record(sale.get("PR_COD")),
+                        "descricao_produto": normalize_record(sale.get("PR_DES")),
+                        "dias_sem_movimento": format_days_without_movement(days_without_movement_base),
+                        "dias_sem_movimento_numero": days_without_movement_base,
+                        "quantidade": round(sale_qty, 3),
+                        "valor_unitario": round(unit_value, 4),
+                        "valor_total": round(gross_total, 2),
+                        "base_calculo": round(net_revenue, 2),
+                        "percentual_bonificacao": round(bonus_percent, 4),
+                        "bonificacao": round(bonus_value, 2),
+                    })
     for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(sales, key=lambda item: (item[0], item[1])):
         client = client_index.get(client_id)
         ge_group_key = economic_group_master_id_from_index(group_index, client_id)
@@ -6044,7 +6048,10 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     year = int(optional_number_value(year_value) or CURRENT_YEAR)
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    fast_mode = str(fast_value or "").strip().lower() in {"1", "true", "sim", "yes"}
+    vendors = load_json(vendors_file(company_id), []) if fast_mode else sync_vendors_from_sales(company_id)[0]
+    if fast_mode and vendor_id_value and not any(item.get("id") == vendor_id_value for item in vendors):
+        vendors, _inserted = sync_vendors_from_sales(company_id)
     active_vendors = [vendor for vendor in vendors if vendor.get("status") == "Ativo"]
     goal_vendors = [vendor_goal_option_record(vendor) for vendor in active_vendors]
     if not vendor_id_value and goal_vendors:
@@ -6056,7 +6063,6 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
     all_goals = load_json(vendor_goals_file(company_id), {})
     stored = all_goals.get(vendor_goals_key(vendor_id_value, year), {}) if vendor_id_value else {}
     record = normalize_vendor_goal_record(stored, company_id, vendor_id_value, year) if vendor_id_value else default_vendor_goal_record(company_id, "", year)
-    fast_mode = str(fast_value or "").strip().lower() in {"1", "true", "sim", "yes"}
     sales_base = (
         {"media_base": 0.0, "fast_mode": True}
         if fast_mode
@@ -6081,7 +6087,7 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
         month_record["meta_clientes_com_vendas_sugerida"] = suggested_clients if not fast_mode else current_clients_goal
     selected_month = int(optional_number_value(month_value) or 0)
     target_months = [selected_month] if 1 <= selected_month <= 12 else None
-    achievements = vendor_goal_achievements(company_id, vendor_id_value, year, record, target_months) if vendor_id_value else {}
+    achievements = vendor_goal_achievements(company_id, vendor_id_value, year, record, target_months, fast_mode) if vendor_id_value else {}
     months_to_apply = target_months or list(range(1, 13))
     for month in months_to_apply:
         month_key = str(month)
