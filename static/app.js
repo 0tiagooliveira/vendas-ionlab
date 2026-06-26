@@ -218,7 +218,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260626-print-regras-uma-pagina1";
+const appAssetVersion = "20260626-ajuste-carregamento1";
 const apiMemoryCache = new Map();
 const fastCacheMs = 30 * 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
@@ -384,7 +384,10 @@ async function fetchJson(url, options) {
     }
   }
   const requestUrl = method === "GET" ? cacheKey : url;
-  const progressTicket = beginAutoLoadingProgress(method === "GET" ? "Carregando dados..." : "Processando solicitacao...");
+  const shouldAutoProgress = method !== "GET" || requestOptions.progress === true;
+  const progressTicket = shouldAutoProgress
+    ? beginAutoLoadingProgress(method === "GET" ? "Carregando dados..." : "Processando solicitacao...")
+    : null;
   try {
     const response = await fetch(requestUrl, {
       ...fetchOptions,
@@ -414,10 +417,14 @@ async function fetchJson(url, options) {
       clearApiCache();
       invalidateLoadedViews();
     }
-    finishAutoLoadingProgress(progressTicket);
+    if (progressTicket) {
+      finishAutoLoadingProgress(progressTicket);
+    }
     return payload;
   } catch (error) {
-    failAutoLoadingProgress(progressTicket, error.message || "Nao foi possivel concluir.");
+    if (progressTicket) {
+      failAutoLoadingProgress(progressTicket, error.message || "Nao foi possivel concluir.");
+    }
     throw error;
   }
 }
