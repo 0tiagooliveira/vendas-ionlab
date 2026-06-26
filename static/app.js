@@ -1,4 +1,4 @@
-﻿const companies = [];
+const companies = [];
 
 const pageTitles = {
   home: "Pagina principal",
@@ -22,6 +22,10 @@ const pageTitles = {
 };
 
 const formatNumber = new Intl.NumberFormat("pt-BR");
+const formatNumber2 = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 const formatCurrency = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -108,17 +112,27 @@ const tableState = {
   "costing-fabricated": { loaded: false, timer: null, sortKey: "", sortDir: "asc" },
 };
 let dashboardLoaded = false;
+let currentDashboardCacheKey = "";
 let currentDashboardChart = "uf";
 let currentVendorRegionPayload = null;
 let currentVendorPageGoalsPayload = null;
+let currentVendorCommissionMemory = new Map();
+let currentVendorAboutGoalPayload = null;
 let currentVendorDayByDayPayload = null;
 let currentVendorDayByDayClient = null;
+let currentVendorAgendaPayload = null;
+let currentVendorContactReportPayload = null;
+let currentVendorDailyContactsPayload = null;
+let homeVendorPanelCache = new Map();
+let homeVendorPanelInFlight = new Map();
 let currentVendorRegionDimension = "ufs";
 let currentVendorRegionIndicator = "quant";
 let currentVendorRegionTarget = "dashboard";
 let currentVendorClientStatus = "all";
 let currentVendorClientFilters = { uf: "", ddd: "", city: "" };
 let vendorRegionClientsLoaded = false;
+let currentVendorRegionClientsPayload = null;
+let currentVendorRegionClientsCacheKey = "";
 let currentVendorWorkspace = "day";
 let currentQuoteContext = null;
 let currentQuoteClient = null;
@@ -126,6 +140,13 @@ let currentQuoteProduct = null;
 let currentQuoteItems = [];
 let currentLoadedQuote = null;
 let currentLoadedOrder = null;
+let currentSentDocumentFocus = null;
+let vendorSlowItemsRows = [];
+let vendorSlowItemsColumns = [];
+let currentVendorSlowItemsCacheKey = "";
+let vendorSlowItemsSortKey = "_dias_sem_movimento";
+let vendorSlowItemsSortDir = "desc";
+let vendorSlowItemsTimer = null;
 let currentQuoteMode = "quote";
 let loadingSavedCommercialDocument = false;
 let currentQuoteLoadedFromSent = false;
@@ -137,13 +158,13 @@ let quoteSavedTimer = null;
 let orderSavedTimer = null;
 const sentDocumentsPageSize = 20;
 const sentDocumentsState = { quote: { page: 1, payload: null }, order: { page: 1, payload: null } };
-let currentSentDocumentFocus = null;
 let prospectOptionsLoaded = false;
 let prospectClientTimer = null;
 let vendorsTimer = null;
 let vendorRegionsSearchTimer = null;
 let slowItemsRows = [];
 let slowItemsTimer = null;
+let currentSlowItemsCacheKey = "";
 let slowItemsSortKey = "_dias_sem_movimento";
 let slowItemsSortDir = "desc";
 let currentVendors = [];
@@ -157,6 +178,16 @@ let mercadoLivreAdsTimer = null;
 let mercadoLivreGeneralTimer = null;
 let mercadoLivreSalesTimer = null;
 let mercadoLivreOverview = { companies: [] };
+let currentMercadoLivreDashboardChart = "sales-value";
+let currentMercadoLivreAdsCacheKey = "";
+let currentMercadoLivreSalesCacheKey = "";
+let currentMercadoLivreDashboardCacheKey = "";
+let currentMercadoLivreGeneralCacheKey = "";
+let economicMasterSearchTimer = null;
+let economicClientSearchTimer = null;
+let currentEconomicMaster = null;
+let currentEconomicCandidate = null;
+let currentEconomicClients = [];
 let currentMercadoLivreCompany = "onix";
 let currentMercadoLivreKind = "anuncios";
 let currentMercadoLivreImportId = "";
@@ -179,15 +210,17 @@ let activeCostingTable = "costing";
 let currentUser = null;
 let currentUserCatalog = { groups: [], levels: [] };
 let currentUsersPayload = null;
+let currentUsersCacheKey = "";
 let usersTimer = null;
 let currentFollowUpPayload = null;
+let currentFollowUpCacheKey = "";
 let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260618-botoes-home-ajuste1";
+const appAssetVersion = "20260626-print-regras-uma-pagina1";
 const apiMemoryCache = new Map();
-const fastCacheMs = 60 * 1000;
+const fastCacheMs = 30 * 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
 
 function clonePayload(payload) {
@@ -225,6 +258,16 @@ function cacheTtlForUrl(cacheUrl) {
     "/api/dashboard/vendor-regions",
     "/api/vendor-page-data",
     "/api/vendor-goals",
+    "/api/vendor-about-goal",
+    "/api/vendor-region-clients",
+    "/api/vendor-day-by-day",
+    "/api/home/vendor-panel",
+    "/api/regions",
+    "/api/vendors/assignment-options",
+    "/api/vendor-page-links",
+    "/api/slow-items",
+    "/api/follow-up",
+    "/api/follow-up/options",
     "/api/mercado-livre/sales-dashboard",
     "/api/mercado-livre/general",
     "/api/mercado-livre/ads",
@@ -245,6 +288,18 @@ function clearApiCache() {
   apiMemoryCache.clear();
 }
 
+function clearVendorWorkspaceCache() {
+  currentVendorAgendaPayload = null;
+  currentVendorContactReportPayload = null;
+  currentVendorDailyContactsPayload = null;
+  currentVendorPageGoalsPayload = null;
+  currentVendorRegionClientsPayload = null;
+  currentVendorRegionClientsCacheKey = "";
+  sentDocumentsState.quote = { page: 1, payload: null };
+  sentDocumentsState.order = { page: 1, payload: null };
+  vendorRegionClientsLoaded = false;
+}
+
 function invalidateLoadedViews() {
   Object.values(tableState).forEach((state) => {
     state.loaded = false;
@@ -252,7 +307,18 @@ function invalidateLoadedViews() {
   });
   dashboardLoaded = false;
   mercadoLivreOverview = { companies: [] };
+  currentDashboardCacheKey = "";
+  currentMercadoLivreAdsCacheKey = "";
+  currentMercadoLivreSalesCacheKey = "";
+  currentMercadoLivreDashboardCacheKey = "";
+  currentMercadoLivreGeneralCacheKey = "";
   currentUsersPayload = null;
+  currentUsersCacheKey = "";
+  currentFollowUpPayload = null;
+  currentFollowUpCacheKey = "";
+  currentSlowItemsCacheKey = "";
+  currentVendorSlowItemsCacheKey = "";
+  clearVendorWorkspaceCache();
 }
 
 const viewPermissionMap = {
@@ -293,6 +359,18 @@ const routinePermissionMap = {
   users: "users",
 };
 
+const importMemoryConfigs = [
+  { formId: "sales-import-form", type: "vendas", label: "Notas fiscais de vendas" },
+  { formId: "clients-import-form", type: "clientes", label: "Clientes" },
+  { formId: "stock-import-form", type: "estoque", label: "Estoque" },
+  { formId: "in-transit-import-form", type: "em_transito", label: "Em Transito" },
+  { formId: "prices-import-form", type: "tabela_precos", label: "Tabela de Precos" },
+  { formId: "prices-ipi-form", type: "tabela_precos_ipi", label: "IPI da tabela" },
+  { formId: "products-import-form", type: "cadastro_produtos", label: "Produtos" },
+  { formId: "costing-import-form", type: "custeio", label: "Custeio Importados" },
+  { formId: "costing-fabricated-import-form", type: "custeio_fabricado", label: "Custeio Fabricado" },
+];
+
 async function fetchJson(url, options) {
   const requestOptions = options || {};
   const { force, ...fetchOptions } = requestOptions;
@@ -302,39 +380,46 @@ async function fetchJson(url, options) {
   if (ttl && !force) {
     const cached = apiMemoryCache.get(cacheKey);
     if (cached && Date.now() - cached.savedAt < ttl) {
-      return clonePayload(cached.payload);
+      return cached.payload;
     }
   }
   const requestUrl = method === "GET" ? cacheKey : url;
-  const response = await fetch(requestUrl, {
-    ...fetchOptions,
-    cache: method === "GET" && ttl ? "default" : "no-store",
-    headers: {
-      Accept: "application/json",
-      ...(localStorage.getItem(authTokenKey) ? { "X-Auth-Token": localStorage.getItem(authTokenKey) } : {}),
-      ...(requestOptions.headers || {}),
-    },
-  });
-  const text = await response.text();
-  let payload;
+  const progressTicket = beginAutoLoadingProgress(method === "GET" ? "Carregando dados..." : "Processando solicitacao...");
   try {
-    payload = text ? JSON.parse(text) : {};
+    const response = await fetch(requestUrl, {
+      ...fetchOptions,
+      cache: method === "GET" && ttl ? "default" : "no-store",
+      headers: {
+        Accept: "application/json",
+        ...(localStorage.getItem(authTokenKey) ? { "X-Auth-Token": localStorage.getItem(authTokenKey) } : {}),
+        ...(requestOptions.headers || {}),
+      },
+    });
+    const text = await response.text();
+    let payload;
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch (error) {
+      const isHtml = text.trim().startsWith("<");
+      throw new Error(isHtml
+        ? `O servidor retornou uma pagina em vez de dados na rota ${url}. Atualize a pagina e tente novamente.`
+        : "A resposta do servidor nao esta em formato valido.");
+    }
+    if (!response.ok) {
+      throw new Error(payload.error || "Nao foi possivel concluir a operacao.");
+    }
+    if (method === "GET" && ttl) {
+      apiMemoryCache.set(cacheKey, { savedAt: Date.now(), payload });
+    } else if (method !== "GET") {
+      clearApiCache();
+      invalidateLoadedViews();
+    }
+    finishAutoLoadingProgress(progressTicket);
+    return payload;
   } catch (error) {
-    const isHtml = text.trim().startsWith("<");
-    throw new Error(isHtml
-      ? `O servidor retornou uma pagina em vez de dados na rota ${url}. Atualize a pagina e tente novamente.`
-      : "A resposta do servidor nao esta em formato valido.");
+    failAutoLoadingProgress(progressTicket, error.message || "Nao foi possivel concluir.");
+    throw error;
   }
-  if (!response.ok) {
-    throw new Error(payload.error || "Nao foi possivel concluir a operacao.");
-  }
-  if (method === "GET" && ttl) {
-    apiMemoryCache.set(cacheKey, { savedAt: Date.now(), payload: clonePayload(payload) });
-  } else if (method !== "GET") {
-    clearApiCache();
-    invalidateLoadedViews();
-  }
-  return payload;
 }
 
 function updateHomeReturnButton(viewName) {
@@ -481,6 +566,7 @@ function setView(viewName) {
   targetView.classList.add("visible");
   document.getElementById("page-title").textContent = pageTitles[viewName] || "CRM";
   updateHomeReturnButton(viewName);
+  updateVendorPrintButtonVisibility();
 
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === viewName);
@@ -578,6 +664,10 @@ function vendorPageRoute() {
     return null;
   }
   return { company: parts[1], vendorId: parts.slice(2).join("/") };
+}
+
+function currentVendorPageCompanyId() {
+  return vendorPageRoute()?.company || currentVendorRegionPayload?.empresa_id || "ionlab";
 }
 
 function setVendorRegionTarget(target) {
@@ -715,24 +805,66 @@ function applyDashboardVendorMode() {
   });
 }
 
+function homeVendorStatsSkeleton() {
+  return `
+    <section class="home-vendor-insights-title home-loading-panel">
+      <div>
+        <p class="eyebrow">Painel individual</p>
+        <h2>Carregando indicadores do vendedor</h2>
+        <p class="muted"><span class="loading-dot"></span>Preparando vendas, contatos e metas do mês.</p>
+      </div>
+    </section>
+    <div class="home-vendor-insights-grid home-skeleton-grid">
+      ${Array.from({ length: 4 }, () => `
+        <article class="home-vendor-chart-card skeleton-card">
+          <span></span><strong></strong><div></div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 async function renderStats(selection = {}) {
   const grid = document.getElementById("stats-grid");
   if (!grid) {
     return;
   }
-  grid.innerHTML = '<div class="table-status">Carregando indicadores do vendedor...</div>';
+  const params = new URLSearchParams();
+  if (selection.company) {
+    params.set("company", selection.company);
+  }
+  if (selection.vendorId) {
+    params.set("vendor_id", selection.vendorId);
+  }
+  const query = params.toString();
+  const cacheKey = query || "current-user";
+  const cached = homeVendorPanelCache.get(cacheKey);
+  if (cached) {
+    renderHomeVendorCharts(cached);
+  } else {
+    grid.innerHTML = homeVendorStatsSkeleton();
+  }
   try {
-    const params = new URLSearchParams();
-    if (selection.company) {
-      params.set("company", selection.company);
+    let request = homeVendorPanelInFlight.get(cacheKey);
+    if (!request) {
+      request = fetchJson(`/api/home/vendor-panel${query ? `?${query}` : ""}`);
+      homeVendorPanelInFlight.set(cacheKey, request);
     }
-    if (selection.vendorId) {
-      params.set("vendor_id", selection.vendorId);
+    const payload = await request;
+    homeVendorPanelCache.set(cacheKey, payload);
+    if (homeVendorPanelInFlight.get(cacheKey) === request) {
+      homeVendorPanelInFlight.delete(cacheKey);
     }
-    const query = params.toString();
-    const payload = await fetchJson(`/api/home/vendor-panel${query ? `?${query}` : ""}`, { force: true });
     renderHomeVendorCharts(payload);
   } catch (error) {
+    homeVendorPanelInFlight.delete(cacheKey);
+    if (cached) {
+      const status = document.createElement("p");
+      status.className = "table-status home-cache-warning";
+      status.textContent = `Mostrando dados em memória. Atualização falhou: ${error.message}`;
+      grid.appendChild(status);
+      return;
+    }
     grid.innerHTML = `
       <section class="home-vendor-insights-empty">
         <p class="eyebrow">Indicadores do vendedor</p>
@@ -809,7 +941,7 @@ function homeVendorContactsCard(payload) {
           const inactiveHeight = Math.round((inactive / maxValue) * 84);
           const neverHeight = Math.round((never / maxValue) * 84);
           const goalReached = contactsGoal > 0 && total >= contactsGoal;
-          const mood = contactsGoal > 0 ? (goalReached ? "☺" : "☹") : "";
+          const mood = contactsGoal > 0 ? (goalReached ? "â˜º" : "â˜¹") : "";
           return `
             <span class="home-mini-bar" title="${escapeHtml(row.data_label || row.data)}: ${formatNumber.format(total)} contatos · Meta ${formatNumber.format(contactsGoal)}">
               <span class="home-mini-bar-plot">
@@ -889,6 +1021,20 @@ function renderHomeVendorCharts(payload) {
   }
 }
 
+function homeVendorCardsSkeleton() {
+  return `
+    <div class="home-vendor-card-skeleton-grid">
+      ${Array.from({ length: 6 }, () => `
+        <article class="home-vendor-card home-vendor-card-skeleton">
+          <span></span>
+          <strong></strong>
+          <small></small>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 async function renderHomeVendorPages() {
   const grid = document.getElementById("home-vendor-grid");
   const panelBox = document.getElementById("home-vendor-panel-box");
@@ -898,14 +1044,14 @@ async function renderHomeVendorPages() {
     return;
   }
   if (panelList) {
-    panelList.innerHTML = '<span class="vendor-panel-empty">Carregando...</span>';
+    panelList.innerHTML = '<span class="vendor-panel-empty vendor-panel-loading"><span class="loading-dot"></span> Carregando painéis...</span>';
   }
   if (panelSummary) {
-    panelSummary.textContent = "Carregando vendedores...";
+    panelSummary.innerHTML = '<span class="loading-dot"></span> Carregando vendedores ativos...';
   }
 
   if (grid) {
-    grid.innerHTML = '<div class="table-status">Carregando vendedores ativos...</div>';
+    grid.innerHTML = homeVendorCardsSkeleton();
   }
   let activeVendors = [];
   try {
@@ -1201,10 +1347,25 @@ async function loadDashboard() {
   const companySelect = document.getElementById("dashboard-company");
   const company = companySelect.value || "ionlab";
   const chart = document.getElementById("uf-chart");
+  const dashboardKey = JSON.stringify({
+    chart: currentDashboardChart,
+    company,
+    vendor: document.getElementById("dashboard-vendor-select")?.value || "",
+    annualYear: document.getElementById("dashboard-annual-year")?.value || "",
+    monthlyYear: document.getElementById("dashboard-monthly-year")?.value || "",
+    monthlyOrigin: document.getElementById("dashboard-monthly-origin")?.value || "",
+    monthlyAgrp: document.getElementById("dashboard-monthly-agrp")?.value || "",
+    familyYear: document.getElementById("dashboard-family-year")?.value || "",
+    familyOrigin: document.getElementById("dashboard-family-origin")?.value || "",
+  });
+  if (dashboardLoaded && currentDashboardCacheKey === dashboardKey) {
+    return;
+  }
 
   if (["annual-sales", "monthly-evolution", "family-sales"].includes(currentDashboardChart)) {
     await loadDashboardSalesCharts();
     dashboardLoaded = true;
+    currentDashboardCacheKey = dashboardKey;
     return;
   }
 
@@ -1212,6 +1373,7 @@ async function loadDashboard() {
     await loadDashboardVendors();
     await loadVendorRegionsChart();
     dashboardLoaded = true;
+    currentDashboardCacheKey = dashboardKey;
     return;
   }
 
@@ -1223,6 +1385,7 @@ async function loadDashboard() {
       renderUfChart(payload);
       renderActivityChart(payload);
       dashboardLoaded = true;
+      currentDashboardCacheKey = dashboardKey;
     } catch (error) {
       chart.innerHTML = `<div class="table-status">${escapeHtml(error.message)}</div>`;
       document.getElementById("activity-chart").innerHTML = `<div class="table-status">${escapeHtml(error.message)}</div>`;
@@ -1275,7 +1438,7 @@ async function loadDashboardVendors() {
     if (!restricted) {
       return false;
     }
-    const linksPayload = await fetchJson("/api/vendor-page-links", { force: true });
+    const linksPayload = await fetchJson("/api/vendor-page-links");
     const linked = (linksPayload.rows || []).filter(currentUserMatchesVendor);
     if (linked.length && linked[0].empresa_id && linked[0].empresa_id !== company) {
       companySelect.value = linked[0].empresa_id;
@@ -1710,6 +1873,17 @@ async function loadVendorPage() {
   status.textContent = "Abra Indicadores para carregar o painel analitico completo.";
 }
 
+function setVendorPageSellerName(name) {
+  const card = document.getElementById("vendor-page-seller-card");
+  const label = document.getElementById("vendor-page-seller-name");
+  const sellerName = String(name || "").trim();
+  if (!card || !label || !sellerName) {
+    return;
+  }
+  label.textContent = sellerName;
+  card.classList.remove("hidden");
+}
+
 async function loadVendorPageIndicators() {
   const route = vendorPageRoute();
   if (!route || currentVendorRegionPayload) {
@@ -1724,7 +1898,8 @@ async function loadVendorPageIndicators() {
   try {
     const payload = await fetchJson(`/api/vendor-page-data?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`);
     document.title = `CRM - ${payload.vendedor.nome_completo || "Vendedor"}`;
-    document.getElementById("vendor-page-title").textContent = payload.vendedor.nome_completo || "Painel do vendedor";
+    document.getElementById("vendor-page-title").textContent = "Painel individual";
+    setVendorPageSellerName(payload.vendedor.nome_completo || "");
     document.getElementById("vendor-page-company").textContent = payload.empresa;
     document.getElementById("vendor-page-subtitle").textContent =
       "Indicadores exclusivos das regioes, DDDs e cidades definidos para este vendedor.";
@@ -1738,6 +1913,7 @@ async function loadVendorPageIndicators() {
 }
 
 function setVendorWorkspaceSection(section) {
+  repairReconstructedLayout();
   currentVendorWorkspace = section;
   if (section !== "sent-quotes") {
     moveQuoteEditorHome();
@@ -1749,7 +1925,7 @@ function setVendorWorkspaceSection(section) {
     panel.classList.toggle("active", panel.id === `vendor-workspace-${section}`);
   });
   if (section === "clients") {
-    loadVendorRegionClients(true);
+    loadVendorRegionClients(false);
   }
   if (section === "indicators") {
     loadVendorPageIndicators();
@@ -1762,10 +1938,18 @@ function setVendorWorkspaceSection(section) {
     loadVendorContactReport();
   }
   if (section === "goals") {
-    loadVendorPageGoals();
+    if (currentVendorPageGoalsPayload) {
+      renderVendorPageGoals();
+    } else {
+      loadVendorPageGoals();
+    }
   }
   if (section === "quick-consult") {
     setTimeout(() => document.getElementById("quick-consult-search")?.focus(), 50);
+  }
+  if (section === "slow-items") {
+    loadVendorSlowItems();
+    setTimeout(() => document.getElementById("vendor-slow-items-search")?.focus(), 50);
   }
   if (section === "quotes") {
     if (!loadingSavedCommercialDocument) {
@@ -1778,7 +1962,7 @@ function setVendorWorkspaceSection(section) {
     moveQuoteEditorHome();
     const status = document.getElementById("sent-quote-status");
     if (status) {
-      status.textContent = "Busque um orcamento ou pedido salvo para abrir na tela de edicao.";
+      status.textContent = "Carregando últimos documentos enviados...";
     }
     loadSentDocumentsList("quote");
     loadSentDocumentsList("order");
@@ -1789,6 +1973,19 @@ function setVendorWorkspaceSection(section) {
     } else {
       renderVendorDayByDay();
     }
+  }
+  updateVendorPrintButtonVisibility();
+}
+
+function updateVendorPrintButtonVisibility() {
+  const button = document.getElementById("vendor-page-goals-print");
+  const monthCard = document.getElementById("vendor-page-goals-month-card");
+  const shouldShow = Boolean(vendorPageRoute() && currentVendorWorkspace === "goals");
+  if (button) {
+    button.classList.toggle("hidden", !shouldShow);
+  }
+  if (monthCard) {
+    monthCard.classList.toggle("hidden", !shouldShow);
   }
 }
 
@@ -1989,72 +2186,6 @@ function openSavedCommercialDocument(row, kind, input = null) {
   }
 }
 
-async function searchSavedCommercialDocuments(kind) {
-  const route = vendorPageRoute();
-  const input = document.getElementById(kind === "order" ? "order-saved-search" : "quote-saved-search");
-  const suggestions = document.getElementById(kind === "order" ? "order-saved-suggestions" : "quote-saved-suggestions");
-  if (!route || !input || !suggestions) {
-    return;
-  }
-  const query = input.value.trim();
-  if (query.length < 2) {
-    clearQuoteSuggestions(kind);
-    return;
-  }
-  suggestions.innerHTML = '<div class="table-status">Buscando registros...</div>';
-  suggestions.classList.add("visible");
-  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
-  try {
-    const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=${encodeURIComponent(query)}&_=${Date.now()}`);
-    suggestions.innerHTML = (payload.rows || []).map((row, index) => `
-      <button class="prospect-suggestion" type="button" data-index="${index}">
-        <strong>${escapeHtml(row.numero)} - ${escapeHtml(row.cliente || "")}</strong>
-        <span>${escapeHtml(row.cliente_documento || "")} | ${escapeHtml(formatCurrency2.format(row.total || 0))}</span>
-      </button>
-    `).join("") || '<div class="table-status">Nenhum registro encontrado.</div>';
-    suggestions.querySelectorAll(".prospect-suggestion").forEach((button) => {
-      button.addEventListener("click", () => {
-        const row = payload.rows[Number(button.dataset.index)];
-        openSavedCommercialDocument(row, kind, input);
-      });
-    });
-    const exact = (payload.rows || []).find((row) => normalizeTextClient(row.numero) === normalizeTextClient(query));
-    if (exact) {
-      openSavedCommercialDocument(exact, kind, input);
-    }
-  } catch (error) {
-    suggestions.innerHTML = `<div class="table-status">${escapeHtml(error.message)}</div>`;
-  }
-}
-
-async function openSavedCommercialDocumentFromSearch(kind) {
-  const route = vendorPageRoute();
-  const input = document.getElementById(kind === "order" ? "order-saved-search" : "quote-saved-search");
-  const status = document.getElementById("sent-quote-status");
-  if (!route || !input) {
-    return;
-  }
-  const query = input.value.trim();
-  if (query.length < 2) {
-    if (status) status.textContent = "Digite o numero, cliente ou CNPJ para abrir.";
-    return;
-  }
-  if (status) status.textContent = "Abrindo registro salvo...";
-  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
-  try {
-    const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=${encodeURIComponent(query)}&_=${Date.now()}`);
-    const rows = payload.rows || [];
-    const row = rows.find((item) => normalizeTextClient(item.numero) === normalizeTextClient(query)) || (rows.length === 1 ? rows[0] : null);
-    if (!row) {
-      if (status) status.textContent = "Encontrei mais de um registro. Clique na opcao correta da lista para abrir.";
-      await searchSavedCommercialDocuments(kind);
-      return;
-    }
-    openSavedCommercialDocument(row, kind, input);
-  } catch (error) {
-    if (status) status.textContent = error.message;
-  }
-}
 
 function sentDocumentPdfUrl(row, kind) {
   const route = vendorPageRoute();
@@ -2078,74 +2209,6 @@ function sentDocumentItemsRows(commercialDocument) {
       <td>${escapeHtml(item.disponibilidade || "")}</td>
     </tr>
   `).join("") || '<tr><td colspan="8">Nenhum item cadastrado.</td></tr>';
-}
-
-function formatSentDocumentDate(value) {
-  if (!value) return "Sem data";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
-
-function sentDocumentElements(kind) {
-  return {
-    list: document.getElementById(kind === "order" ? "sent-orders-list" : "sent-quotes-list"),
-    pages: document.getElementById(kind === "order" ? "sent-orders-pages" : "sent-quotes-pages"),
-    count: document.getElementById(kind === "order" ? "sent-orders-count" : "sent-quotes-count"),
-  };
-}
-
-function renderSentDocumentsList(kind, payload) {
-  const { list, pages, count } = sentDocumentElements(kind);
-  if (!list || !pages || !count) return;
-  const rows = payload.rows || [];
-  const label = kind === "order" ? "pedido" : "orcamento";
-  count.textContent = `${formatNumber.format(payload.total || 0)} ${label}(s)`;
-  list.innerHTML = rows.map((row, index) => `
-    <article class="sent-document-row">
-      <div>
-        <strong>${escapeHtml(row.numero || "Sem número")} - ${escapeHtml(row.cliente || "Cliente não informado")}</strong>
-        <span>${escapeHtml(row.cliente_documento || "")} | ${escapeHtml(formatCurrency2.format(row.total || 0))}</span>
-        <small>Atualizado em ${escapeHtml(formatSentDocumentDate(row.atualizado_em || ""))}</small>
-      </div>
-      <button type="button" data-sent-kind="${kind}" data-sent-index="${index}">Ver</button>
-    </article>
-  `).join("") || `<div class="table-status">Nenhum ${label} encontrado.</div>`;
-  list.querySelectorAll("[data-sent-kind]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const row = rows[Number(button.dataset.sentIndex)];
-      openSentDocumentModal(row, kind);
-    });
-  });
-  const totalPages = Number(payload.total_pages || 1);
-  const currentPage = Number(payload.page || 1);
-  pages.innerHTML = totalPages > 1 ? Array.from({ length: totalPages }, (_, index) => {
-    const page = index + 1;
-    return `<button type="button" class="${page === currentPage ? "active" : ""}" data-sent-page="${page}" data-sent-kind="${kind}">${page}</button>`;
-  }).join("") : "";
-  pages.querySelectorAll("[data-sent-page]").forEach((button) => {
-    button.addEventListener("click", () => loadSentDocumentsList(kind, Number(button.dataset.sentPage), true));
-  });
-}
-
-async function loadSentDocumentsList(kind, page = null, force = false) {
-  const route = vendorPageRoute();
-  const state = sentDocumentsState[kind];
-  const { list } = sentDocumentElements(kind);
-  if (!route || !state || !list) return;
-  const nextPage = page || state.page || 1;
-  if (state.payload?.page === nextPage && !force) {
-    renderSentDocumentsList(kind, state.payload);
-    return;
-  }
-  list.innerHTML = '<div class="table-status">Carregando documentos...</div>';
-  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
-  const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=&page=${encodeURIComponent(nextPage)}&limit=${sentDocumentsPageSize}`);
-  state.page = payload.page || nextPage;
-  state.payload = payload;
-  renderSentDocumentsList(kind, payload);
-  const status = document.getElementById("sent-quote-status");
-  if (status) status.textContent = "Últimos documentos enviados carregados.";
 }
 
 function closeSentDocumentModal() {
@@ -2235,6 +2298,73 @@ function editFocusedSentDocument() {
   if (editButton) editButton.textContent = kind === "order" ? "Editar pedido" : "Editar orçamento";
 }
 
+async function searchSavedCommercialDocuments(kind) {
+  const route = vendorPageRoute();
+  const input = document.getElementById(kind === "order" ? "order-saved-search" : "quote-saved-search");
+  const suggestions = document.getElementById(kind === "order" ? "order-saved-suggestions" : "quote-saved-suggestions");
+  if (!route || !input || !suggestions) {
+    return;
+  }
+  const query = input.value.trim();
+  if (query.length < 2) {
+    clearQuoteSuggestions(kind);
+    return;
+  }
+  suggestions.innerHTML = '<div class="table-status">Buscando registros...</div>';
+  suggestions.classList.add("visible");
+  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
+  try {
+    const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=${encodeURIComponent(query)}&_=${Date.now()}`);
+    suggestions.innerHTML = (payload.rows || []).map((row, index) => `
+      <button class="prospect-suggestion" type="button" data-index="${index}">
+        <strong>${escapeHtml(row.numero)} - ${escapeHtml(row.cliente || "")}</strong>
+        <span>${escapeHtml(row.cliente_documento || "")} | ${escapeHtml(formatCurrency2.format(row.total || 0))}</span>
+      </button>
+    `).join("") || '<div class="table-status">Nenhum registro encontrado.</div>';
+    suggestions.querySelectorAll(".prospect-suggestion").forEach((button) => {
+      button.addEventListener("click", () => {
+        const row = payload.rows[Number(button.dataset.index)];
+        openSavedCommercialDocument(row, kind, input);
+      });
+    });
+    const exact = (payload.rows || []).find((row) => normalizeTextClient(row.numero) === normalizeTextClient(query));
+    if (exact) {
+      openSavedCommercialDocument(exact, kind, input);
+    }
+  } catch (error) {
+    suggestions.innerHTML = `<div class="table-status">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function openSavedCommercialDocumentFromSearch(kind) {
+  const route = vendorPageRoute();
+  const input = document.getElementById(kind === "order" ? "order-saved-search" : "quote-saved-search");
+  const status = document.getElementById("sent-quote-status");
+  if (!route || !input) {
+    return;
+  }
+  const query = input.value.trim();
+  if (query.length < 2) {
+    if (status) status.textContent = "Digite o numero, cliente ou CNPJ para abrir.";
+    return;
+  }
+  if (status) status.textContent = "Abrindo registro salvo...";
+  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
+  try {
+    const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=${encodeURIComponent(query)}&_=${Date.now()}`);
+    const rows = payload.rows || [];
+    const row = rows.find((item) => normalizeTextClient(item.numero) === normalizeTextClient(query)) || (rows.length === 1 ? rows[0] : null);
+    if (!row) {
+      if (status) status.textContent = "Encontrei mais de um registro. Clique na opcao correta da lista para abrir.";
+      await searchSavedCommercialDocuments(kind);
+      return;
+    }
+    openSavedCommercialDocument(row, kind, input);
+  } catch (error) {
+    if (status) status.textContent = error.message;
+  }
+}
+
 function scheduleSavedQuoteSearch() {
   clearTimeout(quoteSavedTimer);
   quoteSavedTimer = setTimeout(() => searchSavedCommercialDocuments("quote"), 250);
@@ -2243,6 +2373,75 @@ function scheduleSavedQuoteSearch() {
 function scheduleSavedOrderSearch() {
   clearTimeout(orderSavedTimer);
   orderSavedTimer = setTimeout(() => searchSavedCommercialDocuments("order"), 250);
+}
+
+
+function sentDocumentElements(kind) {
+  return {
+    list: document.getElementById(kind === "order" ? "sent-orders-list" : "sent-quotes-list"),
+    pages: document.getElementById(kind === "order" ? "sent-orders-pages" : "sent-quotes-pages"),
+    count: document.getElementById(kind === "order" ? "sent-orders-count" : "sent-quotes-count"),
+  };
+}
+
+function formatSentDocumentDate(value) {
+  if (!value) return "Sem data";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function renderSentDocumentsList(kind, payload) {
+  const { list, pages, count } = sentDocumentElements(kind);
+  if (!list || !pages || !count) return;
+  const rows = payload.rows || [];
+  const label = kind === "order" ? "pedido" : "orçamento";
+  count.textContent = `${formatNumber.format(payload.total || 0)} ${label}(s)`;
+  list.innerHTML = rows.map((row, index) => `
+    <article class="sent-document-row">
+      <div>
+        <strong>${escapeHtml(row.numero || "Sem número")} - ${escapeHtml(row.cliente || "Cliente não informado")}</strong>
+        <span>${escapeHtml(row.cliente_documento || "")} | ${escapeHtml(formatCurrency2.format(row.total || 0))}</span>
+        <small>Atualizado em ${escapeHtml(formatSentDocumentDate(row.atualizado_em || ""))}</small>
+      </div>
+      <button type="button" data-sent-kind="${kind}" data-sent-index="${index}">Ver</button>
+    </article>
+  `).join("") || `<div class="table-status">Nenhum ${label} encontrado.</div>`;
+  list.querySelectorAll("[data-sent-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = rows[Number(button.dataset.sentIndex)];
+      openSentDocumentModal(row, kind);
+    });
+  });
+  const totalPages = Number(payload.total_pages || 1);
+  const currentPage = Number(payload.page || 1);
+  pages.innerHTML = totalPages > 1 ? Array.from({ length: totalPages }, (_, index) => {
+    const page = index + 1;
+    return `<button type="button" class="${page === currentPage ? "active" : ""}" data-sent-page="${page}" data-sent-kind="${kind}">${page}</button>`;
+  }).join("") : "";
+  pages.querySelectorAll("[data-sent-page]").forEach((button) => {
+    button.addEventListener("click", () => loadSentDocumentsList(kind, Number(button.dataset.sentPage), true));
+  });
+}
+
+async function loadSentDocumentsList(kind, page = null, force = false) {
+  const route = vendorPageRoute();
+  const state = sentDocumentsState[kind];
+  const { list } = sentDocumentElements(kind);
+  if (!route || !state || !list) return;
+  const nextPage = page || state.page || 1;
+  if (state.payload?.page === nextPage && !force) {
+    renderSentDocumentsList(kind, state.payload);
+    return;
+  }
+  list.innerHTML = '<div class="table-status">Carregando documentos...</div>';
+  const url = kind === "order" ? "/api/orders/search" : "/api/quotes/search";
+  const payload = await fetchJson(`${url}?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&q=&page=${encodeURIComponent(nextPage)}&limit=${sentDocumentsPageSize}`);
+  state.page = payload.page || nextPage;
+  state.payload = payload;
+  renderSentDocumentsList(kind, payload);
+  const status = document.getElementById("sent-quote-status");
+  if (status) status.textContent = "Últimos documentos enviados carregados.";
 }
 
 function selectQuoteProduct(product) {
@@ -2575,6 +2774,7 @@ async function closeQuote() {
     document.getElementById("quote-number").textContent = quote.numero;
     link.href = `/api/quotes/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(quote.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
+    clearVendorWorkspaceCache();
     status.textContent = `Orcamento ${quote.numero} gerado com sucesso. Use o botao Baixar PDF para enviar ao cliente.`;
     if (currentQuoteLoadedFromSent) {
       loadCommercialDocument(quote, "quote", true);
@@ -2627,6 +2827,7 @@ async function convertQuoteToOrder() {
     const link = document.getElementById("quote-pdf-link");
     link.href = `/api/orders/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(order.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
+    clearVendorWorkspaceCache();
     status.textContent = `Pedido ${order.numero} salvo com sucesso.`;
   } catch (error) {
     status.textContent = error.message;
@@ -2663,21 +2864,28 @@ async function saveOrder() {
     const link = document.getElementById("quote-pdf-link");
     link.href = `/api/orders/pdf?company=${encodeURIComponent(route.company)}&id=${encodeURIComponent(order.id)}&_=${Date.now()}`;
     link.classList.remove("hidden");
+    clearVendorWorkspaceCache();
     status.textContent = `Pedido ${order.numero} salvo com sucesso.`;
   } catch (error) {
     status.textContent = error.message;
   }
 }
 
-async function loadVendorAgenda() {
+async function loadVendorAgenda(force = false) {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-agenda-status");
   if (!route || !status) {
     return;
   }
+  if (currentVendorAgendaPayload && !force) {
+    renderSimpleVendorTable(currentVendorAgendaPayload, "vendor-agenda-head", "vendor-agenda-body", "Nenhum contato agendado.");
+    status.textContent = `${currentVendorAgendaPayload.empresa}: ${formatNumber.format(currentVendorAgendaPayload.total || 0)} agendamento(s) encontrado(s).`;
+    return;
+  }
   status.textContent = "Carregando agenda...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force: true });
+    const payload = await fetchJson(`/api/vendor-day-by-day/agenda?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`, { force });
+    currentVendorAgendaPayload = payload;
     renderSimpleVendorTable(payload, "vendor-agenda-head", "vendor-agenda-body", "Nenhum contato agendado.");
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} agendamento(s) encontrado(s).`;
   } catch (error) {
@@ -2685,7 +2893,7 @@ async function loadVendorAgenda() {
   }
 }
 
-async function loadVendorContactReport() {
+async function loadVendorContactReport(force = false) {
   const route = vendorPageRoute();
   const status = document.getElementById("vendor-contact-report-status");
   if (!route || !status) {
@@ -2698,9 +2906,17 @@ async function loadVendorContactReport() {
     end_date: document.getElementById("vendor-contact-report-end")?.value || "",
     q: document.getElementById("vendor-contact-report-client")?.value || "",
   });
+  const cacheKey = params.toString();
+  if (currentVendorContactReportPayload?.cacheKey === cacheKey && !force) {
+    const cached = currentVendorContactReportPayload.payload;
+    renderSimpleVendorTable(cached, "vendor-contact-report-head", "vendor-contact-report-body", "Nenhum contato encontrado.");
+    status.textContent = `${cached.empresa}: ${formatNumber.format(cached.total || 0)} contato(s) encontrado(s).`;
+    return;
+  }
   status.textContent = "Carregando relatorio...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/report?${params.toString()}`, { force: true });
+    const payload = await fetchJson(`/api/vendor-day-by-day/report?${cacheKey}`, { force });
+    currentVendorContactReportPayload = { cacheKey, payload };
     renderSimpleVendorTable(payload, "vendor-contact-report-head", "vendor-contact-report-body", "Nenhum contato encontrado.");
     status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} contato(s) encontrado(s).`;
   } catch (error) {
@@ -3376,6 +3592,8 @@ async function saveVendorDayByDayClient(event) {
       }),
     });
     currentVendorDayByDayClient = saved;
+    currentVendorDayByDayPayload = null;
+    clearVendorWorkspaceCache();
     await loadVendorDayByDay();
     status.textContent = `${saved.message || "Atendimento salvo."} Contagem do dia: ${formatNumber.format(saved.contagem?.salvos || 0)} de ${formatNumber.format(saved.contagem?.meta_diaria || 50)}.`;
   } catch (error) {
@@ -3398,22 +3616,36 @@ function setupVendorPageGoalsMonthSelect() {
 async function loadVendorPageGoals() {
   const route = vendorPageRoute();
   if (!route) {
-    return;
+    return null;
   }
   const status = document.getElementById("vendor-page-goals-status");
   const summary = document.getElementById("vendor-page-goals-summary");
   const list = document.getElementById("vendor-page-goals-list");
-  status.textContent = "Carregando metas e objetivos...";
+  const year = new Date().getFullYear();
+  const cacheKey = `${route.company}|${route.vendorId}|${year}`;
+  if (currentVendorPageGoalsPayload?.cacheKey === cacheKey) {
+    renderVendorPageGoals();
+    status.classList.add("hidden");
+    status.textContent = "";
+    return currentVendorPageGoalsPayload;
+  }
+  status.classList.remove("hidden");
+  status.innerHTML = '<span class="loading-dot"></span> Carregando metas e objetivos...';
   try {
-    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${new Date().getFullYear()}`);
+    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${year}`);
+    payload.cacheKey = cacheKey;
     currentVendorPageGoalsPayload = payload;
     renderVendorPageGoals();
-    status.textContent = `${payload.empresa}: metas carregadas para ${payload.vendedor?.nome_completo || "vendedor"}.`;
+    status.classList.add("hidden");
+    status.textContent = "";
+    return payload;
   } catch (error) {
     currentVendorPageGoalsPayload = null;
     summary.innerHTML = "";
     list.innerHTML = "";
+    status.classList.remove("hidden");
     status.textContent = error.message;
+    return null;
   }
 }
 
@@ -3423,35 +3655,46 @@ function renderVendorPageGoals() {
     return;
   }
   const selectedMonth = document.getElementById("vendor-page-goals-month")?.value || String(new Date().getMonth() + 1);
+  const selectedMonthNumber = Number(selectedMonth) || new Date().getMonth() + 1;
+  const semGiroBaseMonth = selectedMonthNumber === 1 ? 12 : selectedMonthNumber - 1;
+  const semGiroBaseYear = selectedMonthNumber === 1 ? Number(payload.year || new Date().getFullYear()) - 1 : Number(payload.year || new Date().getFullYear());
+  const semGiroDaysColumnLabel = `Dias sem movimento até ${monthLabel(semGiroBaseMonth)} / ${semGiroBaseYear}`;
   const monthData = payload.goals.months?.[selectedMonth] || {};
   const objectives = payload.objectives || [];
   const summary = document.getElementById("vendor-page-goals-summary");
   const list = document.getElementById("vendor-page-goals-list");
   const base = payload.sales_base || {};
   const commissionPercent = Number(payload.goals.comissao_percentual || 0);
+  const decimalValue = (value) => formatNumber2.format(Number(value || 0));
+  const decimalPercent = (value) => formatPercent2.format(Number(value || 0));
+  const decimalMoney = (value) => formatCurrency2.format(Number(value || 0));
+  currentVendorCommissionMemory = new Map();
+  let commissionMemoryIndex = 0;
+  setVendorPageSellerName(payload.vendedor?.nome_completo || payload.vendedor?.nome || "");
   const netSalesGoal = Number(monthData.objetivos?.vendas_liquidas?.meta || 0);
   const netSalesRegion = Number(monthData.objetivos?.vendas_liquidas?.valor_atingido || 0);
   const netSalesOtherRegions = Number(monthData.objetivos?.vendas_liquidas?.valor_atingido_outras_regioes || 0);
   const netSalesAchieved = Number(monthData.objetivos?.vendas_liquidas?.valor_atingido_total || (netSalesRegion + netSalesOtherRegions));
+  const suggestedSalesGoal = Number(monthData.meta_vendas_liquidas_sugerida || netSalesGoal || 0);
   const netSalesPercent = netSalesGoal > 0 ? (netSalesAchieved / netSalesGoal) * 100 : 0;
   const commissionEnabled = netSalesPercent >= 30;
   const formatGoalValue = (objective, value, field = "meta") => {
     if (objective.key === "novos_clientes" && field === "meta") {
-      return formatCurrency.format(value || 0);
+      return decimalMoney(value);
     }
     if (objective.key === "sem_giro" && field === "meta") {
-      return `${formatNumber.format(value || 0)}%`;
+      return `${decimalPercent(value)}%`;
     }
     if (objective.key === "sem_giro" && field === "achieved") {
-      return formatCurrency.format(value || 0);
+      return decimalMoney(value);
     }
     if (objective.kind === "currency") {
-      return formatCurrency.format(value || 0);
+      return decimalMoney(value);
     }
     if (objective.kind === "percent") {
-      return `${formatNumber.format(value || 0)}%`;
+      return `${decimalPercent(value)}%`;
     }
-    return formatNumber.format(Math.round(value || 0));
+    return decimalValue(value);
   };
   const goalHelpTexts = {
     vendas_liquidas: "Vendas liquidas da regiao/carteira do vendedor. A linha de subtotal soma tambem vendas feitas pelo vendedor para clientes de outras regioes, identificadas pelo vendedor informado na nota fiscal.",
@@ -3466,127 +3709,619 @@ function renderVendorPageGoals() {
     return `
       <div class="goal-name-with-help">
         <strong>${escapeHtml(objective.label)}</strong>
-        <span class="goal-help-icon" title="${escapeHtml(help)}" tabindex="0" aria-label="${escapeHtml(help)}">?</span>
+        <button class="goal-help-icon" type="button" data-goal-help="${escapeHtml(help)}" aria-label="${escapeHtml(help)}">?</button>
       </div>
+    `;
+  };
+  const formatCommissionCellValue = (value) => decimalMoney(value);
+  const commissionMemoryButton = (label, value, details = [], options = {}) => {
+    const id = `commission_memory_${commissionMemoryIndex++}`;
+    const safeDetails = Array.isArray(details) ? details.filter(Boolean) : [];
+    currentVendorCommissionMemory.set(id, {
+      label,
+      value: Number(value || 0),
+      details: safeDetails,
+      table: options.table || null,
+    });
+    return `
+      <button class="commission-memory-button" type="button" data-commission-memory="${escapeHtml(id)}" title="${escapeHtml(options.title || "Clique para ver memória de cálculo!")}">
+        ${escapeHtml(formatCommissionCellValue(value))}
+      </button>
     `;
   };
   summary.innerHTML = `
     <article><span>Mes selecionado</span><strong>${monthLabel(selectedMonth)} / ${payload.year}</strong></article>
-    <article><span>% Comissao</span><strong>${formatNumber.format(payload.goals.comissao_percentual || 0)}%</strong></article>
-    <article><span>Meta vendas sugerida</span><strong>${formatCurrency.format(monthData.meta_vendas_liquidas_sugerida || 0)}</strong></article>
-    <article><span>Base: media dos 3 maiores meses dos 2 anos fechados</span><strong>${formatCurrency.format(base.media_base || 0)}</strong></article>
-    <article><span>Gatilho de comissao</span><strong>${commissionEnabled ? "Liberado" : `Bloqueado (${formatNumber.format(netSalesPercent)}%)`}</strong></article>
+    <article><span>% Comissao</span><strong>${decimalPercent(payload.goals.comissao_percentual || 0)}%</strong></article>
+    <article>
+      <span>Meta vendas sugerida</span>
+      <strong>${decimalMoney(monthData.meta_vendas_liquidas_sugerida || 0)}</strong>
+      <small>Aumento definido: ${decimalPercent(monthData.percentual_aumento || 0)}%</small>
+    </article>
+    <article><span>Base: media dos 3 maiores meses dos 2 anos fechados</span><strong>${decimalMoney(base.media_base || 0)}</strong></article>
   `;
   const standardGoalRow = (objective, item) => {
     const percent = Number(item.percentual_atingido || 0);
     const maxCommission = vendorGoalMaxCommission(commissionPercent, objective, item);
     const effectiveCommissionPercent = maxCommission * Math.min(100, Math.max(0, percent)) / 100;
-    let commissionValue = commissionEnabled ? netSalesAchieved * effectiveCommissionPercent / 100 : 0;
-    if (objective.key === "sem_giro") {
-      commissionValue = commissionEnabled ? Number(item.comissao_valor || 0) : 0;
-    } else if (objective.key === "novos_clientes") {
-      commissionValue = Number(item.valor_atingido || 0);
-    }
-    return `
+    const commissionBase = netSalesAchieved;
+    const commissionValue = commissionEnabled ? commissionBase * effectiveCommissionPercent / 100 : 0;
+    const displayMeta = objective.key === "contatos_inativos_nunca"
+      ? Number(item.meta_mensal || item.meta || 0)
+      : Number(item.meta || 0);
+    const progressClass = percent > 100 ? "is-green" : (percent > 30 ? "is-yellow" : "is-red");
+    const detailLabel = objective.label || "Meta";
+    const cappedPercent = Math.min(100, Math.max(0, percent));
+    const memoryDetails = [
+      `Base de calculo: valor atingido em vendas liquidas = ${decimalMoney(commissionBase)}.`,
+      `Comissao base cadastrada: ${decimalPercent(commissionPercent)}%.`,
+      `Peso desta meta: ${decimalPercent(item.peso || 0)}%.`,
+      `% comissao maxima da linha: ${decimalPercent(commissionPercent)}% x ${decimalPercent(item.peso || 0)}% = ${decimalPercent(maxCommission)}%.`,
+      `% atingido da meta: ${decimalPercent(percent)}%.`,
+      `% comissao efetiva: ${decimalPercent(maxCommission)}% x ${decimalPercent(cappedPercent)}% = ${decimalPercent(effectiveCommissionPercent)}%.`,
+      commissionEnabled
+        ? `Comissao calculada: ${decimalMoney(commissionBase)} x ${decimalPercent(effectiveCommissionPercent)}% = ${decimalMoney(commissionValue)}.`
+        : `Comissao zerada porque o subtotal de vendas liquidas atingiu apenas ${decimalPercent(netSalesPercent)}%, abaixo do minimo de 30%.`,
+    ];
+    return {
+      commissionValue,
+      html: `
       <tr>
         <td>${goalNameWithHelp(objective)}</td>
-        <td>${escapeHtml(formatGoalValue(objective, item.meta || 0, "meta"))}</td>
+        <td>${escapeHtml(formatGoalValue(objective, displayMeta, "meta"))}</td>
         <td class="achieved-value">${escapeHtml(formatGoalValue(objective, item.valor_atingido || 0, "achieved"))}</td>
         <td>
-          <div class="goal-progress">
+          <div class="goal-progress ${progressClass}">
             <span style="width: ${Math.min(100, Math.max(0, percent))}%"></span>
-            <strong>${formatNumber.format(percent)}%</strong>
+            <strong>${decimalPercent(percent)}%</strong>
           </div>
         </td>
-        <td>${objective.key === "novos_clientes" || objective.key === "sem_giro" ? "Sem peso" : `${formatNumber.format(item.peso || 0)}%`}</td>
-        <td class="commission-value">${objective.key === "novos_clientes" ? "Valor fixo" : objective.key === "sem_giro" ? "% por item" : `${formatPercent2.format(maxCommission)}%`}</td>
-        <td class="commission-money">${formatCurrency.format(commissionValue)}</td>
+        <td>${decimalPercent(item.peso || 0)}%</td>
+        <td class="commission-value">${decimalPercent(effectiveCommissionPercent)}%</td>
+        <td class="commission-money">${commissionMemoryButton(detailLabel, commissionValue, memoryDetails)}</td>
       </tr>
-    `;
+    `};
   };
   const netSalesRows = () => {
     const objective = objectives.find((item) => item.key === "vendas_liquidas") || { key: "vendas_liquidas", label: "Vendas Liquidas sua regiao", kind: "currency" };
     const item = monthData.objetivos?.vendas_liquidas || {};
     const maxCommission = vendorGoalMaxCommission(commissionPercent, objective, item);
     const totalPercent = Number(item.percentual_atingido_total || netSalesPercent || 0);
+    const totalProgressClass = totalPercent > 100 ? "is-green" : (totalPercent > 30 ? "is-yellow" : "is-red");
+    const regionPercent = Number(item.percentual_atingido || 0);
+    const regionProgressClass = regionPercent > 100 ? "is-green" : (regionPercent > 30 ? "is-yellow" : "is-red");
     const effectiveCommissionPercent = maxCommission * Math.min(100, Math.max(0, totalPercent)) / 100;
     const commissionValue = commissionEnabled ? netSalesAchieved * effectiveCommissionPercent / 100 : 0;
     const subtotalObjective = { ...objective, label: "Subtotal Vendas Liquidas" };
-    return `
+    const subtotalMemoryDetails = [
+      `Vendas liquidas da regiao: ${decimalMoney(netSalesRegion)}.`,
+      `Vendas liquidas de outras regioes: ${decimalMoney(netSalesOtherRegions)}.`,
+      `Subtotal atingido: ${decimalMoney(netSalesRegion)} + ${decimalMoney(netSalesOtherRegions)} = ${decimalMoney(netSalesAchieved)}.`,
+      `Meta do mes: ${decimalMoney(item.meta || 0)}.`,
+      `% atingido do subtotal: ${decimalMoney(netSalesAchieved)} / ${decimalMoney(item.meta || 0)} = ${decimalPercent(totalPercent)}%.`,
+      `Comissao base cadastrada: ${decimalPercent(commissionPercent)}%.`,
+      `Peso desta meta: ${decimalPercent(item.peso || 0)}%.`,
+      `% comissao maxima: ${decimalPercent(commissionPercent)}% x ${decimalPercent(item.peso || 0)}% = ${decimalPercent(maxCommission)}%.`,
+      `% comissao efetiva: ${decimalPercent(maxCommission)}% x ${decimalPercent(Math.min(100, Math.max(0, totalPercent)))}% = ${decimalPercent(effectiveCommissionPercent)}%.`,
+      commissionEnabled
+        ? `Comissao calculada: ${decimalMoney(netSalesAchieved)} x ${decimalPercent(effectiveCommissionPercent)}% = ${decimalMoney(commissionValue)}.`
+        : `Comissao zerada porque o subtotal de vendas liquidas ficou abaixo de 30%.`,
+    ];
+    return {
+      commissionValue,
+      html: `
       <tr>
         <td>${goalNameWithHelp(objective)}</td>
         <td>${escapeHtml(formatGoalValue(objective, item.meta || 0, "meta"))}</td>
-        <td class="achieved-value">${escapeHtml(formatCurrency.format(netSalesRegion))}</td>
-        <td>
-          <div class="goal-progress">
-            <span style="width: ${Math.min(100, Math.max(0, Number(item.percentual_atingido || 0)))}%"></span>
-            <strong>${formatNumber.format(Number(item.percentual_atingido || 0))}%</strong>
-          </div>
-        </td>
-        <td>${formatNumber.format(item.peso || 0)}%</td>
-        <td class="commission-value">Somado no subtotal</td>
-        <td class="commission-money">-</td>
+        <td class="achieved-value">${escapeHtml(decimalMoney(netSalesRegion))}</td>
+        <td class="muted-cell">-</td>
+        <td class="muted-cell">-</td>
+        <td class="muted-cell">-</td>
+        <td class="muted-cell">-</td>
       </tr>
       <tr>
         <td>
           <div class="goal-name-with-help">
             <strong>Vendas Liquidas outras regioes</strong>
-            <span class="goal-help-icon" title="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele." tabindex="0">?</span>
+            <button class="goal-help-icon" type="button" data-goal-help="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele." aria-label="Vendas feitas pelo vendedor, conforme VN_NOM da nota fiscal, para clientes que nao pertencem a regiao/carteira definida para ele.">?</button>
           </div>
         </td>
         <td>-</td>
-        <td class="achieved-value">${escapeHtml(formatCurrency.format(netSalesOtherRegions))}</td>
+        <td class="achieved-value">${escapeHtml(decimalMoney(netSalesOtherRegions))}</td>
         <td>-</td>
         <td>-</td>
-        <td class="commission-value">Somado no subtotal</td>
-        <td class="commission-money">-</td>
+        <td class="muted-cell">-</td>
+        <td class="muted-cell">-</td>
       </tr>
       <tr class="vendor-goal-subtotal-row">
         <td>${goalNameWithHelp(subtotalObjective)}</td>
         <td>${escapeHtml(formatGoalValue(objective, item.meta || 0, "meta"))}</td>
-        <td class="achieved-value">${escapeHtml(formatCurrency.format(netSalesAchieved))}</td>
+        <td class="achieved-value">${escapeHtml(decimalMoney(netSalesAchieved))}</td>
         <td>
-          <div class="goal-progress">
+          <div class="goal-progress ${totalProgressClass}">
             <span style="width: ${Math.min(100, Math.max(0, totalPercent))}%"></span>
-            <strong>${formatNumber.format(totalPercent)}%</strong>
+            <strong>${decimalPercent(totalPercent)}%</strong>
           </div>
         </td>
-        <td>${formatNumber.format(item.peso || 0)}%</td>
-        <td class="commission-value">${formatPercent2.format(maxCommission)}%</td>
-        <td class="commission-money">${formatCurrency.format(commissionValue)}</td>
+        <td>${decimalPercent(item.peso || 0)}%</td>
+        <td class="commission-value">${decimalPercent(effectiveCommissionPercent)}%</td>
+        <td class="commission-money">${commissionMemoryButton("Subtotal Vendas Liquidas", commissionValue, subtotalMemoryDetails)}</td>
+      </tr>
+    `};
+  };
+  const standardObjectives = objectives.filter((objective) => !["vendas_liquidas", "novos_clientes", "sem_giro"].includes(objective.key));
+  const standardRowsData = [
+    netSalesRows(),
+    ...standardObjectives.map((objective) => standardGoalRow(objective, monthData.objetivos?.[objective.key] || {})),
+  ];
+  const totalGoalsCommission = standardRowsData.reduce((sum, row) => sum + Number(row.commissionValue || 0), 0);
+  const totalGoalsPercentOfMonthGoal = suggestedSalesGoal > 0 ? (totalGoalsCommission / suggestedSalesGoal) * 100 : 0;
+  const totalGoalsLabel = `Total comissao Meta/Objetivos ${monthLabel(selectedMonth)} (${decimalPercent(totalGoalsPercentOfMonthGoal)}%)`;
+  const totalGoalsDetails = [
+    `Subtotal Vendas Liquidas: ${decimalMoney(standardRowsData[0]?.commissionValue || 0)}.`,
+    ...standardObjectives.map((objective, index) => `${objective.label}: ${decimalMoney(standardRowsData[index + 1]?.commissionValue || 0)}.`),
+    `Total: ${standardRowsData.map((row) => decimalMoney(row.commissionValue || 0)).join(" + ")} = ${decimalMoney(totalGoalsCommission)}.`,
+    `% atingido em relacao a meta total do mes: ${decimalMoney(totalGoalsCommission)} / ${decimalMoney(suggestedSalesGoal)} = ${decimalPercent(totalGoalsPercentOfMonthGoal)}%.`,
+  ];
+  const rows = [
+    ...standardRowsData.map((row) => row.html),
+    `
+      <tr class="vendor-goal-total-row">
+        <td colspan="6">${totalGoalsLabel}</td>
+        <td class="commission-money">${commissionMemoryButton(totalGoalsLabel, totalGoalsCommission, totalGoalsDetails)}</td>
+      </tr>
+    `,
+  ].join("");
+  const bonusObjectives = objectives.filter((objective) => ["novos_clientes", "sem_giro"].includes(objective.key));
+  const bonusRows = bonusObjectives.map((objective) => {
+    const item = monthData.objetivos?.[objective.key] || {};
+    const bonusType = item.tipo_bonus || (objective.key === "novos_clientes" ? "valor" : "percentual");
+    const bonusValue = Number(item.meta || 0);
+    const achievedValue = Number(item.valor_atingido || 0);
+    const commissionValue = objective.key === "sem_giro" ? Number(item.comissao_valor || 0) : achievedValue;
+    const semGiroDetails = Array.isArray(item.detalhes) ? item.detalhes : [];
+    const displayGoal = ["novos_clientes", "sem_giro"].includes(objective.key) ? "Bonus" : escapeHtml(formatGoalValue(objective, bonusValue, "meta"));
+    const bonusMemoryDetails = objective.key === "sem_giro"
+      ? [
+          "Regra: o sistema verifica as vendas do vendedor e identifica itens/equipamentos cuja venda anterior ocorreu ha mais de 180 dias.",
+          "Base de calculo: mesma regra de Vendas Liquidas, ou seja, valor do item menos frete e desconto vinculados a nota.",
+          "Bonificacao: base de calculo de cada item multiplicada pelo percentual de Bonus cadastrado para a referencia no estoque.",
+          `Valor atingido em itens sem giro: ${decimalMoney(achievedValue)}.`,
+          `Comissao apurada no periodo: ${decimalMoney(commissionValue)}.`,
+        ]
+      : [
+          `Quantidade/valor atingido registrado: ${decimalMoney(achievedValue)}.`,
+          `Bonus cadastrado: ${bonusType === "percentual" ? `${decimalPercent(bonusValue)}%` : decimalMoney(bonusValue)}.`,
+          `Comissao/bonificacao apurada: ${decimalMoney(commissionValue)}.`,
+        ];
+    return `
+      <tr>
+        <td>${goalNameWithHelp(objective)}</td>
+        <td>${displayGoal}</td>
+        <td>${decimalValue(item.qty_minima || 0)}</td>
+        <td>${decimalMoney(item.valor_minimo || 0)}</td>
+        <td>${escapeHtml(String(item.periodo || "mensal"))}</td>
+        <td>${bonusType === "percentual" ? "%" : "Valor"}</td>
+        <td class="commission-value">${bonusType === "percentual" ? `${decimalPercent(bonusValue)}%` : decimalMoney(bonusValue)}</td>
+        <td class="achieved-value">${escapeHtml(formatGoalValue(objective, achievedValue, "achieved"))}</td>
+        <td class="commission-money">${commissionMemoryButton(objective.label, commissionValue, bonusMemoryDetails, objective.key === "sem_giro" ? {
+          title: "Clique e entenda como chegamos nesse valor",
+          table: {
+            title: "Itens e equipamentos considerados",
+            columns: [
+              { key: "nota_fiscal", label: "Nº da nota fiscal" },
+              { key: "data_emissao", label: "Data da emissão" },
+              { key: "codigo_cliente", label: "Código do Cliente" },
+              { key: "nome_cliente", label: "Nome do Cliente" },
+              { key: "referencia_produto", label: "Referencia do Produto" },
+              { key: "descricao_produto", label: "Descrição do Produto" },
+              { key: "dias_sem_movimento", label: semGiroDaysColumnLabel },
+              { key: "quantidade", label: "Quantidade", type: "number" },
+              { key: "valor_unitario", label: "Valor unitário", type: "currency" },
+              { key: "valor_total", label: "Valor total", type: "currency" },
+              { key: "base_calculo", label: "Base de Calculo", type: "currency" },
+              { key: "percentual_bonificacao", label: "% Bonificação", type: "percent" },
+            ],
+            rows: semGiroDetails,
+          },
+        } : {})}</td>
       </tr>
     `;
-  };
-  const rows = [
-    netSalesRows(),
-    ...objectives
-      .filter((objective) => objective.key !== "vendas_liquidas")
-      .map((objective) => standardGoalRow(objective, monthData.objetivos?.[objective.key] || {})),
-  ].join("");
+  }).join("");
+  const customBonusRows = (monthData.bonus_customizados || []).map((bonus) => `
+      <tr>
+        <td><strong>${escapeHtml(bonus.titulo || "Bonus adicional")}</strong></td>
+        <td>Bonus</td>
+        <td>${decimalValue(bonus.qty_minima || 0)}</td>
+        <td>${decimalMoney(bonus.valor_minimo || 0)}</td>
+        <td>${escapeHtml(String(bonus.periodo || "mensal"))}</td>
+        <td>${bonus.tipo_bonus === "percentual" ? "%" : "Valor"}</td>
+        <td class="commission-value">${bonus.tipo_bonus === "percentual" ? `${decimalPercent(bonus.meta || 0)}%` : decimalMoney(bonus.meta || 0)}</td>
+        <td class="achieved-value">-</td>
+        <td class="commission-money">-</td>
+      </tr>
+    `).join("");
+  const totalBonusCommission = bonusObjectives.reduce((sum, objective) => {
+    const item = monthData.objetivos?.[objective.key] || {};
+    return sum + Number(objective.key === "sem_giro" ? item.comissao_valor || 0 : item.valor_atingido || 0);
+  }, 0);
+  const totalBonusDetails = [
+    ...bonusObjectives.map((objective) => {
+      const item = monthData.objetivos?.[objective.key] || {};
+      const value = Number(objective.key === "sem_giro" ? item.comissao_valor || 0 : item.valor_atingido || 0);
+      return `${objective.label}: ${decimalMoney(value)}.`;
+    }),
+    `Total Bonificações: ${bonusObjectives.map((objective) => {
+      const item = monthData.objetivos?.[objective.key] || {};
+      return decimalMoney(Number(objective.key === "sem_giro" ? item.comissao_valor || 0 : item.valor_atingido || 0));
+    }).join(" + ")} = ${decimalMoney(totalBonusCommission)}.`,
+  ];
+  const grandTotalCommission = totalGoalsCommission + totalBonusCommission;
+  const grandTotalPercentOfMonthGoal = suggestedSalesGoal > 0 ? (grandTotalCommission / suggestedSalesGoal) * 100 : 0;
+  const grandTotalLabel = `Total Comissões + Bonificações (${decimalPercent(grandTotalPercentOfMonthGoal)}%)`;
+  const grandTotalDetails = [
+    `Total comissao Meta/Objetivos ${monthLabel(selectedMonth)}: ${decimalMoney(totalGoalsCommission)}.`,
+    `Total Bonificações: ${decimalMoney(totalBonusCommission)}.`,
+    `Total Comissões + Bonificações: ${decimalMoney(totalGoalsCommission)} + ${decimalMoney(totalBonusCommission)} = ${decimalMoney(grandTotalCommission)}.`,
+    `% atingido em relacao a meta total do mes: ${decimalMoney(grandTotalCommission)} / ${decimalMoney(suggestedSalesGoal)} = ${decimalPercent(grandTotalPercentOfMonthGoal)}%.`,
+  ];
+  const totalBonusRow = `
+      <tr class="vendor-goal-total-row vendor-bonus-total-row">
+        <td colspan="8">Total Bonificações</td>
+        <td class="commission-money">${commissionMemoryButton("Total Bonificações", totalBonusCommission, totalBonusDetails)}</td>
+      </tr>
+    `;
+  const grandTotalRow = `
+      <tr class="vendor-goal-total-row vendor-grand-total-row">
+        <td colspan="8">${grandTotalLabel}</td>
+        <td class="commission-money">${commissionMemoryButton(grandTotalLabel, grandTotalCommission, grandTotalDetails)}</td>
+      </tr>
+    `;
   list.innerHTML = `
-    <div class="vendor-page-goal-context">
-      <span>Aumento definido: ${formatNumber.format(monthData.percentual_aumento || 0)}%</span>
-      <span>Clientes com vendas: ${formatNumber.format(monthData.objetivos?.clientes_com_vendas?.meta || 0)}</span>
-      <span>Contatos diarios: ${formatNumber.format(monthData.objetivos?.contatos_inativos_nunca?.meta || 0)}</span>
-      <span>Novo cliente: ${formatCurrency.format(monthData.objetivos?.novos_clientes?.meta || 0)}</span>
-    </div>
-    <div class="table-scroll compact">
-      <table class="vendor-page-goal-table">
-        <thead>
-          <tr>
-            <th>Meta / Objetivo</th>
-            <th>Meta do mes</th>
-            <th>Valor Atingido</th>
-            <th>% Atingido</th>
-            <th>Peso</th>
-            <th>% Comissão Máx.</th>
-            <th>Comissão R$</th>
-          </tr>
-        </thead>
-        <tbody>${rows || '<tr><td colspan="7">Nenhuma meta cadastrada para este mes.</td></tr>'}</tbody>
-      </table>
-    </div>
+    <section class="vendor-page-bonus-section vendor-page-goals-section">
+      <div class="vendor-page-bonus-header vendor-page-goals-section-header">
+        <div>
+          <span>Meta / Objetivo</span>
+        </div>
+      </div>
+      <div class="table-scroll compact">
+        <table class="vendor-page-goal-table vendor-page-main-goal-table">
+          <thead>
+            <tr>
+              <th>Meta / Objetivo</th>
+              <th>Meta do mes</th>
+              <th>Valor Atingido</th>
+              <th>% Atingido</th>
+              <th>Peso</th>
+              <th>% efetivo</th>
+              <th>Comissão R$</th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="7">Nenhuma meta cadastrada para este mes.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="vendor-page-bonus-section">
+      <div class="vendor-page-bonus-header">
+        <div>
+          <span>Premiacao / Bonificacao</span>
+        </div>
+      </div>
+      <div class="table-scroll compact">
+        <table class="vendor-page-goal-table vendor-page-bonus-table">
+          <thead>
+            <tr>
+              <th>Premiacao / Bonificacao</th>
+              <th>Meta do mes</th>
+              <th>Qty Minima</th>
+              <th>Valor Minimo</th>
+              <th>Periodo</th>
+              <th>% / Valor</th>
+              <th>Valor</th>
+              <th>Valor Atingido</th>
+              <th>Bonificacao R$</th>
+            </tr>
+          </thead>
+          <tbody>${bonusRows}${customBonusRows || ""}${(!bonusRows && !customBonusRows) ? '<tr><td colspan="9">Nenhuma bonificacao cadastrada para este mes.</td></tr>' : ""}${totalBonusRow}${grandTotalRow}</tbody>
+        </table>
+      </div>
+    </section>
   `;
+  refreshVendorGoalsPrintHeader(payload, selectedMonth);
+  loadVendorAboutGoal({
+    targetId: "vendor-page-about-goal-content",
+    statusId: "vendor-page-about-goal-status",
+    year: payload.year,
+    month: selectedMonth,
+  });
+}
+
+function formatAboutGoalValue(objective, value) {
+  if (objective.key === "novos_clientes") {
+    return formatCurrency2.format(value || 0);
+  }
+  if (objective.key === "sem_giro") {
+    return `${formatPercent2.format(value || 0)}%`;
+  }
+  if (objective.kind === "currency") {
+    return formatCurrency2.format(value || 0);
+  }
+  if (objective.kind === "percent") {
+    return `${formatPercent2.format(value || 0)}%`;
+  }
+  return formatNumber2.format(value || 0);
+}
+
+function renderVendorAboutGoal(payload, targetId = "vendor-about-goal-content", statusId = "vendor-about-goal-status") {
+  currentVendorAboutGoalPayload = payload;
+  const content = document.getElementById(targetId);
+  const status = document.getElementById(statusId);
+  if (!content || !status) {
+    return;
+  }
+  const regionRows = (payload.regions || []).map((row) => `
+    <tr>
+      <td>${escapeHtml(row.tipo || "")}</td>
+      <td>${escapeHtml(row.uf || "")}</td>
+      <td>${escapeHtml(row.cidade || "")}</td>
+      <td>${escapeHtml(row.ddd || "")}</td>
+    </tr>
+  `).join("");
+  const specificClients = payload.specific_clients || [];
+  const specificClientNames = specificClients.map((client) => client.nome_cliente || client.cliente).filter(Boolean).join(", ");
+  const specificClientsBlock = specificClients.length ? `
+    <section class="vendor-about-card">
+      <div class="vendor-about-title">
+        <p class="eyebrow">Atendimento individual</p>
+        <h4>Clientes Especificos</h4>
+        <span class="vendor-about-client-title">Cliente: ${escapeHtml(specificClientNames || "cliente especifico")}</span>
+      </div>
+      <div class="table-scroll compact">
+        <table class="vendor-about-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Nome do Cliente</th>
+              <th>UF</th>
+              <th>Cidade</th>
+              <th>DDD</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${specificClients.map((client) => `
+              <tr>
+                <td>${escapeHtml(client.cliente || "")}</td>
+                <td>${escapeHtml(client.nome_cliente || "")}</td>
+                <td>${escapeHtml(client.uf || "")}</td>
+                <td>${escapeHtml(client.cidade || "")}</td>
+                <td>${escapeHtml(client.ddd || "")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  ` : "";
+  const salesCalculation = payload.sales_goal_calculation || {};
+  const salesBaseMonths = salesCalculation.meses_base || [];
+  const salesCalculationBlock = salesBaseMonths.length ? `
+    <div class="vendor-sales-calc">
+      <strong>Como a meta foi calculada</strong>
+      <div class="vendor-sales-calc-grid">
+        ${salesBaseMonths.map((item) => `
+          <span>${String(item.mes || "").padStart(2, "0")}/${escapeHtml(item.ano || "")}: ${escapeHtml(formatCurrency2.format(item.valor || 0))}</span>
+        `).join("")}
+      </div>
+      <p>
+        Media dos meses base: <b>${escapeHtml(formatCurrency2.format(salesCalculation.media_base || 0))}</b>.
+        Percentual aplicado: <b>${formatPercent2.format(salesCalculation.percentual_aumento || 0)}%</b>.
+        Meta final: <b>${escapeHtml(formatCurrency2.format(salesCalculation.meta_final || 0))}</b>.
+      </p>
+    </div>
+  ` : "";
+  const renderRuleCards = (items = []) => items.map((objective) => `
+    <article class="vendor-rule-card">
+      <div>
+        <span>${escapeHtml(objective.label || "")}</span>
+        <strong>Meta: ${escapeHtml(formatAboutGoalValue(objective, objective.meta || 0))}</strong>
+      </div>
+      ${objective.key === "vendas_liquidas" ? salesCalculationBlock : ""}
+      ${objective.grupo === "bonus" ? `
+        <div class="vendor-bonus-rule-box">
+          <span>Regra de Bonus cadastrada</span>
+          <div>
+            <strong>Qty Minima</strong><b>${formatNumber2.format(objective.qty_minima || 0)}</b>
+          </div>
+          <div>
+            <strong>Valor Minimo</strong><b>${formatCurrency2.format(objective.valor_minimo || 0)}</b>
+          </div>
+          <div>
+            <strong>Periodo</strong><b>${escapeHtml(objective.periodo || "mensal")}</b>
+          </div>
+          <div>
+            <strong>% / Valor</strong><b>${objective.tipo_bonus === "percentual" ? "%" : "Valor"}</b>
+          </div>
+          <div>
+            <strong>Valor</strong><b>${objective.tipo_bonus === "percentual" ? `${formatPercent2.format(objective.meta || 0)}%` : formatCurrency2.format(objective.meta || 0)}</b>
+          </div>
+        </div>
+      ` : ""}
+      <div class="vendor-rule-meta">
+        <span>Peso: ${objective.grupo === "bonus" ? "Sem peso" : `${formatPercent2.format(objective.peso || 0)}%`}</span>
+        <span>Atingido: ${escapeHtml(formatAboutGoalValue(objective, objective.valor_atingido || 0))}</span>
+      </div>
+      <ul>
+        ${(objective.regras || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </article>
+  `).join("");
+  const metaRuleCards = renderRuleCards((payload.objectives || []).filter((objective) => objective.grupo !== "bonus"));
+  const bonusRuleCards = renderRuleCards((payload.objectives || []).filter((objective) => objective.grupo === "bonus"));
+
+  content.innerHTML = `
+    <section class="vendor-about-hero">
+      <div>
+        <p class="eyebrow">Comissao e carteira</p>
+        <h3>Detalhamento da Sua Região</h3>
+        <p>Resumo do que entra na carteira do vendedor e como cada meta participa da comissao.</p>
+      </div>
+    </section>
+
+    <section class="vendor-print-report-page vendor-print-page-two">
+      <div class="vendor-print-section-header">
+        <img src="/assets/ion_logo.jpg" alt="Ionlab">
+        <h3>CARTEIRA DO VENDEDOR</h3>
+      </div>
+      <section class="vendor-about-card">
+        <div class="vendor-about-title">
+          <p class="eyebrow">Carteira do vendedor</p>
+          <h4>Sua Região</h4>
+        </div>
+        <div class="table-scroll compact">
+          <table class="vendor-about-table">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>UF</th>
+                <th>Cidades</th>
+                <th>DDD</th>
+              </tr>
+            </thead>
+            <tbody>${regionRows || '<tr><td colspan="4">Nenhuma regiao cadastrada para este vendedor.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </section>
+
+      ${specificClientsBlock}
+      <div class="vendor-print-page-number">2/3</div>
+    </section>
+
+    <section class="vendor-print-report-page vendor-print-page-three">
+      <div class="vendor-print-section-header">
+        <img src="/assets/ion_logo.jpg" alt="Ionlab">
+        <h3>REGRAS E CRITERIOS DE CALCULO</h3>
+      </div>
+      <section class="vendor-about-card">
+        <div class="vendor-about-title vendor-about-title-highlight">
+          <p class="eyebrow">Regras e Critérios de Cálculo</p>
+          <h4>Regras e Critérios de Cálculo para Comissões de cada mês</h4>
+        </div>
+        <div class="vendor-rule-group">
+          <h5>Metas e Objetivos</h5>
+          <div class="vendor-rules-grid">${metaRuleCards || '<div class="empty-state">Nenhuma meta cadastrada para este vendedor.</div>'}</div>
+        </div>
+        <div class="vendor-rule-group">
+          <h5>Premiacao / Bonificacao</h5>
+          <div class="vendor-rules-grid">${bonusRuleCards || '<div class="empty-state">Nenhuma premiacao ou bonificacao cadastrada para este mes.</div>'}</div>
+        </div>
+      </section>
+      <div class="vendor-print-signature vendor-print-signature-clone">
+        <p id="vendor-goals-print-place-date-inline">Local e data</p>
+        <div></div>
+        <strong id="vendor-goals-print-signature-name-inline">Nome do vendedor</strong>
+        <span>Assinatura</span>
+      </div>
+      <div class="vendor-print-page-number">3/3</div>
+    </section>
+  `;
+  const inlinePlaceDate = document.getElementById("vendor-goals-print-place-date-inline");
+  const inlineSignature = document.getElementById("vendor-goals-print-signature-name-inline");
+  const vendorNameForPrint = payload.vendedor?.nome_completo || payload.vendedor?.nome || "Vendedor";
+  if (inlinePlaceDate) {
+    inlinePlaceDate.textContent = `Local e data: ______________________________, ${new Date().toLocaleDateString("pt-BR")}`;
+  }
+  if (inlineSignature) {
+    inlineSignature.textContent = vendorNameForPrint;
+  }
+  status.classList.add("hidden");
+  status.textContent = "";
+}
+
+async function loadVendorAboutGoal(options = {}) {
+  const force = typeof options === "boolean" ? options : Boolean(options.force);
+  const targetId = typeof options === "object" && options.targetId ? options.targetId : "vendor-about-goal-content";
+  const statusId = typeof options === "object" && options.statusId ? options.statusId : "vendor-about-goal-status";
+  const route = vendorPageRoute();
+  const status = document.getElementById(statusId);
+  const content = document.getElementById(targetId);
+  if (!route || !status || !content) {
+    return;
+  }
+  const now = new Date();
+  const year = Number(typeof options === "object" && options.year ? options.year : now.getFullYear());
+  const month = Number(typeof options === "object" && options.month ? options.month : now.getMonth() + 1);
+  const cacheKey = `${route.company}|${route.vendorId}|${year}|${month}`;
+  if (!force && currentVendorAboutGoalPayload?.cacheKey === cacheKey) {
+    renderVendorAboutGoal(currentVendorAboutGoalPayload, targetId, statusId);
+    return;
+  }
+  status.classList.remove("hidden");
+  status.innerHTML = '<span class="loading-dot"></span> Carregando resumo das regras...';
+  try {
+    const params = new URLSearchParams({
+      company: route.company,
+      vendor_id: route.vendorId,
+      year: String(year),
+      month: String(month),
+    });
+    const payload = await fetchJson(`/api/vendor-about-goal?${params.toString()}`);
+    payload.cacheKey = cacheKey;
+    renderVendorAboutGoal(payload, targetId, statusId);
+  } catch (error) {
+    currentVendorAboutGoalPayload = null;
+    content.innerHTML = "";
+    status.classList.remove("hidden");
+    status.textContent = error.message;
+  }
+}
+
+function refreshVendorGoalsPrintHeader(payload, selectedMonth) {
+  const vendorName = payload.vendedor?.nome_completo || payload.vendedor?.nome || "Vendedor";
+  const monthText = `${monthLabel(selectedMonth)} / ${payload.year}`;
+  const title = document.getElementById("vendor-goals-print-title");
+  const vendor = document.getElementById("vendor-goals-print-vendor");
+  const placeDate = document.getElementById("vendor-goals-print-place-date");
+  const signature = document.getElementById("vendor-goals-print-signature-name");
+  const inlinePlaceDate = document.getElementById("vendor-goals-print-place-date-inline");
+  const inlineSignature = document.getElementById("vendor-goals-print-signature-name-inline");
+  if (title) {
+    title.textContent = `Relatorio de Comissao e Bonificacao de Vendas referente ao mes ${monthText}`;
+  }
+  if (vendor) {
+    vendor.textContent = vendorName;
+  }
+  if (signature) {
+    signature.textContent = vendorName;
+  }
+  if (inlineSignature) {
+    inlineSignature.textContent = vendorName;
+  }
+  if (placeDate) {
+    placeDate.textContent = `Local e data: ______________________________, ${new Date().toLocaleDateString("pt-BR")}`;
+  }
+  if (inlinePlaceDate) {
+    inlinePlaceDate.textContent = `Local e data: ______________________________, ${new Date().toLocaleDateString("pt-BR")}`;
+  }
+}
+
+async function printVendorGoalsReport() {
+  if (currentVendorWorkspace !== "goals") {
+    setVendorWorkspaceSection("goals");
+  }
+  if (!currentVendorPageGoalsPayload) {
+    await loadVendorPageGoals();
+  }
+  const selectedMonth = document.getElementById("vendor-page-goals-month")?.value || String(new Date().getMonth() + 1);
+  if (currentVendorPageGoalsPayload) {
+    await loadVendorAboutGoal({
+      targetId: "vendor-page-about-goal-content",
+      statusId: "vendor-page-about-goal-status",
+      year: currentVendorPageGoalsPayload.year,
+      month: selectedMonth,
+    });
+  }
+  hideProgressOverlayNow();
+  await waitForNextPaint();
+  window.print();
 }
 
 function resetVendorRegionClientsPanel() {
@@ -3626,7 +4361,7 @@ function renderVendorRegions(payload) {
   renderVendorRegionCharts();
 }
 
-async function loadVendorDailyContactsChart() {
+async function loadVendorDailyContactsChart(force = false) {
   const route = vendorPageRoute();
   const chart = document.getElementById("vendor-daily-contact-chart");
   const status = document.getElementById("vendor-daily-contact-status");
@@ -3639,17 +4374,25 @@ async function loadVendorDailyContactsChart() {
     monthInput.value = new Date().toISOString().slice(0, 7);
   }
   const selectedMonth = monthInput?.value || new Date().toISOString().slice(0, 7);
+  const cacheKey = `${route.company}|${route.vendorId}|${selectedMonth}`;
+  if (currentVendorDailyContactsPayload?.cacheKey === cacheKey && !force) {
+    renderVendorDailyContactsChart(currentVendorDailyContactsPayload.payload);
+    return;
+  }
   status.textContent = "Carregando contatos diários...";
   chart.innerHTML = "";
   total.textContent = "Carregando...";
   try {
-    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force: true });
+    const payload = await fetchJson(`/api/vendor-day-by-day/daily-contacts?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&month=${encodeURIComponent(selectedMonth)}`, { force });
+    currentVendorDailyContactsPayload = { cacheKey, payload };
     renderVendorDailyContactsChart(payload);
   } catch (error) {
     try {
       const { start, end } = dailyContactsMonthRange(selectedMonth);
-      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force: true });
-      renderVendorDailyContactsChart(buildDailyContactsPayloadFromReport(report, selectedMonth));
+      const report = await fetchJson(`/api/vendor-day-by-day/report?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { force });
+      const fallbackPayload = buildDailyContactsPayloadFromReport(report, selectedMonth);
+      currentVendorDailyContactsPayload = { cacheKey, payload: fallbackPayload };
+      renderVendorDailyContactsChart(fallbackPayload);
       status.textContent += " Dados carregados pelo relatório de contatos.";
     } catch (fallbackError) {
       chart.innerHTML = "";
@@ -3740,20 +4483,32 @@ function renderVendorDailyContactsChart(payload) {
     return;
   }
   chart.innerHTML = `
-    <div class="vendor-daily-contact-bars">
+    <div class="vendor-daily-contact-list">
       ${rows.map((row) => {
         const inactive = Number(row.inativos || 0);
         const never = Number(row.nunca_comprou || 0);
-        const inactivePct = Math.max(0, (inactive / maxValue) * 100);
-        const neverPct = Math.max(0, (never / maxValue) * 100);
+        const rowTotal = Number(row.total || 0);
+        const totalPct = Math.max(4, (rowTotal / maxValue) * 100);
+        const inactiveShare = rowTotal ? Math.max(0, (inactive / rowTotal) * 100) : 0;
+        const neverShare = rowTotal ? Math.max(0, (never / rowTotal) * 100) : 0;
+        const dateLabel = escapeHtml(row.data_label || row.data || "");
+        const tooltip = `${dateLabel}: ${formatNumber.format(rowTotal)} contatos | Inativos ${formatNumber.format(inactive)} | Nunca Comprou ${formatNumber.format(never)}`;
         return `
-          <article class="vendor-daily-contact-day">
-            <div class="vendor-daily-contact-stack" title="${escapeHtml(row.data_label || row.data || "")}: ${formatNumber.format(row.total || 0)} contatos">
-              <i class="inactive" style="height:${inactivePct}%"><span>${inactive ? formatNumber.format(inactive) : ""}</span></i>
-              <i class="never" style="height:${neverPct}%"><span>${never ? formatNumber.format(never) : ""}</span></i>
+          <article class="vendor-daily-contact-row" data-tooltip="${tooltip}" title="${tooltip}">
+            <div class="vendor-daily-contact-date">
+              <strong>${dateLabel}</strong>
+              <span>${formatNumber.format(rowTotal)} contato(s)</span>
             </div>
-            <strong>${escapeHtml(row.data_label || row.data || "")}</strong>
-            <span>${formatNumber.format(row.total || 0)}</span>
+            <div class="vendor-daily-contact-meter" aria-label="${tooltip}">
+              <div class="vendor-daily-contact-track" style="--total-width:${totalPct}%;">
+                <i class="inactive" style="--segment-width:${inactiveShare}%;"><span>${inactive ? formatNumber.format(inactive) : ""}</span></i>
+                <i class="never" style="--segment-width:${neverShare}%;"><span>${never ? formatNumber.format(never) : ""}</span></i>
+              </div>
+            </div>
+            <div class="vendor-daily-contact-breakdown">
+              <span><i class="inactive"></i>${formatNumber.format(inactive)} inativos</span>
+              <span><i class="never"></i>${formatNumber.format(never)} nunca comprou</span>
+            </div>
           </article>
         `;
       }).join("")}
@@ -3847,12 +4602,46 @@ function fillVendorClientFilter(selectId, values, selectedValue, labelKey = null
   }
 }
 
+function renderVendorRegionClientsPayload(payload) {
+  const status = document.getElementById("vendor-region-clients-status");
+  const summary = document.getElementById("vendor-region-clients-summary");
+  const head = document.getElementById("vendor-region-clients-head");
+  const body = document.getElementById("vendor-region-clients-body");
+  if (!status || !summary || !head || !body) {
+    return;
+  }
+  fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
+  fillVendorClientFilter("vendor-client-filter-ddd", payload.options.ddds || [], currentVendorClientFilters.ddd);
+  fillVendorClientFilter(
+    "vendor-client-filter-city",
+    (payload.options.cities || []).map((city) => ({ value: city.city, label: city.label })),
+    currentVendorClientFilters.city,
+    "label"
+  );
+  summary.innerHTML = `
+    <article><span>Total carteira</span><strong>${formatNumber.format(payload.total_carteira || 0)}</strong></article>
+    <article><span>Ativos</span><strong>${formatNumber.format(payload.counts.active || 0)}</strong></article>
+    <article><span>Inativos</span><strong>${formatNumber.format(payload.counts.inactive || 0)}</strong></article>
+    <article><span>Nunca Comprou</span><strong>${formatNumber.format(payload.counts.never || 0)}</strong></article>
+    <article><span>Resultado</span><strong>${formatNumber.format(payload.total_resultado || 0)}</strong></article>
+  `;
+  head.innerHTML = `<tr>${payload.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr>`;
+  body.innerHTML = payload.rows.map((row) => `
+    <tr>
+      ${payload.columns.map((column) => {
+        const value = column.key === "faturamento_liquido" ? formatCurrency.format(row[column.key] || 0) : formatCell(row[column.key]);
+        return `<td>${escapeHtml(value)}</td>`;
+      }).join("")}
+    </tr>
+  `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta seleção.</td></tr>`;
+  status.textContent = payload.total_resultado > payload.rows.length
+    ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
+    : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
+}
+
 async function loadVendorRegionClients(force = false) {
   const panel = document.getElementById("vendor-region-clients-panel");
   if (!panel || currentVendorWorkspace !== "clients") {
-    return;
-  }
-  if (vendorRegionClientsLoaded && !force) {
     return;
   }
   const status = document.getElementById("vendor-region-clients-status");
@@ -3863,36 +4652,17 @@ async function loadVendorRegionClients(force = false) {
   if (!params) {
     return;
   }
+  const cacheKey = params.toString();
+  if (vendorRegionClientsLoaded && currentVendorRegionClientsCacheKey === cacheKey && currentVendorRegionClientsPayload && !force) {
+    renderVendorRegionClientsPayload(currentVendorRegionClientsPayload);
+    return;
+  }
   status.textContent = "Carregando clientes da região...";
   try {
-    const payload = await fetchJson(`/api/vendor-region-clients?${params.toString()}`);
-    fillVendorClientFilter("vendor-client-filter-uf", payload.options.ufs || [], currentVendorClientFilters.uf);
-    fillVendorClientFilter("vendor-client-filter-ddd", payload.options.ddds || [], currentVendorClientFilters.ddd);
-    fillVendorClientFilter(
-      "vendor-client-filter-city",
-      (payload.options.cities || []).map((city) => ({ value: city.city, label: city.label })),
-      currentVendorClientFilters.city,
-      "label"
-    );
-    summary.innerHTML = `
-      <article><span>Total carteira</span><strong>${formatNumber.format(payload.total_carteira || 0)}</strong></article>
-      <article><span>Ativos</span><strong>${formatNumber.format(payload.counts.active || 0)}</strong></article>
-      <article><span>Inativos</span><strong>${formatNumber.format(payload.counts.inactive || 0)}</strong></article>
-      <article><span>Nunca Comprou</span><strong>${formatNumber.format(payload.counts.never || 0)}</strong></article>
-      <article><span>Resultado</span><strong>${formatNumber.format(payload.total_resultado || 0)}</strong></article>
-    `;
-    head.innerHTML = `<tr>${payload.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr>`;
-    body.innerHTML = payload.rows.map((row) => `
-      <tr>
-        ${payload.columns.map((column) => {
-          const value = column.key === "faturamento_liquido" ? formatCurrency.format(row[column.key] || 0) : formatCell(row[column.key]);
-          return `<td>${escapeHtml(value)}</td>`;
-        }).join("")}
-      </tr>
-    `).join("") || `<tr><td colspan="${payload.columns.length}">Nenhum cliente encontrado para esta seleção.</td></tr>`;
-    status.textContent = payload.total_resultado > payload.rows.length
-      ? `Mostrando ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_resultado)} clientes.`
-      : `${formatNumber.format(payload.total_resultado)} clientes encontrados.`;
+    const payload = await fetchJson(`/api/vendor-region-clients?${cacheKey}`, { force });
+    currentVendorRegionClientsPayload = payload;
+    currentVendorRegionClientsCacheKey = cacheKey;
+    renderVendorRegionClientsPayload(payload);
     vendorRegionClientsLoaded = true;
   } catch (error) {
     summary.innerHTML = "";
@@ -4001,7 +4771,7 @@ function vendorQuantChart(row, closedYears, closedMonths) {
           const inactiveDeg = Math.min(360, activeDeg + ((inativos / total) * 360));
           const neverDeg = Math.min(360, inactiveDeg + ((nunca / total) * 360));
           return `
-            <div class="period-donut-item">
+            <div class="period-donut-item" title="${escapeHtml(row.label)} | ${escapeHtml(item.label)}: Ativos ${formatNumber.format(Math.round(ativos))}, Inativos ${formatNumber.format(Math.round(inativos))}, Nunca comprou ${formatNumber.format(Math.round(nunca))}, Total ${formatNumber.format(totalClients)}">
               <div class="period-donut ${item.media ? "average" : ""}" style="--active-deg:${activeDeg}deg;--inactive-deg:${inactiveDeg}deg;--never-deg:${neverDeg}deg;">
                 <strong>${formatNumber.format(totalClients)}</strong>
                 <span>${escapeHtml(item.label)}</span>
@@ -4083,7 +4853,7 @@ function vendorSalesChart(row, closedYears, months, closedMonths) {
         ${bars.map((bar) => {
           const barHeight = Math.max(0, (bar.value / scaleMax) * 100);
           return `
-          <div class="bar-column ${bar.type}">
+          <div class="bar-column ${bar.type}" title="${escapeHtml(row.label)} | ${escapeHtml(bar.label)}: ${formatCurrency.format(bar.value)}">
             <div class="bar-shape ${barHeight < 12 ? "tiny-bar" : ""}" style="--bar-height:${barHeight}%">
               ${bar.value > 0 ? `<div class="bar-value">${formatCurrency.format(bar.value)}</div>` : ""}
             </div>
@@ -4332,6 +5102,18 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function formatDateTime(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]} ${match[4]}:${match[5]}`;
+  }
+  return text;
+}
+
 function formatCell(value) {
   if (value === null || value === undefined || value === "") {
     return "";
@@ -4365,13 +5147,19 @@ function formatMercadoLivreCell(columnKey, value) {
 }
 
 function formatTableCell(tableName, key, value) {
-  if (tableName === "stock" && (key === "Quantidade" || key === "V.Unitario" || key === "Total")) {
+  if (tableName === "stock" && key === "Ultima Saida" && (value === null || value === undefined || value === "")) {
+    return "Nunca Vendido";
+  }
+  if (tableName === "stock" && key === "Dias sem movimento" && (value === null || value === undefined || value === "")) {
+    return "Nunca Vendido";
+  }
+  if (tableName === "stock" && (key === "Quantidade" || key === "V.Unitario" || key === "Total" || key === "Bonus")) {
     if (value === null || value === undefined || value === "") {
       return "";
     }
     return new Intl.NumberFormat("pt-BR", {
-      minimumFractionDigits: key === "Total" ? 2 : 3,
-      maximumFractionDigits: key === "Total" ? 2 : 3,
+      minimumFractionDigits: key === "Total" ? 2 : (key === "Bonus" ? 2 : 3),
+      maximumFractionDigits: key === "Total" ? 2 : (key === "Bonus" ? 4 : 3),
     }).format(Number(value));
   }
   if (tableName === "in-transit" && key === "QTY") {
@@ -4414,7 +5202,7 @@ function formatTableCell(tableName, key, value) {
 }
 
 function tableCellClass(tableName, key) {
-  if (tableName === "stock" && (key === "Quantidade" || key === "V.Unitario" || key === "Total")) {
+  if (tableName === "stock" && (key === "Quantidade" || key === "V.Unitario" || key === "Total" || key === "Bonus")) {
     return key === "Total" ? "costing-value-cell stock-total-cell" : "costing-value-cell";
   }
   if (tableName === "in-transit" && key === "QTY") {
@@ -4499,9 +5287,20 @@ async function loadTable(tableName, force = false) {
 
     elements.body.innerHTML = payload.rows.map((row) => `
       <tr>
-        ${payload.columns.map((column) => `<td class="${tableCellClass(tableName, column.key)}">${escapeHtml(formatTableCell(tableName, column.key, row[column.key]))}</td>`).join("")}
+        ${payload.columns.map((column) => {
+          if (tableName === "stock" && column.key === "Bonus") {
+            return `<td class="costing-value-cell"><input class="stock-bonus-input" type="text" inputmode="decimal" data-stock-ref="${escapeHtml(row.Referencia || "")}" value="${escapeHtml(formatTableCell(tableName, column.key, row[column.key]))}"></td>`;
+          }
+          if (tableName === "clients" && column.key === "_GE") {
+            return `<td>${row._GE ? `<button class="ge-pill" type="button" data-ge-client="${escapeHtml(row.ID || "")}">GE</button>` : ""}</td>`;
+          }
+          return `<td class="${tableCellClass(tableName, column.key)}">${escapeHtml(formatTableCell(tableName, column.key, row[column.key]))}</td>`;
+        }).join("")}
       </tr>
     `).join("");
+    elements.body.querySelectorAll("[data-ge-client]").forEach((button) => {
+      button.addEventListener("click", () => openEconomicGroupPanel(button.dataset.geClient || ""));
+    });
 
     if (payload.rows.length === 0) {
       elements.body.innerHTML = `
@@ -4560,6 +5359,107 @@ function scheduleTableLoad(tableName) {
   tableState[tableName].timer = setTimeout(() => loadTable(tableName), 250);
 }
 
+async function saveStockBonuses() {
+  const elements = tableElements("stock");
+  const button = document.getElementById("stock-bonus-save-button");
+  const inputs = Array.from(document.querySelectorAll("#stock-table-body [data-stock-ref]"));
+  if (!inputs.length) {
+    elements.status.textContent = "Carregue o estoque antes de salvar bonus.";
+    return;
+  }
+  const items = inputs.map((input) => ({
+    referencia: input.dataset.stockRef,
+    bonus: parsePtNumber(input.value),
+  }));
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Salvando...";
+  }
+  elements.status.textContent = "Salvando bonus do estoque...";
+  try {
+    const state = tableState.stock;
+    const payload = await fetchJson("/api/stock-bonus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        company: elements.company.value || "ionlab",
+        query: elements.search.value.trim(),
+        sort_key: state.sortKey || "",
+        sort_dir: state.sortDir || "asc",
+        limit: 200,
+        items,
+      }),
+    });
+    tableState.stock.loaded = false;
+    await loadTable("stock", true);
+    elements.status.textContent = payload.message || "Bonus salvo.";
+  } catch (error) {
+    elements.status.textContent = error.message;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Salvar Bonus";
+    }
+  }
+}
+
+async function updateDefaultStockBonusByDays() {
+  const elements = tableElements("stock");
+  const button = document.getElementById("stock-default-bonus-update-button");
+  const bonusInput = document.getElementById("stock-default-bonus-percent");
+  const startInput = document.getElementById("stock-default-bonus-days-start");
+  const endInput = document.getElementById("stock-default-bonus-days-end");
+  const bonus = parsePtNumber(bonusInput?.value || "");
+  const startDays = Number(startInput?.value || 0);
+  const endDays = Number(endInput?.value || 0);
+  if (!bonusInput || !startInput || !endInput) {
+    return;
+  }
+  if (!Number.isFinite(bonus) || bonus < 0) {
+    elements.status.textContent = "Informe um percentual de bonus valido.";
+    bonusInput.focus();
+    return;
+  }
+  if (!Number.isFinite(startDays) || !Number.isFinite(endDays) || startDays < 181 || endDays < 181) {
+    elements.status.textContent = "Informe o intervalo de Dias sem movimento a partir de 181 dias.";
+    startInput.focus();
+    return;
+  }
+  if (endDays < startDays) {
+    elements.status.textContent = "Dias final deve ser maior ou igual ao Dias inicial.";
+    endInput.focus();
+    return;
+  }
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Atualizando...";
+  }
+  elements.status.textContent = "Atualizando bonus padrao por intervalo de dias sem movimento...";
+  try {
+    const payload = await fetchJson("/api/stock-bonus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "bulk_by_days",
+        company: elements.company.value || "ionlab",
+        bonus,
+        start_days: startDays,
+        end_days: endDays,
+      }),
+    });
+    tableState.stock.loaded = false;
+    await loadTable("stock", true);
+    elements.status.textContent = payload.message || "Bonus padrao atualizado.";
+  } catch (error) {
+    elements.status.textContent = error.message;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Atualizar";
+    }
+  }
+}
+
 function renderVendorAccessOptions(selected = null) {
   const container = document.getElementById("vendor-access-options");
   if (!container) {
@@ -4590,7 +5490,7 @@ function normalizeSearchText(value) {
     .normalize("NFKD")
     .replace(/[ß]/g, "SS")
     .replace(/[Ææ]/g, "AE")
-    .replace(/[Œœ]/g, "OE")
+    .replace(/[Å’Å“]/g, "OE")
     .replace(/[Øø]/g, "O")
     .replace(/[Ðð]/g, "D")
     .replace(/[Þþ]/g, "TH")
@@ -4607,7 +5507,7 @@ function normalizeSearchTokens(value) {
     .normalize("NFKD")
     .replace(/[ß]/g, "SS")
     .replace(/[Ææ]/g, "AE")
-    .replace(/[Œœ]/g, "OE")
+    .replace(/[Å’Å“]/g, "OE")
     .replace(/[Øø]/g, "O")
     .replace(/[Ðð]/g, "D")
     .replace(/[Þþ]/g, "TH")
@@ -5706,6 +6606,7 @@ const expandedRegionUfs = new Set();
 const expandedRegionCities = new Set();
 const expandedRegionDdds = new Set();
 let currentRegionsVendorFilter = "all";
+let currentRegionsFilters = { uf: "", cidade: "", ddd: "" };
 
 function regionRuleTimestamp(rule) {
   return String(rule?._atualizado_em || rule?._criado_em || "");
@@ -5783,6 +6684,76 @@ function setupRegionsVendorFilter() {
   currentRegionsVendorFilter = select.value || "all";
 }
 
+function setupRegionsLocationFilters() {
+  const ufSelect = document.getElementById("regions-uf-filter");
+  if (!ufSelect || !currentRegionsPayload) {
+    return;
+  }
+  const previous = ufSelect.value || currentRegionsFilters.uf || "";
+  const ufs = (currentRegionsPayload.ufs || brazilUfs)
+    .map((uf) => String(uf || "").trim().toUpperCase())
+    .filter(Boolean)
+    .sort();
+  ufSelect.innerHTML = '<option value="">Todas</option>' + ufs
+    .map((uf) => `<option value="${escapeHtml(uf)}">${escapeHtml(uf)}</option>`)
+    .join("");
+  ufSelect.value = ufs.includes(previous) ? previous : "";
+  currentRegionsFilters.uf = ufSelect.value || "";
+  const citySelect = document.getElementById("regions-city-filter");
+  const dddSelect = document.getElementById("regions-ddd-filter");
+  if (citySelect) {
+    const selectedUf = currentRegionsFilters.uf || "";
+    const cityRows = (currentRegionsPayload.cities || [])
+      .filter((city) => !selectedUf || String(city.uf || "").trim().toUpperCase() === selectedUf)
+      .slice()
+      .sort((a, b) => `${normalizeLocalText(a.cidade)}|${a.uf}`.localeCompare(`${normalizeLocalText(b.cidade)}|${b.uf}`));
+    const seenCities = new Set();
+    const cityOptions = cityRows
+      .filter((city) => {
+        const key = `${String(city.uf || "").trim().toUpperCase()}|${normalizeLocalText(city.cidade || "")}`;
+        if (seenCities.has(key)) {
+          return false;
+        }
+        seenCities.add(key);
+        return true;
+      })
+      .map((city) => {
+        const cityName = String(city.cidade || "").trim();
+        const label = selectedUf ? cityName : `${cityName} - ${String(city.uf || "").trim().toUpperCase()}`;
+        return `<option value="${escapeHtml(cityName)}">${escapeHtml(label)}</option>`;
+      });
+    const previousCity = currentRegionsFilters.cidade || "";
+    citySelect.innerHTML = '<option value="">Todas</option>' + cityOptions.join("");
+    citySelect.value = [...citySelect.options].some((option) => option.value === previousCity) ? previousCity : "";
+    currentRegionsFilters.cidade = citySelect.value || "";
+  }
+  if (dddSelect) {
+    const selectedUf = currentRegionsFilters.uf || "";
+    const selectedCity = normalizeLocalText(currentRegionsFilters.cidade || "");
+    const ddds = Array.from(new Set((currentRegionsPayload.cities || [])
+      .filter((city) => !selectedUf || String(city.uf || "").trim().toUpperCase() === selectedUf)
+      .filter((city) => !selectedCity || normalizeLocalText(city.cidade || "") === selectedCity)
+      .flatMap((city) => city.ddds || [])
+      .map((ddd) => String(ddd || "").trim())
+      .filter(Boolean)))
+      .sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
+    const previousDdd = currentRegionsFilters.ddd || "";
+    dddSelect.innerHTML = '<option value="">Todos</option>' + ddds
+      .map((ddd) => `<option value="${escapeHtml(ddd)}">${escapeHtml(ddd)}</option>`)
+      .join("");
+    dddSelect.value = ddds.includes(previousDdd) ? previousDdd : "";
+    currentRegionsFilters.ddd = dddSelect.value || "";
+  }
+}
+
+function updateRegionsLocationFilters() {
+  currentRegionsFilters = {
+    uf: document.getElementById("regions-uf-filter")?.value || "",
+    cidade: document.getElementById("regions-city-filter")?.value.trim() || "",
+    ddd: document.getElementById("regions-ddd-filter")?.value.trim() || "",
+  };
+}
+
 function regionOwnerMatchesFilter(ownerId) {
   if (currentRegionsVendorFilter === "all") {
     return true;
@@ -5791,6 +6762,27 @@ function regionOwnerMatchesFilter(ownerId) {
     return !ownerId;
   }
   return ownerId === currentRegionsVendorFilter;
+}
+
+function regionUfMatchesLocation(uf) {
+  const selectedUf = String(currentRegionsFilters.uf || "").trim().toUpperCase();
+  return !selectedUf || String(uf || "").trim().toUpperCase() === selectedUf;
+}
+
+function regionCityMatchesLocation(city) {
+  if (!regionUfMatchesLocation(city.uf)) {
+    return false;
+  }
+  const query = normalizeLocalText(currentRegionsFilters.cidade || "");
+  return !query || normalizeLocalText(city.cidade || "").includes(query);
+}
+
+function regionDddMatchesLocation(city, ddd) {
+  if (!regionCityMatchesLocation(city)) {
+    return false;
+  }
+  const query = normalizeLocalText(currentRegionsFilters.ddd || "");
+  return !query || normalizeLocalText(ddd || "").includes(query);
 }
 
 function regionCitiesForUf(uf) {
@@ -5820,14 +6812,33 @@ function regionFilteredClientsForDdd(city, ddd) {
 
 function regionFilteredDddsForCity(city) {
   return (city.ddds || []).filter((ddd) =>
+    regionDddMatchesLocation(city, ddd) && (
     regionOwnerMatchesFilter(regionEffectiveOwner("ddd", { uf: city.uf, cidade: city.cidade, ddd }))
     || regionFilteredClientsForDdd(city, ddd).length > 0
+    )
   );
 }
 
+function regionLocationDddsForCity(city) {
+  return (city.ddds || []).filter((ddd) => regionDddMatchesLocation(city, ddd));
+}
+
 function regionCityMatchesFilter(city) {
-  return regionOwnerMatchesFilter(regionEffectiveOwner("cidade", { uf: city.uf, cidade: city.cidade }))
-    || regionFilteredDddsForCity(city).length > 0;
+  const hasDddFilter = Boolean(currentRegionsFilters.ddd);
+  if (hasDddFilter && regionLocationDddsForCity(city).length === 0) {
+    return false;
+  }
+  return regionCityMatchesLocation(city) && (
+    regionOwnerMatchesFilter(regionEffectiveOwner("cidade", { uf: city.uf, cidade: city.cidade }))
+    || regionFilteredDddsForCity(city).length > 0
+  );
+}
+
+function regionLocationCitiesForUf(uf) {
+  const dddQuery = normalizeLocalText(currentRegionsFilters.ddd || "");
+  return regionCitiesForUf(uf).filter((city) =>
+    regionCityMatchesLocation(city) && (!dddQuery || regionLocationDddsForCity(city).length > 0)
+  );
 }
 
 function regionFilteredCitiesForUf(uf) {
@@ -5835,8 +6846,37 @@ function regionFilteredCitiesForUf(uf) {
 }
 
 function regionUfMatchesFilter(uf) {
-  return regionOwnerMatchesFilter(regionEffectiveOwner("uf", { uf }))
-    || regionFilteredCitiesForUf(uf).length > 0;
+  const hasLowerLocationFilter = Boolean(currentRegionsFilters.cidade || currentRegionsFilters.ddd);
+  if (hasLowerLocationFilter) {
+    return regionUfMatchesLocation(uf) && regionLocationCitiesForUf(uf).length > 0;
+  }
+  return regionUfMatchesLocation(uf) && (
+    regionOwnerMatchesFilter(regionEffectiveOwner("uf", { uf }))
+    || regionFilteredCitiesForUf(uf).length > 0
+  );
+}
+
+function expandRegionsForActiveFilters(ufs) {
+  const hasUfFilter = Boolean(currentRegionsFilters.uf);
+  const hasCityFilter = Boolean(currentRegionsFilters.cidade);
+  const hasDddFilter = Boolean(currentRegionsFilters.ddd);
+  if (!hasUfFilter && !hasCityFilter && !hasDddFilter) {
+    return;
+  }
+  ufs.forEach((uf) => {
+    expandedRegionUfs.add(uf);
+    regionLocationCitiesForUf(uf).forEach((city) => {
+      const cityKey = `${city.uf}|${normalizeLocalText(city.cidade)}`;
+      if (hasCityFilter || hasDddFilter) {
+        expandedRegionCities.add(cityKey);
+      }
+      if (hasDddFilter) {
+        regionLocationDddsForCity(city).forEach((ddd) => {
+          expandedRegionDdds.add(regionClientGroupKey(city, ddd));
+        });
+      }
+    });
+  });
 }
 
 function renderRegions() {
@@ -5845,7 +6885,9 @@ function renderRegions() {
     return;
   }
   setupRegionsVendorFilter();
+  setupRegionsLocationFilters();
   const ufs = (currentRegionsPayload.ufs || brazilUfs).filter(regionUfMatchesFilter);
+  expandRegionsForActiveFilters(ufs);
   root.innerHTML = `
     <div class="region-tree-head">
       <span>UF / Cidade / DDD / Cliente</span>
@@ -5893,7 +6935,7 @@ function renderRegions() {
 }
 
 function renderRegionUfRow(uf) {
-  const allCities = regionCitiesForUf(uf);
+  const allCities = regionLocationCitiesForUf(uf);
   const cities = currentRegionsVendorFilter === "all" ? allCities : regionFilteredCitiesForUf(uf);
   const clients = cities.reduce((total, city) => total + Number(city.clientes || 0), 0);
   const owner = regionEffectiveOwner("uf", { uf });
@@ -5922,7 +6964,7 @@ function renderRegionCityRow(city, ufOwner) {
       <span>${formatNumber.format(city.clientes || 0)} clientes${inherited ? ` | herdado de ${escapeHtml(city.uf)}` : ""}</span>
       ${regionVendorSelect("cidade", { uf: city.uf, cidade: city.cidade }, owner)}
     </div>
-    ${open ? `<div class="region-tree-children region-tree-ddd-children">${(currentRegionsVendorFilter === "all" ? (city.ddds || []) : regionFilteredDddsForCity(city)).map((ddd) => renderRegionDddRow(city, ddd, owner)).join("") || '<div class="empty-state">Sem DDD identificado nessa cidade.</div>'}</div>` : ""}
+    ${open ? `<div class="region-tree-children region-tree-ddd-children">${(currentRegionsVendorFilter === "all" ? regionLocationDddsForCity(city) : regionFilteredDddsForCity(city)).map((ddd) => renderRegionDddRow(city, ddd, owner)).join("") || '<div class="empty-state">Sem DDD identificado nessa cidade.</div>'}</div>` : ""}
   `;
 }
 
@@ -6540,6 +7582,14 @@ function vendorGoalInput(name, month, objective, value, extraClass = "") {
   return `<input class="${extraClass}" data-goal-field="${name}" data-month="${month}" data-objective="${objective || ""}" type="text" inputmode="decimal" value="${escapeHtml(String(value ?? ""))}">`;
 }
 
+function vendorGoalSelect(name, month, objective, value, options) {
+  return `
+    <select data-goal-field="${name}" data-month="${month}" data-objective="${objective || ""}">
+      ${options.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+    </select>
+  `;
+}
+
 function updateVendorSalesGoalForMonth(monthData) {
   if (!monthData || !currentVendorGoalsPayload) {
     return;
@@ -6558,7 +7608,7 @@ function vendorGoalMetaHeader(objective) {
     return "R$ por novo cliente";
   }
   if (objective.key === "sem_giro") {
-    return "% fixo";
+    return "Bonus";
   }
   return "Valor / Quantidade";
 }
@@ -6578,6 +7628,10 @@ function vendorGoalMaxCommission(commissionPercent, objective, item) {
     return 0;
   }
   return commissionPercent * Number(item.peso || 0) / 100;
+}
+
+function formatCommissionCellValue(value) {
+  return Number(value || 0) > 0 ? formatCurrency.format(value || 0) : "0.00";
 }
 
 function renderVendorGoals(payload) {
@@ -6607,7 +7661,7 @@ function renderVendorGoals(payload) {
   const commissionPercent = Number(payload.goals.comissao_percentual || 0);
   document.getElementById("vendor-goals-months").innerHTML = [selectedMonth].map((month) => {
     const monthData = months[month] || {};
-    const objectiveRows = objectives.map((objective) => {
+    const renderObjectiveRows = (rows) => rows.map((objective) => {
       const item = monthData.objetivos?.[objective.key] || {};
       const readonly = objective.key === "vendas_liquidas" ? "vendor-goal-suggested" : "";
       const maxCommission = vendorGoalMaxCommission(commissionPercent, objective, item);
@@ -6616,10 +7670,54 @@ function renderVendorGoals(payload) {
           <td>${escapeHtml(objective.label)}</td>
           <td>${vendorGoalInput("meta", month, objective.key, String(item.meta || 0).replace(".", ","), readonly)}</td>
           <td>${vendorGoalWeightCell(month, objective, item)}</td>
-          <td class="commission-value">${objective.key === "novos_clientes" ? "Valor fixo" : `${formatPercent2.format(maxCommission)}%`}</td>
+          <td class="commission-value">${objective.key === "novos_clientes" ? formatCurrency2.format(item.meta || 50) : `${formatPercent2.format(maxCommission)}%`}</td>
         </tr>
       `;
     }).join("");
+    const renderBonusRows = (rows) => rows.map((objective) => {
+      const item = monthData.objetivos?.[objective.key] || {};
+      const maxCommission = vendorGoalMaxCommission(commissionPercent, objective, item);
+      return `
+        <tr>
+          <td>${escapeHtml(objective.label)}</td>
+          <td>${vendorGoalInput("qty_minima", month, objective.key, String(item.qty_minima || 0).replace(".", ","))}</td>
+          <td>${vendorGoalInput("valor_minimo", month, objective.key, String(item.valor_minimo || 0).replace(".", ","))}</td>
+          <td>${vendorGoalSelect("periodo", month, objective.key, item.periodo || "mensal", [
+            { value: "diario", label: "Diario" },
+            { value: "semanal", label: "Semanal" },
+            { value: "quinzenal", label: "Quinzenal" },
+            { value: "mensal", label: "Mensal" },
+          ])}</td>
+          <td>${vendorGoalSelect("tipo_bonus", month, objective.key, item.tipo_bonus || (objective.key === "novos_clientes" ? "valor" : "percentual"), [
+            { value: "percentual", label: "%" },
+            { value: "valor", label: "Valor" },
+          ])}</td>
+          <td>${vendorGoalInput("meta", month, objective.key, String(item.meta || (objective.key === "novos_clientes" ? 50 : 0)).replace(".", ","))}</td>
+          <td class="commission-value">${objective.key === "novos_clientes" ? formatCurrency2.format(item.meta || 50) : `${formatPercent2.format(maxCommission)}%`}</td>
+        </tr>
+      `;
+    }).join("");
+    const customBonusRows = (monthData.bonus_customizados || []).map((bonus, index) => `
+        <tr>
+          <td>${vendorGoalCustomInput("titulo", month, index, bonus.titulo || "Bonus adicional", "vendor-goal-text-input")}</td>
+          <td>${vendorGoalCustomInput("qty_minima", month, index, String(bonus.qty_minima || 0).replace(".", ","))}</td>
+          <td>${vendorGoalCustomInput("valor_minimo", month, index, String(bonus.valor_minimo || 0).replace(".", ","))}</td>
+          <td>${vendorGoalCustomSelect("periodo", month, index, bonus.periodo || "mensal", [
+            { value: "diario", label: "Diario" },
+            { value: "semanal", label: "Semanal" },
+            { value: "quinzenal", label: "Quinzenal" },
+            { value: "mensal", label: "Mensal" },
+          ])}</td>
+          <td>${vendorGoalCustomSelect("tipo_bonus", month, index, bonus.tipo_bonus || "valor", [
+            { value: "percentual", label: "%" },
+            { value: "valor", label: "Valor" },
+          ])}</td>
+          <td>${vendorGoalCustomInput("meta", month, index, String(bonus.meta || 0).replace(".", ","))}</td>
+          <td><button class="mini-action" type="button" data-remove-custom-bonus="${index}" data-month="${month}">Remover</button></td>
+        </tr>
+      `).join("");
+    const objectiveRows = renderObjectiveRows(objectives.filter((objective) => !["novos_clientes", "sem_giro"].includes(objective.key)));
+    const bonusRows = renderBonusRows(objectives.filter((objective) => ["novos_clientes", "sem_giro"].includes(objective.key)));
     return `
       <section class="vendor-goal-month">
         <header>
@@ -6631,13 +7729,73 @@ function renderVendorGoals(payload) {
         </div>
         <div class="table-scroll compact">
           <table class="vendor-goal-table">
-            <thead><tr><th>Meta / Objetivo</th><th>Valor / Quantidade</th><th>Peso</th><th>% Comissão Máx.</th></tr></thead>
+            <thead><tr><th>Meta / Objetivo</th><th>Valor / Quantidade</th><th>Peso</th><th>% Comissão Máx / Valor</th></tr></thead>
             <tbody>${objectiveRows}</tbody>
+          </table>
+        </div>
+        <div class="vendor-goal-bonus-heading">
+          <h4 class="vendor-goal-bonus-title">Bonus</h4>
+          <button class="secondary-action" type="button" data-add-custom-bonus="${month}">Incluir Bonus</button>
+        </div>
+        <div class="table-scroll compact">
+          <table class="vendor-goal-table">
+            <thead><tr><th>Bonus</th><th>Qty Minima</th><th>Valor Minimo</th><th>Periodo</th><th>% / Valor</th><th>Valor</th><th>% Comissão Máx / Valor</th></tr></thead>
+            <tbody>${bonusRows}${customBonusRows}</tbody>
           </table>
         </div>
       </section>
     `;
   }).join("");
+  document.querySelectorAll("[data-add-custom-bonus]").forEach((button) => {
+    button.addEventListener("click", () => addVendorCustomBonus(button.dataset.addCustomBonus));
+  });
+  document.querySelectorAll("[data-remove-custom-bonus]").forEach((button) => {
+    button.addEventListener("click", () => removeVendorCustomBonus(button.dataset.month, Number(button.dataset.removeCustomBonus)));
+  });
+}
+
+function vendorGoalCustomInput(name, month, index, value, extraClass = "") {
+  const isText = name === "titulo";
+  return `<input class="${extraClass}" data-custom-bonus-field="${name}" data-month="${month}" data-custom-index="${index}" type="text" inputmode="${isText ? "text" : "decimal"}" value="${escapeHtml(String(value ?? ""))}">`;
+}
+
+function vendorGoalCustomSelect(name, month, index, value, options) {
+  return `
+    <select data-custom-bonus-field="${name}" data-month="${month}" data-custom-index="${index}">
+      ${options.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+    </select>
+  `;
+}
+
+function addVendorCustomBonus(month) {
+  if (!currentVendorGoalsPayload?.goals?.months?.[month]) {
+    return;
+  }
+  syncVendorGoalFormIntoPayload();
+  const monthData = currentVendorGoalsPayload.goals.months[month];
+  monthData.bonus_customizados = monthData.bonus_customizados || [];
+  monthData.bonus_customizados.push({
+    id: `bonus_custom_${Date.now()}`,
+    titulo: "Novo Bonus",
+    qty_minima: 0,
+    valor_minimo: 0,
+    periodo: "mensal",
+    tipo_bonus: "valor",
+    meta: 0,
+    observacao: "",
+  });
+  renderVendorGoals(currentVendorGoalsPayload);
+}
+
+function removeVendorCustomBonus(month, index) {
+  if (!currentVendorGoalsPayload?.goals?.months?.[month]) {
+    return;
+  }
+  syncVendorGoalFormIntoPayload();
+  const rows = currentVendorGoalsPayload.goals.months[month].bonus_customizados || [];
+  rows.splice(index, 1);
+  currentVendorGoalsPayload.goals.months[month].bonus_customizados = rows;
+  renderVendorGoals(currentVendorGoalsPayload);
 }
 
 function syncVendorGoalFormIntoPayload() {
@@ -6659,11 +7817,28 @@ function syncVendorGoalFormIntoPayload() {
     if (objective) {
       monthData.objetivos = monthData.objetivos || {};
       monthData.objetivos[objective] = monthData.objetivos[objective] || { meta: 0, peso: 0 };
-      monthData.objetivos[objective][field] = parsePtNumber(input.value);
+      monthData.objetivos[objective][field] = ["periodo", "tipo_bonus"].includes(field) ? input.value : parsePtNumber(input.value);
     } else {
       monthData[field] = parsePtNumber(input.value);
     }
     updateVendorSalesGoalForMonth(monthData);
+  });
+  document.querySelectorAll("[data-custom-bonus-field]").forEach((input) => {
+    const month = input.dataset.month;
+    const index = Number(input.dataset.customIndex);
+    const field = input.dataset.customBonusField;
+    if (!month || !field || !Number.isFinite(index)) {
+      return;
+    }
+    const monthData = currentVendorGoalsPayload.goals.months[month] = currentVendorGoalsPayload.goals.months[month] || {
+      percentual_aumento: 0,
+      quantidade_minima_clientes: 0,
+      objetivos: {},
+      bonus_customizados: [],
+    };
+    monthData.bonus_customizados = monthData.bonus_customizados || [];
+    monthData.bonus_customizados[index] = monthData.bonus_customizados[index] || { id: `bonus_custom_${index + 1}` };
+    monthData.bonus_customizados[index][field] = ["titulo", "periodo", "tipo_bonus", "observacao"].includes(field) ? input.value : parsePtNumber(input.value);
   });
 }
 
@@ -6700,8 +7875,13 @@ function replicateVendorGoalsNextMonths() {
         ...(target.objetivos[key] || {}),
         meta: Number(sourceObjective.meta || 0),
         peso: Number(sourceObjective.peso || 0),
+        qty_minima: Number(sourceObjective.qty_minima || 0),
+        valor_minimo: Number(sourceObjective.valor_minimo || 0),
+        periodo: sourceObjective.periodo || "mensal",
+        tipo_bonus: sourceObjective.tipo_bonus || (key === "novos_clientes" ? "valor" : "percentual"),
       };
     });
+    target.bonus_customizados = JSON.parse(JSON.stringify(source.bonus_customizados || []));
     target.objetivos.vendas_liquidas = target.objetivos.vendas_liquidas || { meta: 0, peso: 0 };
     target.objetivos.vendas_liquidas.peso = Number((sourceObjectives.vendas_liquidas || {}).peso || 0);
     updateVendorSalesGoalForMonth(target);
@@ -7495,6 +8675,203 @@ function exportClientsTable() {
   window.location.href = `/api/export-clients-xlsx?company=${encodeURIComponent(company)}&q=${encodeURIComponent(query)}&_=${Date.now()}`;
 }
 
+function economicGroupCompany() {
+  return document.getElementById("clients-company-select")?.value
+    || document.getElementById("clients-table-company")?.value
+    || "ionlab";
+}
+
+function fillEconomicClient(prefix, client) {
+  document.getElementById(`${prefix}-name`).value = client?.nome || "";
+  document.getElementById(`${prefix}-uf`).value = client?.uf || "";
+  document.getElementById(`${prefix}-vendor`).value = client?.vendedor || "";
+}
+
+function renderEconomicSuggestions(target, payload, onSelect) {
+  const suggestions = document.getElementById(target);
+  const clients = payload.clients || [];
+  suggestions.innerHTML = clients.map((client) => `
+    <button class="prospect-suggestion" type="button" data-client='${escapeHtml(JSON.stringify(client))}'>
+      <strong>${escapeHtml(client.codigo || "")} - ${escapeHtml(client.nome || "")}</strong>
+      <span>${escapeHtml(client.documento || "")} | ${escapeHtml(client.uf || "")} | ${escapeHtml(client.vendedor || "Sem vendedor")}</span>
+    </button>
+  `).join("") || '<div class="table-status">Nenhum cliente encontrado.</div>';
+  suggestions.classList.add("visible");
+  suggestions.querySelectorAll(".prospect-suggestion").forEach((button) => {
+    button.addEventListener("click", () => {
+      const client = JSON.parse(button.dataset.client || "{}");
+      suggestions.classList.remove("visible");
+      onSelect(client);
+    });
+  });
+}
+
+async function searchEconomicClient(kind) {
+  const inputId = kind === "master" ? "economic-master-search" : "economic-client-search";
+  const suggestionsId = kind === "master" ? "economic-master-suggestions" : "economic-client-suggestions";
+  const input = document.getElementById(inputId);
+  const query = input?.value.trim() || "";
+  if (query.length < 2) {
+    document.getElementById(suggestionsId)?.classList.remove("visible");
+    return;
+  }
+  const payload = await fetchJson(`/api/economic-groups/client-search?company=${encodeURIComponent(economicGroupCompany())}&q=${encodeURIComponent(query)}`);
+  renderEconomicSuggestions(suggestionsId, payload, async (client) => {
+    if (kind === "master") {
+      currentEconomicMaster = client;
+      input.value = `${client.codigo} - ${client.nome}`;
+      fillEconomicClient("economic-master", client);
+      await loadEconomicGroup(client.codigo);
+    } else {
+      currentEconomicCandidate = client;
+      input.value = `${client.codigo} - ${client.nome}`;
+      fillEconomicClient("economic-client", client);
+    }
+  });
+}
+
+function scheduleEconomicSearch(kind) {
+  if (kind === "master") {
+    clearTimeout(economicMasterSearchTimer);
+    economicMasterSearchTimer = setTimeout(() => searchEconomicClient("master"), 220);
+  } else {
+    clearTimeout(economicClientSearchTimer);
+    economicClientSearchTimer = setTimeout(() => searchEconomicClient("client"), 220);
+  }
+}
+
+function renderEconomicGroupClients() {
+  const body = document.getElementById("economic-group-body");
+  body.innerHTML = currentEconomicClients.map((client, index) => `
+    <tr>
+      <td>${escapeHtml(client.nome || "")}</td>
+      <td>${escapeHtml(client.uf || "")}</td>
+      <td>${escapeHtml(client.vendedor || "")}</td>
+      <td><button class="mini-action" type="button" data-economic-remove="${index}">Remover</button></td>
+    </tr>
+  `).join("") || '<tr><td colspan="4">Nenhuma empresa adicionada ao grupo.</td></tr>';
+  body.querySelectorAll("[data-economic-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentEconomicClients.splice(Number(button.dataset.economicRemove), 1);
+      renderEconomicGroupClients();
+    });
+  });
+}
+
+function renderEconomicGroupsSavedList(groups = []) {
+  const body = document.getElementById("economic-groups-saved-body");
+  if (!body) {
+    return;
+  }
+  body.innerHTML = (groups || []).map((group) => {
+    const master = group.master || {};
+    const clients = group.clientes || [];
+    const clientNames = clients.map((client) => `${client.codigo || ""} - ${client.nome || ""}`.trim()).join(", ");
+    return `
+      <tr>
+        <td><strong>${escapeHtml(master.codigo || "")} - ${escapeHtml(master.nome || "")}</strong></td>
+        <td>${escapeHtml(clientNames || "Nenhuma empresa vinculada")}</td>
+        <td>${escapeHtml(formatDateTime(group.updated_at || group.created_at || ""))}</td>
+        <td><button class="mini-action" type="button" data-economic-load="${escapeHtml(master.codigo || "")}">Abrir</button></td>
+      </tr>
+    `;
+  }).join("") || '<tr><td colspan="4">Nenhum grupo econômico salvo.</td></tr>';
+  body.querySelectorAll("[data-economic-load]").forEach((button) => {
+    button.addEventListener("click", () => loadEconomicGroup(button.dataset.economicLoad || ""));
+  });
+}
+
+async function loadEconomicGroup(clientId = "") {
+  const status = document.getElementById("economic-group-status");
+  const payload = await fetchJson(`/api/economic-groups?company=${encodeURIComponent(economicGroupCompany())}&client_id=${encodeURIComponent(clientId)}`);
+  renderEconomicGroupsSavedList(payload.groups || []);
+  if (payload.group) {
+    currentEconomicMaster = payload.group.master;
+    currentEconomicClients = payload.group.clientes || [];
+    document.getElementById("economic-master-search").value = `${currentEconomicMaster.codigo} - ${currentEconomicMaster.nome}`;
+    fillEconomicClient("economic-master", currentEconomicMaster);
+    status.textContent = `GE carregado: ${currentEconomicMaster.nome}.`;
+  } else {
+    currentEconomicClients = [];
+    status.textContent = "Novo GE. Adicione as empresas pertencentes ao mesmo grupo economico.";
+  }
+  renderEconomicGroupClients();
+}
+
+function addEconomicClient() {
+  const status = document.getElementById("economic-group-status");
+  if (!currentEconomicCandidate?.codigo) {
+    status.textContent = "Busque e selecione uma empresa para adicionar.";
+    return;
+  }
+  if (currentEconomicMaster?.codigo && currentEconomicCandidate.codigo === currentEconomicMaster.codigo) {
+    status.textContent = "O cliente Master ja representa o grupo.";
+    return;
+  }
+  if (currentEconomicClients.some((client) => client.codigo === currentEconomicCandidate.codigo)) {
+    status.textContent = "Empresa ja adicionada ao grupo.";
+    return;
+  }
+  currentEconomicClients.push(currentEconomicCandidate);
+  currentEconomicCandidate = null;
+  document.getElementById("economic-client-search").value = "";
+  fillEconomicClient("economic-client", {});
+  renderEconomicGroupClients();
+  status.textContent = "Empresa adicionada. Clique em Salvar para gravar.";
+}
+
+async function saveEconomicGroup() {
+  const status = document.getElementById("economic-group-status");
+  if (!currentEconomicMaster?.codigo) {
+    status.textContent = "Selecione o cliente Master.";
+    return;
+  }
+  status.textContent = "Salvando GE...";
+  try {
+    const payload = await fetchJson("/api/economic-groups", {
+      method: "POST",
+      body: JSON.stringify({
+        company: economicGroupCompany(),
+        master: currentEconomicMaster,
+        clients: currentEconomicClients,
+      }),
+    });
+    status.textContent = payload.message || "GE salvo.";
+    renderEconomicGroupsSavedList(payload.groups || []);
+    clearEconomicGroup();
+    status.textContent = `${payload.message || "GE salvo."} Campos limpos para incluir um novo cliente.`;
+    tableState.clients.loaded = false;
+    loadTable("clients", true);
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
+function clearEconomicGroup() {
+  currentEconomicMaster = null;
+  currentEconomicCandidate = null;
+  currentEconomicClients = [];
+  ["economic-master-search", "economic-client-search"].forEach((id) => { document.getElementById(id).value = ""; });
+  fillEconomicClient("economic-master", {});
+  fillEconomicClient("economic-client", {});
+  renderEconomicGroupClients();
+  document.getElementById("economic-group-status").textContent = "Busque o cliente Master para carregar ou criar um GE.";
+}
+
+function openEconomicGroupPanel(clientId = "") {
+  if (document.getElementById("cadastros-view")) {
+    setView("cadastros");
+    setRoutine("clients");
+  }
+  document.getElementById("economic-group-panel")?.classList.remove("hidden");
+  if (clientId) {
+    loadEconomicGroup(clientId);
+  } else {
+    loadEconomicGroup();
+  }
+  setTimeout(() => document.getElementById("economic-master-search")?.focus(), 50);
+}
+
 async function recalculateStockValue() {
   const button = document.getElementById("stock-recalculate-value-button");
   const panel = document.getElementById("stock-result-panel");
@@ -7577,6 +8954,9 @@ function slowItemsElements() {
 }
 
 function formatSlowItemsValue(key, value) {
+  if ((key === "ultima_saida" || key === "dias_sem_movimento") && (value === null || value === undefined || value === "" || String(value).toLowerCase().includes("nunca"))) {
+    return "Nunca Vendido";
+  }
   if (["quantidade", "valor_unitario", "percentual"].includes(key)) {
     return new Intl.NumberFormat("pt-BR", {
       minimumFractionDigits: 3,
@@ -7715,11 +9095,16 @@ async function loadSlowItems() {
   }
   const company = elements.company.value || "ionlab";
   const query = elements.search.value.trim();
+  const cacheKey = `${company}|${query}`;
+  if (currentSlowItemsCacheKey === cacheKey && elements.body.innerHTML.trim()) {
+    return;
+  }
   elements.status.textContent = "Carregando itens sem giro...";
   elements.loadButton.disabled = true;
   try {
-    const payload = await fetchJson(`/api/slow-items?company=${encodeURIComponent(company)}&q=${encodeURIComponent(query)}&_=${Date.now()}`);
+    const payload = await fetchJson(`/api/slow-items?company=${encodeURIComponent(company)}&q=${encodeURIComponent(query)}`);
     renderSlowItemsTable(payload);
+    currentSlowItemsCacheKey = cacheKey;
   } catch (error) {
     elements.status.textContent = error.message;
     elements.head.innerHTML = "";
@@ -7739,6 +9124,140 @@ function exportSlowItems() {
   const params = new URLSearchParams({
     company: elements.company.value || "ionlab",
     q: elements.search.value.trim(),
+    _: Date.now().toString(),
+  });
+  window.location.href = `/api/export-slow-items?${params.toString()}`;
+}
+
+function vendorSlowItemsElements() {
+  return {
+    search: document.getElementById("vendor-slow-items-search"),
+    status: document.getElementById("vendor-slow-items-status"),
+    head: document.getElementById("vendor-slow-items-table-head"),
+    body: document.getElementById("vendor-slow-items-table-body"),
+    loadButton: document.getElementById("vendor-slow-items-load"),
+    exportButton: document.getElementById("vendor-slow-items-export"),
+  };
+}
+
+function sortVendorSlowItemsRows(rows) {
+  const key = vendorSlowItemsSortKey === "_dias_sem_movimento" ? "dias_sem_movimento" : vendorSlowItemsSortKey;
+  const direction = vendorSlowItemsSortDir === "desc" ? -1 : 1;
+  return [...rows].sort((left, right) => {
+    const leftValue = slowItemSortValue(left, key);
+    const rightValue = slowItemSortValue(right, key);
+    if (typeof leftValue === "number" && typeof rightValue === "number") {
+      return (leftValue - rightValue) * direction;
+    }
+    return String(leftValue).localeCompare(String(rightValue), "pt-BR") * direction;
+  });
+}
+
+function setVendorSlowItemsSort(key) {
+  const normalizedKey = key === "dias_sem_movimento" ? "_dias_sem_movimento" : key;
+  if (vendorSlowItemsSortKey === normalizedKey) {
+    vendorSlowItemsSortDir = vendorSlowItemsSortDir === "asc" ? "desc" : "asc";
+  } else {
+    vendorSlowItemsSortKey = normalizedKey;
+    vendorSlowItemsSortDir = ["quantidade", "valor_unitario", "total", "percentual", "dias_sem_movimento"].includes(key) ? "desc" : "asc";
+  }
+  renderVendorSlowItemsTable({ columns: vendorSlowItemsColumns, rows: vendorSlowItemsRows, total: vendorSlowItemsRows.length });
+}
+
+function renderVendorSlowItemsTable(payload) {
+  const elements = vendorSlowItemsElements();
+  if (!elements.head || !elements.body) {
+    return;
+  }
+  const vendorColumnLabels = {
+    referencia: "Referencia",
+    descricao: "Descricao",
+    agrp: "AGRP",
+    origem: "Origem",
+    quantidade: "Quantidade",
+    ultima_saida: "Ultima Saida",
+    valor_unitario: "Preco de venda",
+  };
+  const vendorColumnOrder = ["referencia", "descricao", "agrp", "origem", "quantidade", "ultima_saida", "valor_unitario"];
+  const sourceColumns = payload.columns || vendorSlowItemsColumns;
+  vendorSlowItemsColumns = vendorColumnOrder.map((key) => {
+    const column = sourceColumns.find((item) => item.key === key) || { key };
+    return { ...column, label: vendorColumnLabels[key] || column.label || key };
+  });
+  vendorSlowItemsRows = sortVendorSlowItemsRows(payload.rows || []);
+  elements.head.innerHTML = `
+    <tr>
+      ${vendorSlowItemsColumns.map((column) => {
+        const active = (vendorSlowItemsSortKey === column.key) || (vendorSlowItemsSortKey === "_dias_sem_movimento" && column.key === "dias_sem_movimento");
+        const arrow = active ? (vendorSlowItemsSortDir === "desc" ? " â†“" : " â†‘") : "";
+        return `<th><button class="table-sort-button ${active ? "active" : ""}" type="button" data-vendor-slow-sort="${escapeHtml(column.key)}">${escapeHtml(column.label)}<span>${arrow}</span></button></th>`;
+      }).join("")}
+    </tr>
+  `;
+  elements.head.querySelectorAll("[data-vendor-slow-sort]").forEach((button) => {
+    button.addEventListener("click", () => setVendorSlowItemsSort(button.dataset.vendorSlowSort));
+  });
+  elements.body.innerHTML = vendorSlowItemsRows.map((row) => `
+    <tr>
+      ${vendorSlowItemsColumns.map((column) => {
+        const valueClass = ["quantidade", "valor_unitario", "total"].includes(column.key) ? "costing-value-cell" : "";
+        return `<td class="${valueClass}">${escapeHtml(formatSlowItemsValue(column.key, row[column.key]))}</td>`;
+      }).join("")}
+    </tr>
+  `).join("");
+  if (!vendorSlowItemsRows.length) {
+    elements.body.innerHTML = `
+      <tr>
+        <td colspan="${Math.max(1, vendorSlowItemsColumns.length)}">Nenhum item sem movimento encontrado.</td>
+      </tr>
+    `;
+  }
+  if (elements.status) {
+    elements.status.textContent = `${formatNumber.format(payload.total || vendorSlowItemsRows.length || 0)} item(ns) em estoque sem venda ha mais de 6 meses.`;
+  }
+}
+
+async function loadVendorSlowItems() {
+  const elements = vendorSlowItemsElements();
+  if (!elements.status) {
+    return;
+  }
+  const company = currentVendorPageCompanyId();
+  const query = elements.search?.value.trim() || "";
+  const cacheKey = `${company}|${query}|180`;
+  if (currentVendorSlowItemsCacheKey === cacheKey && elements.body?.innerHTML.trim()) {
+    return;
+  }
+  elements.status.textContent = "Carregando itens sem movimento...";
+  if (elements.loadButton) {
+    elements.loadButton.disabled = true;
+  }
+  try {
+    const payload = await fetchJson(`/api/slow-items?company=${encodeURIComponent(company)}&q=${encodeURIComponent(query)}&min_days=180`);
+    renderVendorSlowItemsTable(payload);
+    currentVendorSlowItemsCacheKey = cacheKey;
+  } catch (error) {
+    elements.status.textContent = error.message;
+    if (elements.head) elements.head.innerHTML = "";
+    if (elements.body) elements.body.innerHTML = "";
+  } finally {
+    if (elements.loadButton) {
+      elements.loadButton.disabled = false;
+    }
+  }
+}
+
+function scheduleVendorSlowItemsLoad() {
+  clearTimeout(vendorSlowItemsTimer);
+  vendorSlowItemsTimer = setTimeout(loadVendorSlowItems, 300);
+}
+
+function exportVendorSlowItems() {
+  const elements = vendorSlowItemsElements();
+  const params = new URLSearchParams({
+    company: currentVendorPageCompanyId(),
+    q: elements.search?.value.trim() || "",
+    min_days: "180",
     _: Date.now().toString(),
   });
   window.location.href = `/api/export-slow-items?${params.toString()}`;
@@ -7867,6 +9386,10 @@ async function loadMercadoLivreAds() {
   }
   const company = currentMercadoLivreCompany || "onix";
   const query = elements.search.value.trim();
+  const cacheKey = `${company}|${currentMercadoLivreKind}|${currentMercadoLivreImportId}|${query}`;
+  if (currentMercadoLivreAdsCacheKey === cacheKey && elements.body.innerHTML.trim()) {
+    return;
+  }
   elements.status.textContent = `Carregando ${mercadoLivreKindLabel(currentMercadoLivreKind).toLowerCase()}...`;
   try {
     const payload = await fetchJson(`/api/mercado-livre/ads?company=${encodeURIComponent(company)}&type=${encodeURIComponent(currentMercadoLivreKind)}&import_id=${encodeURIComponent(currentMercadoLivreImportId)}&q=${encodeURIComponent(query)}&limit=300`);
@@ -7890,6 +9413,7 @@ async function loadMercadoLivreAds() {
     if (elements.exportSummaryButton) {
       elements.exportSummaryButton.classList.toggle("hidden", currentMercadoLivreKind !== "resumo");
     }
+    currentMercadoLivreAdsCacheKey = cacheKey;
   } catch (error) {
     elements.status.textContent = error.message;
     elements.head.innerHTML = "";
@@ -7927,6 +9451,10 @@ async function loadMercadoLivreSales() {
   }
   const company = elements.company.value || "onix";
   const query = elements.search.value.trim();
+  const cacheKey = `${company}|${query}`;
+  if (currentMercadoLivreSalesCacheKey === cacheKey && elements.body.innerHTML.trim()) {
+    return;
+  }
   elements.status.textContent = "Carregando vendas...";
   try {
     const payload = await fetchJson(`/api/mercado-livre/sales?company=${encodeURIComponent(company)}&q=${encodeURIComponent(query)}&limit=300`);
@@ -7944,6 +9472,7 @@ async function loadMercadoLivreSales() {
       elements.body.innerHTML = `<tr><td colspan="${Math.max(1, payload.columns.length)}">Nenhuma venda encontrada.</td></tr>`;
     }
     elements.status.textContent = `${payload.empresa}: exibindo ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_filtrado)} encontrada(s). Base com ${formatNumber.format(payload.total_registros)} venda(s).`;
+    currentMercadoLivreSalesCacheKey = cacheKey;
   } catch (error) {
     elements.status.textContent = error.message;
     elements.head.innerHTML = "";
@@ -7977,6 +9506,8 @@ function mercadoLivreDashboardElements() {
   return {
     company: document.getElementById("ml-dashboard-company"),
     year: document.getElementById("ml-dashboard-year"),
+    month: document.getElementById("ml-dashboard-month"),
+    product: document.getElementById("ml-dashboard-product"),
     status: document.getElementById("ml-dashboard-status"),
     chart: document.getElementById("ml-dashboard-chart"),
   };
@@ -7998,6 +9529,50 @@ function updateMercadoLivreDashboardYears(payload, selectedYear) {
     : "todos";
 }
 
+function updateMercadoLivreDashboardMonths(selectedMonth) {
+  const monthSelect = document.getElementById("ml-dashboard-month");
+  if (!monthSelect) {
+    return;
+  }
+  const currentValue = selectedMonth || monthSelect.value || "todos";
+  monthSelect.innerHTML = `
+    <option value="todos">Todos</option>
+    ${Array.from({ length: 12 }, (_, index) => {
+      const month = index + 1;
+      return `<option value="${month}">${monthLabel(month)}</option>`;
+    }).join("")}
+  `;
+  monthSelect.value = [...monthSelect.options].some((option) => option.value === currentValue)
+    ? currentValue
+    : "todos";
+}
+
+function updateMercadoLivreDashboardProducts(payload, selectedProduct = "") {
+  const productSelect = document.getElementById("ml-dashboard-product");
+  if (!productSelect) {
+    return;
+  }
+  const currentValue = selectedProduct || productSelect.value || "";
+  const products = payload.products || [];
+  productSelect.innerHTML = `
+    <option value="">Todos os produtos</option>
+    ${products.map((product) => `
+      <option value="${escapeHtml(product.sku || "")}">
+        ${escapeHtml(product.label || product.sku || "Sem SKU")} - ${formatNumber.format(product.sales_count || 0)} venda(s)
+      </option>
+    `).join("")}
+  `;
+  productSelect.value = [...productSelect.options].some((option) => option.value === currentValue)
+    ? currentValue
+    : "";
+}
+
+function formatMercadoLivreDashboardValue(payload, value) {
+  return payload.chart?.kind === "currency"
+    ? formatCurrency2.format(value || 0)
+    : formatNumber.format(Math.round(value || 0));
+}
+
 function renderMercadoLivreDashboardChart(payload) {
   const elements = mercadoLivreDashboardElements();
   const points = payload.chart?.points || [];
@@ -8011,16 +9586,16 @@ function renderMercadoLivreDashboardChart(payload) {
   elements.chart.innerHTML = `
     <div class="ml-chart-header">
       <div>
-        <p class="eyebrow">Vendas</p>
+        <p class="eyebrow">Mercado Livre</p>
         <h3>${escapeHtml(payload.chart?.title || "Vendas")} - ${escapeHtml(payload.empresa || "")}</h3>
-        <p class="muted">Valor liquido: produtos + taxas, tarifas, envios, cancelamentos e reembolsos.</p>
+        <p class="muted">${escapeHtml(payload.chart?.subtitle || "")}</p>
       </div>
-      <strong>${formatCurrency2.format(total)}</strong>
+      <strong>${escapeHtml(formatMercadoLivreDashboardValue(payload, total))}</strong>
     </div>
     <div class="ml-column-chart">
       <div class="ml-chart-scale" aria-hidden="true">
         ${scaleLabels.map((label) => `
-          <span style="top:${label.top}">${formatCurrency.format(label.value)}</span>
+          <span style="top:${label.top}">${escapeHtml(formatMercadoLivreDashboardValue(payload, label.value))}</span>
         `).join("")}
       </div>
       <div class="ml-chart-plot">
@@ -8033,7 +9608,7 @@ function renderMercadoLivreDashboardChart(payload) {
               <div class="ml-chart-bar-item">
                 <div class="ml-chart-bar-wrap">
                   <div class="ml-chart-bar" style="height:${height}%">
-                    <span>${value > 0 ? escapeHtml(formatCurrency2.format(value)) : ""}</span>
+                    <span>${value > 0 ? escapeHtml(formatMercadoLivreDashboardValue(payload, value)) : ""}</span>
                   </div>
                 </div>
                 <strong>${escapeHtml(point.label || "")}</strong>
@@ -8046,20 +9621,75 @@ function renderMercadoLivreDashboardChart(payload) {
   `;
 }
 
+function renderMercadoLivrePfPjChart(payload) {
+  const elements = mercadoLivreDashboardElements();
+  const points = payload.chart?.points || [];
+  const maxValue = Math.max(...points.flatMap((point) => [Number(point.pf) || 0, Number(point.pj) || 0]), 1);
+  const total = Number(payload.chart?.total || 0);
+  elements.chart.innerHTML = `
+    <div class="ml-chart-header">
+      <div>
+        <p class="eyebrow">Mercado Livre</p>
+        <h3>PF/PJ - ${escapeHtml(payload.empresa || "")}</h3>
+        <p class="muted">${escapeHtml(payload.chart?.subtitle || "Quantidade por tipo de documento")}</p>
+      </div>
+      <strong>${formatNumber.format(total)}</strong>
+    </div>
+    <div class="ml-pfpj-chart">
+      ${points.map((point) => {
+        const pf = Number(point.pf) || 0;
+        const pj = Number(point.pj) || 0;
+        const pfHeight = pf > 0 ? Math.max(3, (pf / maxValue) * 100) : 1;
+        const pjHeight = pj > 0 ? Math.max(3, (pj / maxValue) * 100) : 1;
+        return `
+          <div class="ml-pfpj-group">
+            <div class="ml-pfpj-bars">
+              <div class="ml-pfpj-bar ml-pfpj-pj" style="height:${pjHeight}%"><span>${pj ? formatNumber.format(pj) : ""}</span></div>
+              <div class="ml-pfpj-bar ml-pfpj-pf" style="height:${pfHeight}%"><span>${pf ? formatNumber.format(pf) : ""}</span></div>
+            </div>
+            <strong>${escapeHtml(point.label || "")}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
+    <div class="ml-chart-legend">
+      <span><i class="ml-pfpj-pj"></i>Pessoa Juridica</span>
+      <span><i class="ml-pfpj-pf"></i>Pessoa Fisica</span>
+    </div>
+  `;
+}
+
 async function loadMercadoLivreDashboard() {
   const elements = mercadoLivreDashboardElements();
-  if (!elements.company || !elements.year || !elements.chart) {
+  if (!elements.company || !elements.year || !elements.month || !elements.chart) {
     return;
   }
   const company = elements.company.value || "agrupado";
   const year = elements.year.value || "todos";
+  const month = elements.month.value || "todos";
+  const product = elements.product?.value || "";
+  const chart = currentMercadoLivreDashboardChart || "sales-value";
+  const cacheKey = `${company}|${year}|${month}|${chart}|${product}`;
+  document.querySelectorAll("[data-ml-dashboard-chart]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mlDashboardChart === chart);
+  });
+  if (currentMercadoLivreDashboardCacheKey === cacheKey && elements.chart.innerHTML.trim()) {
+    return;
+  }
   elements.status.textContent = "Carregando dashboard...";
   elements.chart.innerHTML = "";
   try {
-    const payload = await fetchJson(`/api/mercado-livre/sales-dashboard?company=${encodeURIComponent(company)}&year=${encodeURIComponent(year)}`);
+    const payload = await fetchJson(`/api/mercado-livre/sales-dashboard?company=${encodeURIComponent(company)}&year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}&chart=${encodeURIComponent(chart)}&product=${encodeURIComponent(product)}`);
     updateMercadoLivreDashboardYears(payload, year);
-    renderMercadoLivreDashboardChart(payload);
+    updateMercadoLivreDashboardMonths(month);
+    updateMercadoLivreDashboardProducts(payload, product);
+    if (payload.chart_type === "pf-pj") {
+      renderMercadoLivrePfPjChart(payload);
+    } else {
+      renderMercadoLivreDashboardChart(payload);
+    }
     elements.status.textContent = `${payload.empresa}: ${formatNumber.format(payload.linhas_consideradas || 0)} venda(s) consideradas.`;
+    currentMercadoLivreDashboardCacheKey = cacheKey;
   } catch (error) {
     elements.status.textContent = error.message;
     elements.chart.innerHTML = "";
@@ -8081,6 +9711,9 @@ async function loadMercadoLivreGeneral() {
     return;
   }
   const query = elements.search.value.trim();
+  if (currentMercadoLivreGeneralCacheKey === query && elements.body.innerHTML.trim()) {
+    return;
+  }
   elements.status.textContent = "Carregando gestao geral...";
   try {
     const payload = await fetchJson(`/api/mercado-livre/general?q=${encodeURIComponent(query)}&limit=300`);
@@ -8098,6 +9731,7 @@ async function loadMercadoLivreGeneral() {
       elements.body.innerHTML = `<tr><td colspan="${Math.max(1, payload.columns.length)}">Nenhum SKU encontrado.</td></tr>`;
     }
     elements.status.textContent = `Gestao Geral: exibindo ${formatNumber.format(payload.rows.length)} de ${formatNumber.format(payload.total_filtrado)} encontrado(s). Base com ${formatNumber.format(payload.total_registros)} SKU(s).`;
+    currentMercadoLivreGeneralCacheKey = query;
   } catch (error) {
     elements.status.textContent = error.message;
     elements.head.innerHTML = "";
@@ -8254,6 +9888,192 @@ function exportSalesMissingCost() {
   window.location.href = `/api/export-sales-missing-cost?${params.toString()}`;
 }
 
+let importProgressHideTimer = null;
+let autoLoadingProgressCounter = 0;
+const autoLoadingProgressTickets = new Map();
+
+function setImportProgress(state, title, message) {
+  const overlay = document.getElementById("import-progress-overlay");
+  const titleElement = document.getElementById("import-progress-title");
+  const messageElement = document.getElementById("import-progress-message");
+  if (!overlay || !titleElement || !messageElement) {
+    return;
+  }
+  clearTimeout(importProgressHideTimer);
+  overlay.classList.remove("hidden", "done", "error");
+  if (state) {
+    overlay.classList.add(state);
+  }
+  titleElement.textContent = title;
+  messageElement.textContent = message;
+}
+
+function showImportProgress(message = "Enviando arquivo e processando dados...") {
+  setImportProgress("", "Importando arquivo", message);
+}
+
+function hideProgressOverlayNow() {
+  clearTimeout(importProgressHideTimer);
+  autoLoadingProgressTickets.forEach((item) => clearTimeout(item.timer));
+  autoLoadingProgressTickets.clear();
+  autoLoadingProgressCounter = 0;
+  const overlay = document.getElementById("import-progress-overlay");
+  if (overlay) {
+    overlay.classList.add("hidden");
+    overlay.classList.remove("done", "error");
+  }
+}
+
+function waitForNextPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+function beginAutoLoadingProgress(message = "Carregando dados...") {
+  const ticket = `load_${Date.now()}_${Math.random()}`;
+  const overlay = document.getElementById("import-progress-overlay");
+  const alreadyVisible = overlay && !overlay.classList.contains("hidden");
+  const timer = setTimeout(() => {
+    if (alreadyVisible) {
+      return;
+    }
+    autoLoadingProgressCounter += 1;
+    setImportProgress("", "Carregando", message);
+  }, 2500);
+  autoLoadingProgressTickets.set(ticket, { timer, shown: false, alreadyVisible });
+  return ticket;
+}
+
+function finishAutoLoadingProgress(ticket) {
+  const item = autoLoadingProgressTickets.get(ticket);
+  if (!item) {
+    return;
+  }
+  clearTimeout(item.timer);
+  autoLoadingProgressTickets.delete(ticket);
+  const overlay = document.getElementById("import-progress-overlay");
+  if (item.alreadyVisible || !overlay || overlay.classList.contains("hidden")) {
+    return;
+  }
+  setImportProgress("done", "Carregamento finalizado", "Carregamento finalizado.");
+  importProgressHideTimer = setTimeout(() => {
+    document.getElementById("import-progress-overlay")?.classList.add("hidden");
+  }, 1200);
+}
+
+function failAutoLoadingProgress(ticket, message = "Nao foi possivel concluir.") {
+  const item = autoLoadingProgressTickets.get(ticket);
+  if (!item) {
+    return;
+  }
+  clearTimeout(item.timer);
+  autoLoadingProgressTickets.delete(ticket);
+  const overlay = document.getElementById("import-progress-overlay");
+  if (item.alreadyVisible || !overlay || overlay.classList.contains("hidden")) {
+    return;
+  }
+  setImportProgress("error", "Carregamento nao concluido", message);
+  importProgressHideTimer = setTimeout(() => {
+    document.getElementById("import-progress-overlay")?.classList.add("hidden");
+  }, 3600);
+}
+
+function finishImportProgress(message = "Importação Finalizada") {
+  setImportProgress("done", "Importação Finalizada", message);
+  importProgressHideTimer = setTimeout(() => {
+    document.getElementById("import-progress-overlay")?.classList.add("hidden");
+  }, 2800);
+}
+
+function failImportProgress(message = "Nao foi possivel importar.") {
+  setImportProgress("error", "Importação não concluída", message);
+  importProgressHideTimer = setTimeout(() => {
+    document.getElementById("import-progress-overlay")?.classList.add("hidden");
+  }, 5200);
+}
+
+function formatImportMemoryDate(value) {
+  if (!value) {
+    return "";
+  }
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value).replace("T", " ");
+  }
+  return parsed.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function setupImportMemoryCards() {
+  importMemoryConfigs.forEach((config) => {
+    const form = document.getElementById(config.formId);
+    if (!form || form.querySelector(".import-memory-card")) {
+      return;
+    }
+    const card = document.createElement("div");
+    card.className = "import-memory-card";
+    card.dataset.importMemoryType = config.type;
+    card.innerHTML = `
+      <span>Ultima importacao</span>
+      <strong id="${config.formId}-memory-date">Carregando...</strong>
+      <small id="${config.formId}-memory-file">${escapeHtml(config.label)}</small>
+    `;
+    form.appendChild(card);
+  });
+}
+
+async function loadImportMemory(config) {
+  const form = document.getElementById(config.formId);
+  const dateElement = document.getElementById(`${config.formId}-memory-date`);
+  const fileElement = document.getElementById(`${config.formId}-memory-file`);
+  const company = form?.querySelector('[name="company"]')?.value || "ionlab";
+  if (!form || !dateElement || !fileElement) {
+    return;
+  }
+  dateElement.textContent = "Carregando...";
+  fileElement.textContent = config.label;
+  try {
+    const payload = await fetchJson(`/api/import-status?company=${encodeURIComponent(company)}&type=${encodeURIComponent(config.type)}&_=${Date.now()}`, { force: true });
+    if (payload.importado_em) {
+      dateElement.textContent = formatImportMemoryDate(payload.importado_em);
+      fileElement.textContent = payload.arquivo ? `${config.label} - ${payload.arquivo}` : config.label;
+    } else {
+      dateElement.textContent = "Sem importacao registrada";
+      fileElement.textContent = config.label;
+    }
+  } catch (error) {
+    dateElement.textContent = "Nao foi possivel carregar";
+    fileElement.textContent = error.message;
+  }
+}
+
+function loadAllImportMemory() {
+  setupImportMemoryCards();
+  importMemoryConfigs.forEach((config) => loadImportMemory(config));
+}
+
+function bindImportMemoryCompanyChanges() {
+  importMemoryConfigs.forEach((config) => {
+    const form = document.getElementById(config.formId);
+    const companySelect = form?.querySelector('[name="company"]');
+    if (!companySelect || companySelect.dataset.importMemoryBound === "1") {
+      return;
+    }
+    companySelect.dataset.importMemoryBound = "1";
+    companySelect.addEventListener("change", () => loadImportMemory(config));
+  });
+}
+
+function importMemoryConfigByType(type) {
+  return importMemoryConfigs.find((config) => config.type === type);
+}
+
 async function handleImport(event, options) {
   event.preventDefault();
 
@@ -8268,20 +10088,30 @@ async function handleImport(event, options) {
     <h3>Processando arquivo</h3>
     <p class="muted">A importacao esta conferindo duplicidades antes de gravar.</p>
   `;
+  showImportProgress("Importacao em andamento. Aguarde ate a conclusao.");
 
   try {
     const summary = await fetchJson(options.url, {
       method: "POST",
       body: new FormData(form),
     });
+    showImportProgress("Arquivo recebido. Atualizando os dados da tela...");
     await options.render(summary);
     await renderStats();
+    if (options.importType) {
+      const memoryConfig = importMemoryConfigByType(options.importType);
+      if (memoryConfig) {
+        await loadImportMemory(memoryConfig);
+      }
+    }
+    finishImportProgress("Importação Finalizada");
   } catch (error) {
     panel.innerHTML = `
       <p class="eyebrow">Resultado</p>
       <h3>Nao foi possivel importar</h3>
       <p class="muted">${error.message}</p>
     `;
+    failImportProgress(error.message || "Nao foi possivel importar.");
   } finally {
     button.disabled = false;
     button.textContent = options.defaultButton;
@@ -8345,7 +10175,7 @@ function repairReconstructedLayout() {
   if (!vendorView || !insertBefore) {
     return;
   }
-  ["vendor-workspace-quick-consult", "quote-panel-anchor", "vendor-workspace-quotes", "vendor-workspace-sent-quotes"].forEach((id) => {
+  ["vendor-workspace-quick-consult", "vendor-workspace-slow-items", "quote-panel-anchor", "vendor-workspace-quotes", "vendor-workspace-sent-quotes"].forEach((id) => {
     const node = document.getElementById(id);
     if (node && node.parentElement !== vendorView) {
       vendorView.insertBefore(node, insertBefore);
@@ -8508,10 +10338,15 @@ async function loadUsers() {
   if (!elements.search) {
     return;
   }
+  const cacheKey = elements.search.value.trim();
+  if (currentUsersCacheKey === cacheKey && currentUsersPayload && elements.body.innerHTML.trim()) {
+    return;
+  }
   elements.status.textContent = "Carregando usuarios...";
   try {
     const payload = await fetchJson(`/api/users?q=${encodeURIComponent(elements.search.value.trim())}`);
     currentUsersPayload = payload;
+    currentUsersCacheKey = cacheKey;
     currentUserCatalog = { groups: payload.groups || currentUserCatalog.groups || [], levels: payload.levels || currentUserCatalog.levels || [] };
     elements.head.innerHTML = `<tr>${payload.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}<th>Acao</th></tr>`;
     elements.body.innerHTML = payload.rows.map((user) => `
@@ -8638,9 +10473,13 @@ async function loadFollowUpOptions() {
   if (!elements.company) {
     return null;
   }
-  elements.status.textContent = "Carregando filtros do Follow-UP...";
   const company = elements.company.value || "ionlab";
-  const payload = await fetchJson(`/api/follow-up/options?company=${encodeURIComponent(company)}`, { force: true });
+  if (currentFollowUpOptions?.empresa_id === company || currentFollowUpOptions?.company === company) {
+    renderFollowUpOptions(currentFollowUpOptions);
+    return currentFollowUpOptions;
+  }
+  elements.status.textContent = "Carregando filtros do Follow-UP...";
+  const payload = await fetchJson(`/api/follow-up/options?company=${encodeURIComponent(company)}`);
   currentFollowUpOptions = payload;
   renderFollowUpOptions(payload);
   elements.status.textContent = `${payload.empresa}: ${formatNumber.format(payload.total || 0)} atendimento(s) salvo(s) na base.`;
@@ -8671,15 +10510,21 @@ function exportFollowUp() {
   window.location.href = `/api/follow-up/export-xlsx?${params.toString()}`;
 }
 
-async function loadFollowUp() {
+async function loadFollowUp(force = false) {
   const elements = followUpElements();
   if (!elements.company) {
     return;
   }
+  const params = followUpParams();
+  const cacheKey = params.toString();
+  if (!force && currentFollowUpCacheKey === cacheKey && currentFollowUpPayload && elements.body.innerHTML.trim()) {
+    return;
+  }
   elements.status.textContent = "Buscando atendimentos...";
   try {
-    const payload = await fetchJson(`/api/follow-up?${followUpParams().toString()}`, { force: true });
+    const payload = await fetchJson(`/api/follow-up?${params.toString()}`, { force });
     currentFollowUpPayload = payload;
+    currentFollowUpCacheKey = cacheKey;
     renderFollowUp(payload);
     elements.status.textContent = `${payload.empresa}: exibindo ${formatNumber.format(payload.rows?.length || 0)} de ${formatNumber.format(payload.total || 0)} atendimento(s) encontrado(s).`;
   } catch (error) {
@@ -8819,6 +10664,14 @@ async function init() {
   document.getElementById("ml-sales-search").addEventListener("input", scheduleMercadoLivreSalesLoad);
   document.getElementById("ml-dashboard-company").addEventListener("change", loadMercadoLivreDashboard);
   document.getElementById("ml-dashboard-year").addEventListener("change", loadMercadoLivreDashboard);
+  document.getElementById("ml-dashboard-month")?.addEventListener("change", loadMercadoLivreDashboard);
+  document.getElementById("ml-dashboard-product")?.addEventListener("change", loadMercadoLivreDashboard);
+  document.querySelectorAll("[data-ml-dashboard-chart]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentMercadoLivreDashboardChart = button.dataset.mlDashboardChart || "sales-value";
+      loadMercadoLivreDashboard();
+    });
+  });
   document.getElementById("ml-general-search").addEventListener("input", scheduleMercadoLivreGeneralLoad);
   document.getElementById("ml-general-export-button").addEventListener("click", exportMercadoLivreGeneral);
 
@@ -8876,6 +10729,9 @@ async function init() {
   });
   document.getElementById("quote-client-search").addEventListener("input", scheduleQuoteClientSearch);
   document.getElementById("quick-consult-search").addEventListener("input", scheduleQuickConsultSearch);
+  document.getElementById("vendor-slow-items-search")?.addEventListener("input", scheduleVendorSlowItemsLoad);
+  document.getElementById("vendor-slow-items-load")?.addEventListener("click", loadVendorSlowItems);
+  document.getElementById("vendor-slow-items-export")?.addEventListener("click", exportVendorSlowItems);
   document.getElementById("quote-saved-search").addEventListener("input", scheduleSavedQuoteSearch);
   document.getElementById("order-saved-search").addEventListener("input", scheduleSavedOrderSearch);
   document.getElementById("quote-saved-open").addEventListener("click", () => openSavedCommercialDocumentFromSearch("quote"));
@@ -8918,6 +10774,8 @@ async function init() {
   document.getElementById("vendor-contact-report-load").addEventListener("click", loadVendorContactReport);
   document.getElementById("vendor-daily-contact-month")?.addEventListener("change", loadVendorDailyContactsChart);
   document.getElementById("vendor-page-goals-month").addEventListener("change", renderVendorPageGoals);
+  document.getElementById("vendor-page-goals-print")?.addEventListener("click", printVendorGoalsReport);
+  document.getElementById("vendor-about-goal-refresh")?.addEventListener("click", () => loadVendorAboutGoal(true));
   document.querySelectorAll("[data-vendor-client-status]").forEach((button) => {
     button.addEventListener("click", () => setVendorClientStatus(button.dataset.vendorClientStatus));
   });
@@ -8941,14 +10799,24 @@ async function init() {
     await loadFollowUpOptions();
     await loadFollowUp();
   });
-  document.getElementById("follow-up-load").addEventListener("click", loadFollowUp);
+  document.getElementById("follow-up-load").addEventListener("click", () => loadFollowUp(true));
   document.getElementById("follow-up-export").addEventListener("click", exportFollowUp);
   ["follow-up-vendor", "follow-up-region", "follow-up-uf", "follow-up-city", "follow-up-start", "follow-up-end", "follow-up-probability", "follow-up-scheduled"].forEach((id) => {
-    document.getElementById(id).addEventListener("change", loadFollowUp);
+    document.getElementById(id).addEventListener("change", () => loadFollowUp(true));
   });
   document.getElementById("follow-up-client").addEventListener("input", scheduleFollowUpLoad);
   document.getElementById("clients-table-export-button").addEventListener("click", exportClientsTable);
+  document.getElementById("clients-who-button")?.addEventListener("click", () => openEconomicGroupPanel());
+  document.getElementById("clients-who-cad-button")?.addEventListener("click", () => openEconomicGroupPanel());
+  document.getElementById("economic-group-close")?.addEventListener("click", () => document.getElementById("economic-group-panel")?.classList.add("hidden"));
+  document.getElementById("economic-master-search")?.addEventListener("input", () => scheduleEconomicSearch("master"));
+  document.getElementById("economic-client-search")?.addEventListener("input", () => scheduleEconomicSearch("client"));
+  document.getElementById("economic-client-add")?.addEventListener("click", addEconomicClient);
+  document.getElementById("economic-group-save")?.addEventListener("click", saveEconomicGroup);
+  document.getElementById("economic-group-clear")?.addEventListener("click", clearEconomicGroup);
   document.getElementById("stock-table-export-button").addEventListener("click", exportStockTable);
+  document.getElementById("stock-bonus-save-button")?.addEventListener("click", saveStockBonuses);
+  document.getElementById("stock-default-bonus-update-button")?.addEventListener("click", updateDefaultStockBonusByDays);
   document.getElementById("in-transit-table-export-button").addEventListener("click", exportInTransitTable);
   document.getElementById("prices-table-export-button").addEventListener("click", exportPriceTable);
   document.getElementById("products-table-export-button").addEventListener("click", exportProductsTable);
@@ -8995,6 +10863,18 @@ async function init() {
   document.getElementById("regions-company").addEventListener("change", loadRegions);
   document.getElementById("regions-vendor-filter").addEventListener("change", (event) => {
     currentRegionsVendorFilter = event.currentTarget.value || "all";
+    renderRegions();
+  });
+  document.getElementById("regions-uf-filter").addEventListener("change", () => {
+    updateRegionsLocationFilters();
+    renderRegions();
+  });
+  document.getElementById("regions-city-filter").addEventListener("change", () => {
+    updateRegionsLocationFilters();
+    renderRegions();
+  });
+  document.getElementById("regions-ddd-filter").addEventListener("change", () => {
+    updateRegionsLocationFilters();
     renderRegions();
   });
   document.getElementById("vendors-company").addEventListener("change", () => {
@@ -9087,6 +10967,7 @@ async function init() {
 
   document.getElementById("sales-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-sales",
+    importType: "vendas",
     panelId: "sales-result-panel",
     defaultButton: "Importar notas",
     loadingButton: "Importando...",
@@ -9098,6 +10979,7 @@ async function init() {
 
   document.getElementById("clients-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-clients",
+    importType: "clientes",
     panelId: "clients-result-panel",
     defaultButton: "Importar clientes",
     loadingButton: "Importando...",
@@ -9106,6 +10988,7 @@ async function init() {
 
   document.getElementById("stock-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-stock",
+    importType: "estoque",
     panelId: "stock-result-panel",
     defaultButton: "Importar estoque",
     loadingButton: "Importando...",
@@ -9117,6 +11000,7 @@ async function init() {
 
   document.getElementById("in-transit-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-in-transit",
+    importType: "em_transito",
     panelId: "in-transit-result-panel",
     defaultButton: "Importar Em Transito",
     loadingButton: "Importando...",
@@ -9126,6 +11010,7 @@ async function init() {
 
   document.getElementById("prices-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-prices",
+    importType: "tabela_precos",
     panelId: "prices-import-result-panel",
     defaultButton: "Importar tabela de preços",
     loadingButton: "Importando...",
@@ -9133,6 +11018,7 @@ async function init() {
   }));
   document.getElementById("prices-ipi-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-prices-ipi",
+    importType: "tabela_precos_ipi",
     panelId: "prices-import-result-panel",
     defaultButton: "Atualizar IPI",
     loadingButton: "Atualizando IPI...",
@@ -9140,6 +11026,7 @@ async function init() {
   }));
   document.getElementById("products-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-products",
+    importType: "cadastro_produtos",
     panelId: "products-result-panel",
     defaultButton: "Importar produtos",
     loadingButton: "Importando...",
@@ -9165,6 +11052,7 @@ async function init() {
 
   document.getElementById("costing-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-costing",
+    importType: "custeio",
     panelId: "costing-result-panel",
     defaultButton: "Importar custeio",
     loadingButton: "Importando...",
@@ -9175,6 +11063,7 @@ async function init() {
 
   document.getElementById("costing-fabricated-import-form").addEventListener("submit", (event) => handleImport(event, {
     url: "/api/import-costing-fabricated",
+    importType: "custeio_fabricado",
     panelId: "costing-fabricated-result-panel",
     defaultButton: "Importar custeio fabricado",
     loadingButton: "Importando...",
@@ -9182,10 +11071,145 @@ async function init() {
   }));
   document.getElementById("costing-fabricated-recalculate-button").addEventListener("click", recalculateCostingFabricated);
   document.getElementById("costing-fabricated-export-button").addEventListener("click", exportCostingFabricated);
+  setupImportMemoryCards();
+  bindImportMemoryCompanyChanges();
+  loadAllImportMemory();
   showAppScreen();
 }
 
+
+function closeGoalHelpPopovers() {
+  document.querySelectorAll(".goal-help-popover").forEach((popover) => popover.remove());
+  document.querySelectorAll(".goal-help-icon.active").forEach((button) => {
+    button.classList.remove("active");
+    button.setAttribute("aria-expanded", "false");
+  });
+}
+
+function toggleGoalHelpPopover(button) {
+  const text = button?.dataset.goalHelp || button?.getAttribute("aria-label") || "";
+  if (!button || !text) {
+    return;
+  }
+  const existing = button.parentElement?.querySelector(".goal-help-popover");
+  if (existing) {
+    closeGoalHelpPopovers();
+    return;
+  }
+  closeGoalHelpPopovers();
+  const popover = document.createElement("span");
+  popover.className = "goal-help-popover";
+  popover.textContent = text;
+  button.insertAdjacentElement("afterend", popover);
+  button.classList.add("active");
+  button.setAttribute("aria-expanded", "true");
+}
+
+function handleGoalHelpClick(event) {
+  const button = event.target.closest(".goal-help-icon[data-goal-help]");
+  if (button) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleGoalHelpPopover(button);
+    return;
+  }
+  if (!event.target.closest(".goal-help-popover")) {
+    closeGoalHelpPopovers();
+  }
+}
+
+function closeCommissionMemoryModal() {
+  document.getElementById("commission-memory-modal")?.remove();
+}
+
+function formatCommissionMemoryTableValue(value, type = "text") {
+  if (type === "currency") {
+    return formatCurrency2.format(Number(value || 0));
+  }
+  if (type === "percent") {
+    return `${formatPercent2.format(Number(value || 0))}%`;
+  }
+  if (type === "number") {
+    return formatNumber2.format(Number(value || 0));
+  }
+  return String(value ?? "");
+}
+
+function renderCommissionMemoryTable(table) {
+  const rows = Array.isArray(table?.rows) ? table.rows : [];
+  const columns = Array.isArray(table?.columns) ? table.columns : [];
+  if (!rows.length || !columns.length) {
+    return "";
+  }
+  return `
+    <div class="commission-memory-table-block">
+      <h4>${escapeHtml(table.title || "Detalhamento")}</h4>
+      <div class="table-scroll compact">
+        <table class="commission-memory-table">
+          <thead>
+            <tr>${columns.map((column) => `<th>${escapeHtml(column.label || column.key || "")}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                ${columns.map((column) => `<td>${escapeHtml(formatCommissionMemoryTableValue(row[column.key], column.type || "text"))}</td>`).join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function openCommissionMemoryModal(memoryId) {
+  const memory = currentVendorCommissionMemory.get(memoryId);
+  if (!memory) {
+    return;
+  }
+  closeCommissionMemoryModal();
+  const modal = document.createElement("div");
+  modal.className = "commission-memory-modal";
+  modal.id = "commission-memory-modal";
+  modal.innerHTML = `
+    <section class="commission-memory-panel" role="dialog" aria-modal="true" aria-labelledby="commission-memory-title">
+      <header>
+        <div>
+          <p class="eyebrow">Memoria de calculo</p>
+          <h3 id="commission-memory-title">${escapeHtml(memory.label || "Comissao")}</h3>
+        </div>
+        <button type="button" class="commission-memory-close" aria-label="Fechar">×</button>
+      </header>
+      <div class="commission-memory-result">
+        <span>Comissao apurada</span>
+        <strong>${escapeHtml(formatCommissionCellValue(memory.value))}</strong>
+      </div>
+      <ol>
+        ${(memory.details || []).map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
+      </ol>
+      ${renderCommissionMemoryTable(memory.table)}
+    </section>
+  `;
+  document.body.appendChild(modal);
+}
+
+function handleCommissionMemoryClick(event) {
+  const button = event.target.closest(".commission-memory-button[data-commission-memory]");
+  if (button) {
+    event.preventDefault();
+    openCommissionMemoryModal(button.dataset.commissionMemory);
+    return;
+  }
+  if (event.target.closest(".commission-memory-close") || event.target.id === "commission-memory-modal") {
+    closeCommissionMemoryModal();
+  }
+}
+
+document.addEventListener("click", handleGoalHelpClick);
+document.addEventListener("click", handleCommissionMemoryClick);
 document.addEventListener("click", handleGlobalNavigationClick);
 
 init();
+
+
 

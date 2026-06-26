@@ -149,6 +149,7 @@ STOCK_TABLE_COLUMNS = [
     ("Total", "Total"),
     ("Ultima Saida", "Ultima Saida"),
     ("Dias sem movimento", "Dias sem movimento"),
+    ("Bonus", "Bonus"),
     ("C.Fiscal", "C.Fiscal"),
     ("Id.Estoque", "Id.Estoque"),
     ("Local", "Local"),
@@ -294,8 +295,16 @@ def clients_file(company_id: str) -> Path:
     return company_dir(company_id) / "clientes.json"
 
 
+def economic_groups_file(company_id: str) -> Path:
+    return company_dir(company_id) / "grupos_economicos.json"
+
+
 def stock_file(company_id: str) -> Path:
     return company_dir(company_id) / "estoque.json"
+
+
+def stock_bonus_file(company_id: str) -> Path:
+    return company_dir(company_id) / "estoque_bonus.json"
 
 
 def in_transit_file(company_id: str) -> Path:
@@ -370,6 +379,20 @@ def vendor_monthly_items_file(company_id: str) -> Path:
 
 def vendor_day_by_day_file(company_id: str) -> Path:
     return company_dir(company_id) / "day_by_day_vendedores.json"
+
+
+def vendor_day_by_day_operational_file(company_id: str) -> Path:
+    return company_dir(company_id) / "day_by_day_vendedores_operacional.json"
+
+
+def vendor_day_by_day_queue_dir(company_id: str) -> Path:
+    return company_dir(company_id) / "day_by_day_filas"
+
+
+def vendor_day_by_day_queue_file(company_id: str, day_key: str, vendor_id_value: str) -> Path:
+    safe_vendor = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(vendor_id_value or "vendedor"))
+    safe_day = re.sub(r"[^0-9-]+", "_", str(day_key or date.today().isoformat()))
+    return vendor_day_by_day_queue_dir(company_id) / f"{safe_day}_{safe_vendor}.json"
 
 
 def region_assignments_file(company_id: str) -> Path:
@@ -600,6 +623,36 @@ def save_json(path: Path, payload):
     SHARED_PAYLOAD_CACHE.clear()
 
 
+def load_vendor_day_by_day_data(company_id: str, default=None):
+    fallback = default if isinstance(default, dict) else {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []}
+    operational_path = vendor_day_by_day_operational_file(company_id)
+    legacy_path = vendor_day_by_day_file(company_id)
+    if operational_path.exists():
+        return load_json(operational_path, fallback)
+    data = load_json(legacy_path, fallback)
+    if not isinstance(data, dict):
+        data = copy.deepcopy(fallback)
+    data.setdefault("_origem_operacional", "migrado_do_arquivo_antigo")
+    data.setdefault("_migrado_em", datetime.now().isoformat(timespec="seconds"))
+    try:
+        save_json(operational_path, data)
+    except PermissionError:
+        pass
+    return data
+
+
+def save_vendor_day_by_day_data(company_id: str, data: dict):
+    save_json(vendor_day_by_day_operational_file(company_id), data)
+
+
+def load_vendor_day_by_day_queue(company_id: str, day_key: str, vendor_id_value: str) -> dict:
+    return load_json(vendor_day_by_day_queue_file(company_id, day_key, vendor_id_value), {})
+
+
+def save_vendor_day_by_day_queue(company_id: str, day_key: str, vendor_id_value: str, queue: dict):
+    save_json(vendor_day_by_day_queue_file(company_id, day_key, vendor_id_value), queue)
+
+
 def file_signature(paths: list[Path]) -> tuple:
     signature = []
     for path in paths:
@@ -642,6 +695,7 @@ def common_company_dependencies(company_id: str) -> list[Path]:
         vendors_file(company_id),
         vendor_goals_file(company_id),
         vendor_monthly_items_file(company_id),
+        vendor_day_by_day_operational_file(company_id),
         region_assignments_file(company_id),
         blocked_clients_file(company_id),
     ]
@@ -977,6 +1031,52 @@ def economic_client_key(client_id: str, client: dict | None = None, sale: dict |
     return f"ID:{normalize_identifier(client_id)}"
 
 
+def all_client_record_map(company_id: str) -> dict:
+    rows = {}
+    for client_company_id in vendor_sales_company_ids(company_id):
+        if client_company_id not in COMPANIES:
+            continue
+        for client in load_json(clients_file(client_company_id), []):
+            client_id = normalize_identifier(client.get("ID"))
+            if client_id and client_id not in rows:
+                rows[client_id] = client
+    return rows
+
+
+def economic_group_master_id_from_index(group_index: dict, client_id: str) -> str:
+    group = group_index.get(normalize_identifier(client_id))
+    if not group:
+        return ""
+    return normalize_identifier((group.get("master") or {}).get("codigo"))
+
+
+def economic_group_key_from_index(
+    group_index: dict,
+    client_id: str,
+    client: dict | None = None,
+    sale: dict | None = None,
+) -> str:
+    master_id = economic_group_master_id_from_index(group_index, client_id)
+    if master_id:
+        return f"GE:{master_id}"
+    return economic_client_key(client_id, client, sale)
+
+
+def economic_group_display_client(
+    group_index: dict,
+    client_id: str,
+    client: dict | None = None,
+    client_index: dict | None = None,
+) -> tuple[str, dict]:
+    master_id = economic_group_master_id_from_index(group_index, client_id)
+    if master_id:
+        master_client = (client_index or {}).get(master_id)
+        if master_client:
+            return master_id, master_client
+    normalized_id = normalize_identifier(client_id)
+    return normalized_id, client or {}
+
+
 def vendor_can_manage(role: str) -> bool:
     return role in ("master", "supervisor")
 
@@ -1009,13 +1109,16 @@ def format_days_without_movement(days: int) -> str:
 def stock_records_with_last_exit(company_id: str):
     return cached_payload(
         ("stock_records_with_last_exit", company_id, date.today().isoformat()),
-        [stock_file(company_id), sales_file(company_id)],
+        [stock_file(company_id), stock_bonus_file(company_id), sales_file(company_id)],
         lambda: build_stock_records_with_last_exit(company_id),
     )
 
 
 def build_stock_records_with_last_exit(company_id: str):
     records = load_json(stock_file(company_id), [])
+    stock_bonus = load_json(stock_bonus_file(company_id), {})
+    if not isinstance(stock_bonus, dict):
+        stock_bonus = {}
     latest_exit_by_reference = {}
     for sale in load_json(sales_file(company_id), []):
         key = normalize_text(sale.get("PR_COD"))
@@ -1035,11 +1138,131 @@ def build_stock_records_with_last_exit(company_id: str):
         latest_date = latest_exit_by_reference.get(normalize_text(record.get("Referencia")))
         enriched["Ultima Saida"] = latest_date.isoformat() if latest_date else ""
         enriched["Dias sem movimento"] = format_days_without_movement((today - latest_date).days) if latest_date else ""
+        ref_key = normalize_text(record.get("Referencia"))
+        if ref_key in stock_bonus:
+            enriched["Bonus"] = number_value(stock_bonus.get(ref_key))
+        elif enriched.get("Bonus") in (None, ""):
+            enriched["Bonus"] = 1.5 if latest_date and (today - latest_date).days > 180 else 0.0
         enriched_records.append(enriched)
     return enriched_records
 
 
-def slow_items_payload(company_id: str, query: str = ""):
+def apply_stock_bonus_defaults(company_id: str) -> int:
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    records = load_json(stock_file(company_id), [])
+    bonus_map = load_json(stock_bonus_file(company_id), {})
+    if not isinstance(bonus_map, dict):
+        bonus_map = {}
+    latest_exit_by_reference = {}
+    for sale in load_json(sales_file(company_id), []):
+        ref_key = normalize_text(sale.get("PR_COD"))
+        sale_date = record_date_value(sale.get("NF_EMI"))
+        if not ref_key or not sale_date:
+            continue
+        current = latest_exit_by_reference.get(ref_key)
+        if current is None or sale_date > current:
+            latest_exit_by_reference[ref_key] = sale_date
+    today = date.today()
+    changed = 0
+    for record in records:
+        ref_key = normalize_text(record.get("Referencia"))
+        if not ref_key or ref_key in bonus_map or record.get("Bonus") not in (None, ""):
+            continue
+        latest_date = latest_exit_by_reference.get(ref_key)
+        bonus_map[ref_key] = 1.5 if latest_date and (today - latest_date).days > 180 else 0.0
+        changed += 1
+    if changed:
+        save_json(stock_bonus_file(company_id), bonus_map)
+    return changed
+
+
+def save_stock_bonus_payload(payload: dict):
+    company_id = payload.get("company", "")
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    if str(payload.get("action") or "") == "bulk_by_days":
+        return apply_stock_bonus_by_days_payload(payload)
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    records = load_json(stock_file(company_id), [])
+    valid_refs = {normalize_text(record.get("Referencia")) for record in records if normalize_text(record.get("Referencia"))}
+    bonus_map = load_json(stock_bonus_file(company_id), {})
+    if not isinstance(bonus_map, dict):
+        bonus_map = {}
+    changed = 0
+    for item in items:
+        ref_key = normalize_text(item.get("referencia"))
+        if not ref_key or ref_key not in valid_refs:
+            continue
+        bonus_map[ref_key] = round(max(0.0, number_value(item.get("bonus"))), 4)
+        changed += 1
+    if changed:
+        save_json(stock_bonus_file(company_id), bonus_map)
+    return {
+        "message": f"Bonus salvo para {changed} item(ns).",
+        "updated": changed,
+    }
+
+
+def apply_stock_bonus_by_days_payload(payload: dict):
+    company_id = payload.get("company", "")
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    bonus_value = round(max(0.0, number_value(payload.get("bonus"))), 4)
+    start_days = int(number_value(payload.get("start_days")))
+    end_days = int(number_value(payload.get("end_days")))
+    if start_days < 0 or end_days < 0:
+        raise ValueError("Informe dias sem movimento validos.")
+    if end_days < start_days:
+        raise ValueError("O campo Dias final deve ser maior ou igual ao campo Dias inicial.")
+    records = load_json(stock_file(company_id), [])
+    bonus_map = load_json(stock_bonus_file(company_id), {})
+    if not isinstance(bonus_map, dict):
+        bonus_map = {}
+    latest_exit_by_reference = {}
+    for sale in load_json(sales_file(company_id), []):
+        ref_key = normalize_text(sale.get("PR_COD"))
+        sale_date = record_date_value(sale.get("NF_EMI"))
+        if not ref_key or not sale_date:
+            continue
+        current = latest_exit_by_reference.get(ref_key)
+        if current is None or sale_date > current:
+            latest_exit_by_reference[ref_key] = sale_date
+    today = date.today()
+    changed = 0
+    skipped_never_sold = 0
+    skipped_recent = 0
+    for record in records:
+        ref_key = normalize_text(record.get("Referencia"))
+        if not ref_key:
+            continue
+        latest_date = latest_exit_by_reference.get(ref_key)
+        if not latest_date:
+            skipped_never_sold += 1
+            continue
+        days_without_movement = (today - latest_date).days
+        if days_without_movement <= 180:
+            skipped_recent += 1
+            continue
+        if start_days <= days_without_movement <= end_days:
+            bonus_map[ref_key] = bonus_value
+            changed += 1
+    if changed:
+        save_json(stock_bonus_file(company_id), bonus_map)
+    return {
+        "message": (
+            f"Bonus padrao atualizado para {changed} item(ns) com {start_days} a {end_days} dias sem movimento."
+        ),
+        "updated": changed,
+        "bonus": bonus_value,
+        "start_days": start_days,
+        "end_days": end_days,
+        "skipped_never_sold": skipped_never_sold,
+        "skipped_recent": skipped_recent,
+    }
+
+
+def slow_items_payload(company_id: str, query: str = "", min_days_without_movement: int = 365):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
 
@@ -1068,7 +1291,7 @@ def slow_items_payload(company_id: str, query: str = ""):
 
         last_exit = record_date_value(record.get("Ultima Saida"))
         days_without_movement = (today - last_exit).days if last_exit else 999999
-        if last_exit and days_without_movement <= 365:
+        if last_exit and days_without_movement <= min_days_without_movement:
             continue
 
         key = normalize_text(reference)
@@ -1084,8 +1307,8 @@ def slow_items_payload(company_id: str, query: str = ""):
             "valor_unitario": round(unit_price, 3),
             "sem_preco_tabela": not has_price,
             "total": round(quantity * unit_price, 2),
-            "ultima_saida": display_date_br(last_exit) if last_exit else "",
-            "dias_sem_movimento": format_days_without_movement(days_without_movement) if last_exit else "Nunca vendeu",
+            "ultima_saida": display_date_br(last_exit) if last_exit else "Nunca Vendido",
+            "dias_sem_movimento": format_days_without_movement(days_without_movement) if last_exit else "Nunca Vendido",
             "percentual": round(number_value(saved.get("percentual")), 3),
             "_dias_sem_movimento": days_without_movement,
         }
@@ -1151,8 +1374,8 @@ def save_slow_items_payload(payload: dict):
     return result
 
 
-def slow_items_export_xlsx(company_id: str, query: str = "") -> bytes:
-    payload = slow_items_payload(company_id, query)
+def slow_items_export_xlsx(company_id: str, query: str = "", min_days_without_movement: int = 365) -> bytes:
+    payload = slow_items_payload(company_id, query, min_days_without_movement)
     columns = [
         ("referencia", "Referencia"),
         ("descricao", "Descricao"),
@@ -1178,7 +1401,7 @@ def slow_items_export_xlsx(company_id: str, query: str = "") -> bytes:
 
 
 def table_sort_value(record: dict, key: str):
-    if key in ("Quantidade", "QTY", "V.Unitario", "Total", "Preco Dollar", "Custo BRL Indice", "Custo BRL Ultima Importacao", "PR_QTD", "PR_SBT", "LUCRO_REAIS", "Aliquota IPI", "Aliquota de IPI"):
+    if key in ("Quantidade", "QTY", "V.Unitario", "Total", "Bonus", "Preco Dollar", "Custo BRL Indice", "Custo BRL Ultima Importacao", "PR_QTD", "PR_SBT", "LUCRO_REAIS", "Aliquota IPI", "Aliquota de IPI"):
         return number_value(record.get(key))
     if key in ("Ultima Saida", "Previsao", "NF_EMI", "importado_em", "bloqueado_em"):
         parsed = record_date_value(record.get(key))
@@ -1243,6 +1466,24 @@ def table_payload(company_id: str, table_name: str, query: str, limit: int, sort
         }
         for record in matches[:limit]
     ]
+    payload_columns = [
+        {"key": key, "label": label}
+        for key, label in columns
+    ]
+    if table_name == "clients":
+        ge_index = economic_group_index(company_id)
+        for row in rows:
+            client_id = normalize_identifier(row.get("ID"))
+            group = ge_index.get(client_id)
+            if group:
+                row["_GE"] = "GE"
+                row["_GE_master"] = normalize_identifier((group.get("master") or {}).get("codigo"))
+                row["_GE_nome"] = (group.get("master") or {}).get("nome") or ""
+            else:
+                row["_GE"] = ""
+                row["_GE_master"] = ""
+                row["_GE_nome"] = ""
+        payload_columns.append({"key": "_GE", "label": "GE"})
 
     payload = {
         "empresa": COMPANIES[company_id],
@@ -1254,10 +1495,7 @@ def table_payload(company_id: str, table_name: str, query: str, limit: int, sort
         "limite": limit,
         "sort_key": sort_key,
         "sort_dir": "desc" if reverse_sort else "asc",
-        "columns": [
-            {"key": key, "label": label}
-            for key, label in columns
-        ],
+        "columns": payload_columns,
         "rows": rows,
     }
     if table_name == "costing":
@@ -1490,9 +1728,11 @@ def prospect_payload(params):
     clients = load_json(clients_file(company_id), [])
     sales = load_json(sales_file(company_id), [])
     blocked_clients = blocked_client_map(company_id)
+    client_lookup = {normalize_identifier(client.get("ID")): client for client in clients if normalize_identifier(client.get("ID"))}
+    group_index = economic_group_index(company_id)
     client_map = {}
-    last_purchase_by_client = {}
-    last_purchase_revenue_by_client = {}
+    last_purchase_by_group = {}
+    last_purchase_revenue_by_group = {}
 
     for client in clients:
         client_id = normalize_identifier(client.get("ID"))
@@ -1510,27 +1750,34 @@ def prospect_payload(params):
             client_haystack = normalize_text(f"{client_id} {client.get('NOM') or ''}")
             if selected_client_query not in client_haystack:
                 continue
-        client_map[client_id] = {
-            "client": client,
+        group_key = economic_group_key_from_index(group_index, client_id, client)
+        display_client_id, display_client = economic_group_display_client(group_index, client_id, client, client_lookup)
+        entry = client_map.setdefault(group_key, {
+            "client_id": display_client_id,
+            "client": display_client or client,
             "sales": [],
             "revenue": 0.0,
             "last_purchase": None,
-        }
+            "member_ids": set(),
+        })
+        entry["member_ids"].add(client_id)
 
     for sale in sales:
         if is_excluded_group_sale(company_id, sale.get("CL_NOM")):
             continue
 
         client_id = normalize_identifier(sale.get("ID_CL"))
+        sale_client = client_lookup.get(client_id, {})
+        group_key = economic_group_key_from_index(group_index, client_id, sale_client, sale)
         sale_date = normalize_record(sale.get("NF_EMI"))
         if client_id and sale_date:
-            previous_date = last_purchase_by_client.get(client_id)
+            previous_date = last_purchase_by_group.get(group_key)
             if previous_date is None or str(sale_date) > str(previous_date):
-                last_purchase_by_client[client_id] = sale_date
-                last_purchase_revenue_by_client[client_id] = sale_net_revenue(sale)
+                last_purchase_by_group[group_key] = sale_date
+                last_purchase_revenue_by_group[group_key] = sale_net_revenue(sale)
             elif str(sale_date) == str(previous_date):
-                last_purchase_revenue_by_client[client_id] = (
-                    last_purchase_revenue_by_client.get(client_id, 0.0) + sale_net_revenue(sale)
+                last_purchase_revenue_by_group[group_key] = (
+                    last_purchase_revenue_by_group.get(group_key, 0.0) + sale_net_revenue(sale)
                 )
 
         sale_index = sale_period_index(sale)
@@ -1539,10 +1786,10 @@ def prospect_payload(params):
         if not sale_matches_reference(sale, reference):
             continue
 
-        if client_id not in client_map:
+        if group_key not in client_map:
             continue
 
-        entry = client_map[client_id]
+        entry = client_map[group_key]
         entry["sales"].append(sale)
         entry["revenue"] += sale_net_revenue(sale)
         if sale_date and (entry["last_purchase"] is None or str(sale_date) > str(entry["last_purchase"])):
@@ -1552,11 +1799,11 @@ def prospect_payload(params):
     active_count = 0
     inactive_count = 0
     never_bought_count = 0
-    for client_id, entry in client_map.items():
+    for group_key, entry in client_map.items():
         sales_count = len(entry["sales"])
         if reference and sales_count == 0:
             continue
-        has_historical_purchase = client_id in last_purchase_by_client
+        has_historical_purchase = group_key in last_purchase_by_group
         status = "Ativo" if sales_count > 0 else "Inativo"
         display_status = "Nunca Comprou" if not has_historical_purchase else status
 
@@ -1583,10 +1830,10 @@ def prospect_payload(params):
             "status": display_status,
             "compras_periodo": sales_count,
             "faturamento_liquido": round(
-                entry["revenue"] if status == "Ativo" else last_purchase_revenue_by_client.get(client_id, 0.0),
+                entry["revenue"] if status == "Ativo" else last_purchase_revenue_by_group.get(group_key, 0.0),
                 2,
             ),
-            "ultima_compra": entry["last_purchase"] if status == "Ativo" else last_purchase_by_client.get(client_id, "Nunca Comprou"),
+            "ultima_compra": entry["last_purchase"] if status == "Ativo" else last_purchase_by_group.get(group_key, "Nunca Comprou"),
         })
 
     rows.sort(key=lambda row: (row["status"], normalize_text(row.get("UF")), normalize_text(row.get("NOM"))))
@@ -2082,6 +2329,9 @@ def vendor_regions_payload(company_id: str, vendor_id_value: str):
 
     sales_by_client = {}
     historical_clients = set()
+    group_index = economic_group_index(company_id)
+    all_clients = dict(all_client_record_map(company_id))
+    all_clients.update(client_index)
     years = list(range(START_YEAR, CURRENT_YEAR + 1))
     closed_month_count = max(1, date.today().month - 1) if CURRENT_YEAR == date.today().year else 12
     months = list(range(1, date.today().month + 1)) if CURRENT_YEAR == date.today().year else list(range(1, 13))
@@ -2092,11 +2342,13 @@ def vendor_regions_payload(company_id: str, vendor_id_value: str):
             client_id = normalize_identifier(sale.get("ID_CL"))
             if not client_id:
                 continue
-            historical_clients.add(client_id)
+            sale_client = all_clients.get(client_id, {})
+            group_key = economic_group_key_from_index(group_index, client_id, sale_client, sale)
+            historical_clients.add(group_key)
             year = record_year(sale.get("NF_EMI"))
             month = record_month(sale.get("NF_EMI"))
             net_revenue = sale_net_revenue(sale)
-            entry = sales_by_client.setdefault(client_id, {
+            entry = sales_by_client.setdefault(group_key, {
                 "total": 0.0,
                 "years": {str(year_value): 0.0 for year_value in years},
                 "months": {str(month_value): 0.0 for month_value in months},
@@ -2123,12 +2375,13 @@ def vendor_regions_payload(company_id: str, vendor_id_value: str):
     city_rows = {}
     grouped_row = empty_region_summary("Agrupado", "agrupado", years, months)
 
-    def include_client_in_summary(summary: dict, client_id: str):
-        if client_id in summary["_client_ids"]:
+    def include_client_in_summary(summary: dict, client_id: str, client: dict):
+        group_key = economic_group_key_from_index(group_index, client_id, client)
+        if group_key in summary["_client_ids"]:
             return
-        summary["_client_ids"].add(client_id)
+        summary["_client_ids"].add(group_key)
         summary["clientes"] += 1
-        sale_summary = sales_by_client.get(client_id, {
+        sale_summary = sales_by_client.get(group_key, {
             "total": 0.0,
             "years": {str(year_value): 0.0 for year_value in years},
             "months": {str(month_value): 0.0 for month_value in months},
@@ -2143,7 +2396,7 @@ def vendor_regions_payload(company_id: str, vendor_id_value: str):
         purchase_months = sale_summary.get("purchase_months", set())
         if purchase_years:
             summary["ativos"] += 1
-        elif client_id in historical_clients:
+        elif group_key in historical_clients:
             summary["inativos"] += 1
         else:
             summary["nunca_comprou"] += 1
@@ -2175,26 +2428,32 @@ def vendor_regions_payload(company_id: str, vendor_id_value: str):
             else:
                 summary["nunca_meses"][month_key] += 1
 
+    region_group_keys = set()
     for client_id in region_client_ids:
         client = client_index.get(client_id)
         if not client:
             continue
+        group_key = economic_group_key_from_index(group_index, client_id, client)
+        if group_key in region_group_keys:
+            continue
+        region_group_keys.add(group_key)
+        _display_client_id, client = economic_group_display_client(group_index, client_id, client, all_clients)
         uf = str(client.get("UF") or "").strip().upper() or "Sem UF"
         city = str(client.get("CID") or "").strip() or "Sem cidade"
         city_key = normalize_text(city)
         ddd = client_ddd(client) or "Sem DDD"
 
         uf_row = uf_rows.setdefault(uf, empty_region_summary(uf, uf, years, months))
-        include_client_in_summary(uf_row, client_id)
+        include_client_in_summary(uf_row, client_id, client)
 
         ddd_row = ddd_rows.setdefault(ddd, empty_region_summary(ddd, ddd, years, months))
-        include_client_in_summary(ddd_row, client_id)
+        include_client_in_summary(ddd_row, client_id, client)
 
         city_row_key = f"{uf}|{city_key}"
         city_row = city_rows.setdefault(city_row_key, empty_region_summary(f"{city} - {uf}", city_row_key, years, months))
-        include_client_in_summary(city_row, client_id)
+        include_client_in_summary(city_row, client_id, client)
 
-        include_client_in_summary(grouped_row, client_id)
+        include_client_in_summary(grouped_row, client_id, client)
 
     return {
         "empresa": COMPANIES[company_id],
@@ -2206,8 +2465,8 @@ def vendor_regions_payload(company_id: str, vendor_id_value: str):
         "meses": months,
         "meses_fechados": list(range(1, closed_month_count + 1)),
         "resumo": {
-            "clientes": len(region_client_ids),
-            "faturamento_total": round(sum(sales_by_client.get(client_id, {}).get("total", 0.0) for client_id in region_client_ids), 2),
+            "clientes": len(region_group_keys),
+            "faturamento_total": round(sum(sales_by_client.get(group_key, {}).get("total", 0.0) for group_key in region_group_keys), 2),
         },
         "ufs": sorted((finalize_region_summary(row) for row in uf_rows.values()), key=lambda item: item["label"]),
         "ddds": sorted((finalize_region_summary(row) for row in ddd_rows.values()), key=lambda item: normalize_text(item["label"])),
@@ -2225,6 +2484,9 @@ def vendor_region_clients_payload(company_id: str, vendor_id_value: str, params)
     query = str(params.get("q", [""])[0] or "").strip()
 
     sales_stats = {}
+    group_index = economic_group_index(company_id)
+    all_clients = dict(all_client_record_map(company_id))
+    all_clients.update(client_index)
     for sale_company_id in vendor_sales_company_ids(company_id):
         for sale in load_json(sales_file(sale_company_id), []):
             if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
@@ -2232,9 +2494,11 @@ def vendor_region_clients_payload(company_id: str, vendor_id_value: str, params)
             client_id = normalize_identifier(sale.get("ID_CL"))
             if not client_id:
                 continue
+            sale_client = all_clients.get(client_id, {})
+            stats_key = economic_group_key_from_index(group_index, client_id, sale_client, sale)
             sale_date = normalize_record(sale.get("NF_EMI"))
             net_revenue = sale_net_revenue(sale)
-            entry = sales_stats.setdefault(client_id, {
+            entry = sales_stats.setdefault(stats_key, {
                 "historical": False,
                 "current_year_purchases": 0,
                 "current_year_revenue": 0.0,
@@ -2255,10 +2519,17 @@ def vendor_region_clients_payload(company_id: str, vendor_id_value: str, params)
     options = {"ufs": set(), "ddds": set(), "cities": {}}
     rows = []
     counts = {"active": 0, "inactive": 0, "never": 0}
+    seen_group_keys = set()
     for client_id in region_client_ids:
         client = client_index.get(client_id)
         if not client:
             continue
+        stats_key = economic_group_key_from_index(group_index, client_id, client)
+        if stats_key in seen_group_keys:
+            continue
+        seen_group_keys.add(stats_key)
+        display_client_id, display_client = economic_group_display_client(group_index, client_id, client, all_clients)
+        client = display_client or client
         uf = str(client.get("UF") or "").strip().upper()
         city = str(client.get("CID") or "").strip()
         city_key = normalize_text(city)
@@ -2269,7 +2540,7 @@ def vendor_region_clients_payload(company_id: str, vendor_id_value: str, params)
         if uf or city:
             options["cities"][f"{uf}|{city_key}"] = {"uf": uf, "city": city, "label": f"{city} - {uf}".strip(" -")}
 
-        stats = sales_stats.get(client_id, {})
+        stats = sales_stats.get(stats_key, {})
         if stats.get("current_year_purchases", 0) > 0:
             status_key = "active"
             status_label = "Ativo"
@@ -2294,7 +2565,7 @@ def vendor_region_clients_payload(company_id: str, vendor_id_value: str, params)
 
         revenue = stats.get("current_year_revenue", 0.0) if status_key == "active" else stats.get("last_purchase_revenue", 0.0)
         rows.append({
-            "ID": client.get("ID"),
+            "ID": client.get("ID") or display_client_id,
             "NOM": client.get("NOM"),
             "UF": uf,
             "CID": city,
@@ -2323,7 +2594,7 @@ def vendor_region_clients_payload(company_id: str, vendor_id_value: str, params)
             "city": params.get("city", [""])[0],
         },
         "counts": counts,
-        "total_carteira": len(region_client_ids),
+        "total_carteira": len(seen_group_keys),
         "total_resultado": len(rows),
         "columns": [
             {"key": "ID", "label": "Codigo"},
@@ -2368,6 +2639,13 @@ def next_day_by_day_business_day(day_value: date) -> date:
     return next_day
 
 
+def previous_day_by_day_business_day(day_value: date) -> date:
+    previous_day = day_value - timedelta(days=1)
+    while not is_day_by_day_business_day(previous_day):
+        previous_day -= timedelta(days=1)
+    return previous_day
+
+
 def day_by_day_weekend_payload(company_id: str, vendor_id_value: str, day_value: date) -> dict:
     next_business = next_day_by_day_business_day(day_value)
     vendor = vendor_record_by_id(company_id, vendor_id_value)
@@ -2409,6 +2687,8 @@ def day_by_day_weekend_payload(company_id: str, vendor_id_value: str, day_value:
 
 def vendor_client_sales_stats(company_id: str) -> dict:
     sales_stats = {}
+    group_index = economic_group_index(company_id)
+    client_lookup = all_client_record_map(company_id)
     for sale_company_id in vendor_sales_company_ids(company_id):
         for sale in load_json(sales_file(sale_company_id), []):
             if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
@@ -2416,10 +2696,12 @@ def vendor_client_sales_stats(company_id: str) -> dict:
             client_id = normalize_identifier(sale.get("ID_CL"))
             if not client_id:
                 continue
+            sale_client = client_lookup.get(client_id, {})
+            stats_key = economic_group_key_from_index(group_index, client_id, sale_client, sale)
             sale_date = normalize_record(sale.get("NF_EMI"))
             sale_year = record_year(sale.get("NF_EMI"))
             net_revenue = sale_net_revenue(sale)
-            entry = sales_stats.setdefault(client_id, {
+            entry = sales_stats.setdefault(stats_key, {
                 "historical": False,
                 "current_year_purchases": 0,
                 "current_year_revenue": 0.0,
@@ -2514,12 +2796,21 @@ def vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str
     _vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
     sales_stats = vendor_client_sales_stats(company_id)
     blocked_clients = blocked_client_map(company_id)
+    group_index = economic_group_index(company_id)
+    all_clients = dict(all_client_record_map(company_id))
+    all_clients.update(client_index)
+    region_group_keys = {
+        economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
+        for client_id in region_client_ids
+    }
     oldest_by_client = {}
     for record in data.get("historico") or []:
         if str(record.get("vendor_id") or "") != vendor_id_value:
             continue
         client_id = normalize_identifier(record.get("client_id"))
-        if not client_id or client_id in blocked_clients or client_id not in region_client_ids:
+        record_client = all_clients.get(client_id) or (record.get("cliente") or {})
+        record_group_key = economic_group_key_from_index(group_index, client_id, record_client)
+        if not client_id or client_id in blocked_clients or record_group_key not in region_group_keys:
             continue
         record_sort = (str(record.get("data") or ""), str(record.get("saved_at") or ""))
         current = oldest_by_client.get(client_id)
@@ -2528,12 +2819,18 @@ def vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str
             oldest_by_client[client_id] = record
 
     rows = []
+    seen_group_keys = set()
     for client_id, record in oldest_by_client.items():
         client = client_index.get(client_id) or (record.get("cliente") or {})
         if not client:
             continue
-        stats = sales_stats.get(client_id, {})
-        row = vendor_day_by_day_client_row(client_id, client, stats, "recontact")
+        stats_key = economic_group_key_from_index(group_index, client_id, client)
+        if stats_key in seen_group_keys:
+            continue
+        seen_group_keys.add(stats_key)
+        display_client_id, display_client = economic_group_display_client(group_index, client_id, client, all_clients)
+        stats = sales_stats.get(stats_key, {})
+        row = vendor_day_by_day_client_row(display_client_id, display_client or client, stats, "recontact")
         form = record.get("form") or {}
         row.update({
             "primeiro_contato": record.get("data") or "",
@@ -2552,18 +2849,29 @@ def vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
     vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
     sales_stats = vendor_client_sales_stats(company_id)
     blocked_clients = blocked_client_map(company_id)
+    group_index = economic_group_index(company_id)
+    all_clients = dict(all_client_record_map(company_id))
+    all_clients.update(client_index)
     candidates = {"inactive": [], "never": []}
+    seen_group_keys = set()
     for client_id in region_client_ids:
         if client_id in blocked_clients:
             continue
         client = client_index.get(client_id)
         if not client:
             continue
-        stats = sales_stats.get(client_id, {})
+        stats_key = economic_group_key_from_index(group_index, client_id, client)
+        if stats_key in seen_group_keys:
+            continue
+        seen_group_keys.add(stats_key)
+        display_client_id, display_client = economic_group_display_client(group_index, client_id, client, all_clients)
+        if display_client_id in blocked_clients:
+            continue
+        stats = sales_stats.get(stats_key, {})
         if stats.get("current_year_purchases", 0) > 0:
             continue
         status_key = "inactive" if stats.get("historical") else "never"
-        candidates[status_key].append(vendor_day_by_day_client_row(client_id, client, stats, status_key))
+        candidates[status_key].append(vendor_day_by_day_client_row(display_client_id, display_client or client, stats, status_key))
     candidates["inactive"].sort(key=lambda row: normalize_text(row.get("nome")))
     candidates["inactive"].sort(key=lambda row: row.get("ultima_compra_iso") or "", reverse=True)
     candidates["never"].sort(key=lambda row: normalize_text(row.get("nome")))
@@ -2614,6 +2922,63 @@ def stable_daily_sample(rows: list[dict], amount: int, company_id: str, vendor_i
     return [row.get("id") for row in ordered[:amount] if row.get("id")]
 
 
+def vendor_day_by_day_attended_client_ids(company_id: str, data: dict, vendor_id_value: str, before_day_key: str = "") -> set[str]:
+    attended = set()
+    group_index = economic_group_index(company_id)
+    for record in data.get("historico") or []:
+        if str(record.get("vendor_id") or "") != vendor_id_value:
+            continue
+        record_day = str(record.get("data") or "")[:10]
+        if before_day_key and record_day >= before_day_key:
+            continue
+        client_id = normalize_identifier(record.get("client_id"))
+        if client_id:
+            attended.add(client_id)
+            master_id = economic_group_master_id_from_index(group_index, client_id)
+            if master_id:
+                attended.add(master_id)
+    for key, record in (data.get("atendimentos") or {}).items():
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("vendor_id") or "") != vendor_id_value:
+            continue
+        record_day = str(record.get("data") or "")[:10]
+        if before_day_key and record_day >= before_day_key:
+            continue
+        client_id = normalize_identifier(record.get("client_id"))
+        if client_id:
+            attended.add(client_id)
+            master_id = economic_group_master_id_from_index(group_index, client_id)
+            if master_id:
+                attended.add(master_id)
+    return attended
+
+
+def vendor_day_by_day_unattended_previous_ids(data: dict, vendor_id_value: str, day_value: date, status_key: str) -> list[str]:
+    previous_key = previous_day_by_day_business_day(day_value).isoformat()
+    previous_list = ((data.get("listas") or {}).get(f"{previous_key}|{vendor_id_value}") or {})
+    previous_ids = previous_list.get(status_key) or []
+    attended_previous = {
+        normalize_identifier(record.get("client_id"))
+        for record in (data.get("atendimentos") or {}).values()
+        if isinstance(record, dict)
+        and str(record.get("vendor_id") or "") == vendor_id_value
+        and str(record.get("data") or "")[:10] == previous_key
+    }
+    if not attended_previous:
+        attended_previous = {
+            normalize_identifier(record.get("client_id"))
+            for record in data.get("historico") or []
+            if str(record.get("vendor_id") or "") == vendor_id_value
+            and str(record.get("data") or "")[:10] == previous_key
+        }
+    return [
+        normalize_identifier(client_id)
+        for client_id in previous_ids
+        if normalize_identifier(client_id) and normalize_identifier(client_id) not in attended_previous
+    ]
+
+
 def vendor_agrp_options(company_id: str) -> list[str]:
     dependencies = []
     for current_company_id in vendor_sales_company_ids(company_id):
@@ -2651,7 +3016,7 @@ def vendor_day_by_day_count_summary(data: dict, vendor_id_value: str, day_key: s
 
 
 def vendor_day_by_day_monthly_count(company_id: str, vendor_id_value: str, year: int, month: int) -> int:
-    data = load_json(vendor_day_by_day_file(company_id), {"listas": {}, "atendimentos": {}, "contagens": {}})
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     total = 0
     for key, counter in (data.get("contagens") or {}).items():
         day_key = str((counter or {}).get("data") or key.split("|", 1)[0])
@@ -2673,16 +3038,24 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
     if not is_day_by_day_business_day(day_value):
         return day_by_day_weekend_payload(company_id, vendor_id_value, day_value)
     day_key = day_value.isoformat()
-    data = load_json(vendor_day_by_day_file(company_id), {"listas": {}, "atendimentos": {}})
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     blocked_clients = blocked_client_map(company_id)
     list_key = f"{day_key}|{vendor_id_value}"
-    current_list = data.setdefault("listas", {}).get(list_key) or {}
+    current_list = data.setdefault("listas", {}).get(list_key) or load_vendor_day_by_day_queue(company_id, day_key, vendor_id_value) or {}
     saved_details = current_list.get("details") or {}
+    expected_selection_strategy = "unattended_until_wallet_complete_v2"
     saved_schema_is_current = all(
         "compras_por_ano" in item and "compras_ano_detalhe" in item
         for rows in saved_details.values()
         for item in (rows or [])
+    ) and current_list.get("selection_strategy") == expected_selection_strategy
+    saved_has_today_attendance = any(
+        isinstance(record, dict)
+        and str(record.get("vendor_id") or "") == vendor_id_value
+        and str(record.get("data") or "")[:10] == day_key
+        for record in (data.get("atendimentos") or {}).values()
     )
+    saved_schema_is_current = saved_schema_is_current or (bool(saved_details) and saved_has_today_attendance)
     if saved_details and saved_schema_is_current:
         records = data.get("atendimentos", {})
 
@@ -2735,27 +3108,32 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
     selected = {}
     targets = {"inactive": 35, "never": 15}
     recontact_candidates = []
-    if not candidates.get("inactive") and not candidates.get("never"):
+    attended_before_today = vendor_day_by_day_attended_client_ids(company_id, data, vendor_id_value, day_key)
+    unattended_candidates = {
+        status_key: [
+            row for row in rows
+            if normalize_identifier(row.get("id")) not in attended_before_today
+        ]
+        for status_key, rows in candidates.items()
+    }
+    if not unattended_candidates.get("inactive") and not unattended_candidates.get("never"):
         recontact_candidates = vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data)
-        candidates["recontact"] = recontact_candidates
+        unattended_candidates["recontact"] = recontact_candidates
         targets = {"recontact": DAY_BY_DAY_DAILY_TARGET}
     candidate_by_status = {
         status: {row.get("id"): row for row in rows}
-        for status, rows in candidates.items()
+        for status, rows in unattended_candidates.items()
     }
     for status_key, amount in targets.items():
-        if status_key == "inactive":
-            saved_ids = [row.get("id") for row in candidates.get(status_key, [])[:amount] if row.get("id")]
-        elif status_key == "recontact":
-            saved_ids = [row.get("id") for row in candidates.get(status_key, [])[:amount] if row.get("id")]
-        else:
-            saved_ids = [
-                client_id for client_id in current_list.get(status_key, [])
-                if client_id in candidate_by_status.get(status_key, {})
-            ]
-        if status_key != "inactive" and len(saved_ids) < min(amount, len(candidate_by_status.get(status_key, {}))):
+        previous_pending = vendor_day_by_day_unattended_previous_ids(data, vendor_id_value, day_value, status_key)
+        saved_ids = [
+            client_id for client_id in previous_pending
+            if client_id in candidate_by_status.get(status_key, {})
+        ][:amount]
+        if len(saved_ids) < min(amount, len(candidate_by_status.get(status_key, {}))):
+            saved_set = set(saved_ids)
             extra_ids = stable_daily_sample(
-                [row for row in candidates.get(status_key, []) if row.get("id") not in set(saved_ids)],
+                [row for row in unattended_candidates.get(status_key, []) if row.get("id") not in saved_set],
                 amount - len(saved_ids),
                 company_id,
                 vendor_id_value,
@@ -2779,29 +3157,30 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
 
     save_warning = ""
     if changed or list_key not in data.get("listas", {}) or not current_list.get("details") or not saved_schema_is_current:
-        data.setdefault("listas", {})[list_key] = {
+        queue_payload = {
             "data": day_key,
             "vendor_id": vendor_id_value,
             "inactive": selected.get("inactive", []),
             "never": selected.get("never", []),
             "recontact": selected.get("recontact", []),
-            "inactive_strategy": "recent_purchase_first",
+            "inactive_strategy": "previous_unattended_then_new_unattended",
+            "selection_strategy": expected_selection_strategy,
             "details": selected_details,
             "candidate_counts": {
-                "inactive": len(candidates["inactive"]),
-                "never": len(candidates["never"]),
-                "recontact": len(candidates.get("recontact", [])),
+                "inactive": len(unattended_candidates.get("inactive", [])),
+                "never": len(unattended_candidates.get("never", [])),
+                "recontact": len(unattended_candidates.get("recontact", [])),
+                "inactive_total": len(candidates.get("inactive", [])),
+                "never_total": len(candidates.get("never", [])),
             },
             "created_at": current_list.get("created_at") or datetime.now().isoformat(timespec="seconds"),
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         }
+        data.setdefault("listas", {})[list_key] = queue_payload
         try:
-            save_json(vendor_day_by_day_file(company_id), data)
+            save_vendor_day_by_day_data(company_id, data)
         except PermissionError:
-            save_warning = (
-                "A fila foi exibida, mas o Windows nao permitiu gravar o arquivo do Day by Day neste momento. "
-                "Feche outras janelas do CRM ou backups usando o arquivo e tente atualizar novamente."
-            )
+            save_vendor_day_by_day_queue(company_id, day_key, vendor_id_value, queue_payload)
 
     records = data.get("atendimentos", {})
 
@@ -2832,9 +3211,9 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
             "nunca_comprou": len(selected.get("never", [])),
             "ja_contatados": len(selected.get("recontact", [])),
             "total": len(selected.get("inactive", [])) + len(selected.get("never", [])) + len(selected.get("recontact", [])),
-            "candidatos_inativos": len(candidates["inactive"]),
-            "candidatos_nunca_comprou": len(candidates["never"]),
-            "candidatos_ja_contatados": len(candidates.get("recontact", [])),
+            "candidatos_inativos": len(unattended_candidates.get("inactive", [])),
+            "candidatos_nunca_comprou": len(unattended_candidates.get("never", [])),
+            "candidatos_ja_contatados": len(unattended_candidates.get("recontact", [])),
             "ufs_consideradas": selected_ufs,
         },
         "contagem": count_summary,
@@ -2888,8 +3267,8 @@ def vendor_day_by_day_client_payload(company_id: str, vendor_id_value: str, clie
         raise ValueError("Cliente bloqueado. Ele nao deve receber novas tratativas no Day by Day.")
     row = None
     status_key = ""
-    data = load_json(vendor_day_by_day_file(company_id), {"listas": {}, "atendimentos": {}})
-    daily_list = (data.get("listas") or {}).get(f"{day_key}|{vendor_id_value}") or {}
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
+    daily_list = (data.get("listas") or {}).get(f"{day_key}|{vendor_id_value}") or load_vendor_day_by_day_queue(company_id, day_key, vendor_id_value) or {}
     for key in ("inactive", "never", "recontact"):
         row = next((item for item in (daily_list.get("details") or {}).get(key, []) if normalize_identifier(item.get("id")) == client_id), None)
         if row:
@@ -3079,7 +3458,7 @@ def save_vendor_day_by_day_client_payload(payload: dict):
         "contatos_adicionais": extra_contacts,
     }
     validate_vendor_day_by_day_form(form, client_payload.get("status_key") or "")
-    data = load_json(vendor_day_by_day_file(company_id), {"listas": {}, "atendimentos": {}, "contagens": {}})
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     record_key = f"{day_key}|{vendor_id_value}|{client_id}"
     now = datetime.now().isoformat(timespec="seconds")
     data.setdefault("atendimentos", {})[record_key] = {
@@ -3121,7 +3500,7 @@ def save_vendor_day_by_day_client_payload(payload: dict):
     counter["total_salvos"] = len(counter.get("eventos") or [])
     counter["updated_at"] = now
     try:
-        save_json(vendor_day_by_day_file(company_id), data)
+        save_vendor_day_by_day_data(company_id, data)
     except PermissionError as exc:
         raise ValueError(
             "Nao foi possivel salvar o atendimento porque o Windows bloqueou o arquivo do Day by Day. "
@@ -3144,7 +3523,7 @@ def save_vendor_day_by_day_client_payload(payload: dict):
 
 
 def vendor_day_by_day_records(company_id: str, vendor_id_value: str) -> list[dict]:
-    data = load_json(vendor_day_by_day_file(company_id), {"historico": []})
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     rows = []
     for record in data.get("historico") or []:
         if str(record.get("vendor_id") or "") != vendor_id_value:
@@ -3176,7 +3555,7 @@ def vendor_day_by_day_daily_contacts_payload(company_id: str, vendor_id_value: s
     month_key = str((params.get("month") or [date.today().strftime("%Y-%m")])[0] or "").strip()
     if not re.match(r"^\d{4}-\d{2}$", month_key):
         month_key = date.today().strftime("%Y-%m")
-    data = load_json(vendor_day_by_day_file(company_id), {"historico": []})
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     grouped = {}
     for record in data.get("historico") or []:
         if str(record.get("vendor_id") or "") != vendor_id_value:
@@ -3316,7 +3695,7 @@ def vendor_home_month_goals(company_id: str, vendor_id_value: str, year: int, mo
     return goals
 
 
-def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
+def build_home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
     company_id, vendor, user = current_user_vendor_context(token, company_id_value, vendor_id_value)
     vendor_id_value = str(vendor.get("id") or "")
     today_value = date.today()
@@ -3343,6 +3722,13 @@ def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_
 
     _vendor, _client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
     region_client_ids = set(region_client_ids)
+    group_index = economic_group_index(company_id)
+    all_clients = dict(all_client_record_map(company_id))
+    all_clients.update(_client_index)
+    region_group_keys = {
+        economic_group_key_from_index(group_index, client_id, _client_index.get(client_id))
+        for client_id in region_client_ids
+    }
     sales_by_client_dates = defaultdict(list)
     daily_clients = defaultdict(set)
 
@@ -3351,15 +3737,19 @@ def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_
             if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
                 continue
             client_id = normalize_identifier(sale.get("ID_CL"))
-            if not client_id or client_id not in region_client_ids:
+            if not client_id:
+                continue
+            sale_client = all_clients.get(client_id, {})
+            group_key = economic_group_key_from_index(group_index, client_id, sale_client, sale)
+            if group_key not in region_group_keys:
                 continue
             sale_date = record_date_value(sale.get("NF_EMI"))
             if not sale_date:
                 continue
-            sales_by_client_dates[client_id].append(sale_date)
+            sales_by_client_dates[group_key].append(sale_date)
             if sale_date.year == year and sale_date.month == month and sale_date.isoformat() in day_rows:
                 day_rows[sale_date.isoformat()]["vendas_liquidas"] += sale_net_revenue(sale)
-                daily_clients[sale_date.isoformat()].add(client_id)
+                daily_clients[sale_date.isoformat()].add(group_key)
 
     for day_key, clients in daily_clients.items():
         day_rows[day_key]["clientes_atendidos"] = len(clients)
@@ -3421,6 +3811,24 @@ def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_
         "rows": rows,
         "totals": totals,
     }
+
+
+def home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
+    company_id, vendor, user = current_user_vendor_context(token, company_id_value, vendor_id_value)
+    resolved_vendor_id = str(vendor.get("id") or "")
+    cache_key = (
+        "home_vendor_panel",
+        str(user.get("id") or user.get("login") or token or "anon"),
+        company_id,
+        resolved_vendor_id,
+        date.today().strftime("%Y-%m-%d"),
+    )
+    dependencies = vendor_dashboard_dependencies(company_id) + [users_file(), auth_sessions_file()]
+    return cached_payload(
+        cache_key,
+        dependencies,
+        lambda: build_home_vendor_panel_payload(token, company_id, resolved_vendor_id),
+    )
 
 
 def vendor_day_by_day_agenda_payload(company_id: str, vendor_id_value: str):
@@ -3627,7 +4035,7 @@ def follow_up_record_row(company_id: str, record: dict, vendor_lookup: dict) -> 
 
 
 def follow_up_all_rows(company_id: str, allowed_vendor_ids: set[str], is_admin: bool) -> list[dict]:
-    data = load_json(vendor_day_by_day_file(company_id), {"historico": []})
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     vendors = load_json(vendors_file(company_id), [])
     vendor_lookup = {str(vendor.get("id") or ""): vendor for vendor in vendors}
     rows = []
@@ -3825,6 +4233,204 @@ def vendor_page_payload(company_id: str, vendor_id_value: str):
     if vendor.get("status") != "Ativo":
         raise ValueError("Pagina disponivel somente para vendedores ativos.")
     return vendor_regions_payload(company_id, vendor_id_value)
+
+
+def vendor_about_goal_region_rows(company_id: str, vendor: dict, client_index: dict) -> list[dict]:
+    vendor_id_value = str(vendor.get("id") or "")
+    rows = []
+    seen = set()
+    rules = [
+        rule for rule in active_region_rules(company_id)
+        if rule.get("vendor_id") == vendor_id_value
+        and str(rule.get("tipo") or "").lower() in {"uf", "cidade", "ddd"}
+    ]
+    for rule in sorted(rules, key=lambda item: (item.get("uf") or "", normalize_text(item.get("cidade")), item.get("ddd") or "")):
+        rule_type = str(rule.get("tipo") or "").lower()
+        row = {
+            "tipo": {"uf": "UF", "cidade": "Cidade", "ddd": "DDD"}.get(rule_type, "Regiao"),
+            "uf": str(rule.get("uf") or "").strip().upper(),
+            "cidade": str(rule.get("cidade") or "").strip() if rule_type == "cidade" else "Todas as cidades",
+            "ddd": str(rule.get("ddd") or "").strip() if rule_type in {"ddd", "cidade"} and rule.get("ddd") else "Todos",
+            "origem": "Cadastro de regioes",
+        }
+        key = (row["tipo"], row["uf"], normalize_text(row["cidade"]), row["ddd"])
+        if key not in seen:
+            seen.add(key)
+            rows.append(row)
+    if rows:
+        return rows
+
+    assignments = vendor.get("clientes_atendidos") or {}
+    for uf in assignments.get("ufs", []):
+        uf_value = str(uf or "").strip().upper()
+        if not uf_value:
+            continue
+        row = {"tipo": "UF", "uf": uf_value, "cidade": "Todas as cidades", "ddd": "Todos", "origem": "Cadastro do vendedor"}
+        key = (row["tipo"], row["uf"], row["cidade"], row["ddd"])
+        if key not in seen:
+            seen.add(key)
+            rows.append(row)
+    for item in assignments.get("cidades", []):
+        uf_value = str(item.get("uf") or "").strip().upper()
+        city = str(item.get("cidade") or "").strip()
+        ddds = [str(value).strip() for value in item.get("ddds", []) if str(value).strip()] or ["Todos"]
+        for ddd in ddds:
+            row = {"tipo": "Cidade", "uf": uf_value, "cidade": city, "ddd": ddd, "origem": "Cadastro do vendedor"}
+            key = (row["tipo"], row["uf"], normalize_text(row["cidade"]), row["ddd"])
+            if key not in seen:
+                seen.add(key)
+                rows.append(row)
+    return rows
+
+
+def vendor_about_goal_specific_clients(company_id: str, vendor: dict, client_index: dict) -> list[dict]:
+    vendor_id_value = str(vendor.get("id") or "")
+    client_ids = []
+    for rule in active_region_rules(company_id):
+        if rule.get("vendor_id") == vendor_id_value and str(rule.get("tipo") or "").lower() == "cliente":
+            client_id = normalize_identifier(rule.get("cliente_id"))
+            if client_id:
+                client_ids.append(client_id)
+
+    assignments = vendor.get("clientes_atendidos") or {}
+    for item in assignments.get("clientes_especificos", []):
+        client_id = normalize_identifier(item.get("id"))
+        if client_id:
+            client_ids.append(client_id)
+
+    rows = []
+    seen = set()
+    for client_id in client_ids:
+        if client_id in seen:
+            continue
+        seen.add(client_id)
+        client = client_index.get(client_id) or {}
+        client_name = str(client.get("NOM") or client.get("NOME") or client.get("CL_NOM") or client.get("nome") or "").strip()
+        rows.append({
+            "codigo": client_id,
+            "cliente": client_id,
+            "nome_cliente": client_name or client_id,
+            "uf": str(client.get("UF") or "").strip().upper(),
+            "cidade": str(client.get("CID") or "").strip(),
+            "ddd": client_ddd(client),
+        })
+    rows.sort(key=lambda item: normalize_text(f"{item['nome_cliente']} {item['codigo']}"))
+    return rows
+
+
+def vendor_about_goal_payload(company_id: str, vendor_id_value: str, year_value=None, month_value=None):
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    vendor, client_index, _region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+    if vendor.get("status") != "Ativo":
+        raise ValueError("Pagina disponivel somente para vendedores ativos.")
+
+    year = int(optional_number_value(year_value) or CURRENT_YEAR)
+    month = int(optional_number_value(month_value) or date.today().month)
+    month = max(1, min(12, month))
+    goals = vendor_goals_payload(company_id, vendor_id_value, year)
+    month_data = (goals.get("goals", {}).get("months") or {}).get(str(month), {})
+    sales_base = goals.get("sales_base") or {}
+    increase_percent = number_value(month_data.get("percentual_aumento"))
+    base_average = number_value(sales_base.get("media_base"))
+    sales_goal_value = number_value(((month_data.get("objetivos") or {}).get("vendas_liquidas") or {}).get("meta"))
+    sales_goal_calculation = {
+        "criterio": "Media dos 3 maiores meses dos 2 anos fechados",
+        "meses_base": sales_base.get("meses_base") or [],
+        "media_base": round(base_average, 2),
+        "percentual_aumento": round(increase_percent, 2),
+        "meta_final": round(sales_goal_value, 2),
+        "formula": "media_base_com_percentual",
+    }
+
+    rule_texts = {
+        "vendas_liquidas": [
+            "Conta as vendas liquidas feitas para clientes da regiao ou carteira do vendedor.",
+            "Vendas feitas pelo vendedor para clientes de outras regioes entram no subtotal quando o nome do vendedor estiver na nota fiscal.",
+            "A comissao das metas so fica liberada quando o vendedor atingir pelo menos 30% da meta de vendas liquidas.",
+        ],
+        "reativacao_inativos": [
+            "Conta clientes que ja compraram no passado, ficaram mais de 180 dias sem comprar e voltaram a comprar no mes.",
+            "Clientes novos ou clientes que nunca compraram nao entram nessa regra.",
+        ],
+        "clientes_com_vendas": [
+            "Conta quantos clientes diferentes da carteira compraram no mes.",
+            "Quando o cliente faz parte de um mesmo grupo economico, o grupo deve contar como uma unica empresa.",
+        ],
+        "contatos_inativos_nunca": [
+            "Conta os atendimentos registrados no Day by Day para clientes inativos e clientes que nunca compraram.",
+            "A rotina considera os contatos salvos pelo vendedor dentro do mes.",
+        ],
+        "novos_clientes": [
+            "Conta novo cliente cadastrado que fez compra e que nao existia na base de clientes antes.",
+            "Nao conta quando o cliente pertence a um grupo de empresas ja cadastrado.",
+            "A comissao e um valor fixo por novo cliente, conforme valor configurado na meta.",
+        ],
+        "sem_giro": [
+            "Conta vendas de itens ou equipamentos sem movimento conforme a regra de estoque.",
+            "A comissao e calculada item a item: valor liquido vendido multiplicado pelo percentual de Bonus cadastrado no estoque.",
+            "Itens sem data de ultima venda nao entram na regra automatica de bonus por mais de 6 meses.",
+        ],
+    }
+
+    objectives = []
+    for objective in goals.get("objectives", []):
+        item = (month_data.get("objetivos") or {}).get(objective.get("key"), {})
+        objective_key = objective.get("key")
+        objective_group = "bonus" if objective_key in {"novos_clientes", "sem_giro"} else "meta"
+        objectives.append({
+            "key": objective_key,
+            "label": objective.get("label"),
+            "grupo": objective_group,
+            "kind": objective.get("kind"),
+            "meta": number_value(item.get("meta")),
+            "peso": number_value(item.get("peso")),
+            "valor_atingido": number_value(item.get("valor_atingido")),
+            "percentual_atingido": number_value(item.get("percentual_atingido")),
+            "qty_minima": number_value(item.get("qty_minima")),
+            "valor_minimo": number_value(item.get("valor_minimo")),
+            "periodo": str(item.get("periodo") or "mensal"),
+            "tipo_bonus": str(item.get("tipo_bonus") or ("valor" if objective_key == "novos_clientes" else "percentual")),
+            "regras": rule_texts.get(objective_key, []),
+        })
+    custom_bonus_rules = []
+    for index, bonus in enumerate(month_data.get("bonus_customizados") or [], start=1):
+        title = normalize_record(bonus.get("titulo")) or f"Bonus adicional {index}"
+        bonus_type = str(bonus.get("tipo_bonus") or "valor")
+        custom_bonus_rules.append({
+            "key": normalize_record(bonus.get("id")) or f"bonus_custom_{index}",
+            "label": title,
+            "grupo": "bonus",
+            "kind": "currency" if bonus_type == "valor" else "percent",
+            "meta": number_value(bonus.get("meta")),
+            "peso": 0.0,
+            "valor_atingido": 0.0,
+            "percentual_atingido": 0.0,
+            "qty_minima": number_value(bonus.get("qty_minima")),
+            "valor_minimo": number_value(bonus.get("valor_minimo")),
+            "periodo": str(bonus.get("periodo") or "mensal"),
+            "tipo_bonus": bonus_type,
+            "customizado": True,
+            "regras": [
+                normalize_record(bonus.get("observacao")) or "Regra de bonificacao customizada cadastrada para este mes.",
+                "Esta linha e dinamica e acompanha inclusoes, alteracoes ou exclusoes feitas no cadastro de metas e objetivos.",
+            ],
+        })
+    objectives.extend(custom_bonus_rules)
+
+    return {
+        "empresa": COMPANIES[company_id],
+        "empresa_id": company_id,
+        "vendedor": vendor_public_record(vendor),
+        "year": year,
+        "month": month,
+        "month_label": month,
+        "comissao_percentual": number_value((goals.get("goals") or {}).get("comissao_percentual")),
+        "sales_goal_calculation": sales_goal_calculation,
+        "regions": vendor_about_goal_region_rows(company_id, vendor, client_index),
+        "specific_clients": vendor_about_goal_specific_clients(company_id, vendor, client_index),
+        "objectives": objectives,
+    }
 
 
 def quote_vendor_prefix(vendor: dict) -> str:
@@ -4502,6 +5108,8 @@ def commercial_document_search_payload(company_id: str, vendor_id_value: str, qu
         raise ValueError("Empresa invalida.")
     source = orders_file(company_id) if kind == "pedido" else quotes_file(company_id)
     query_key = normalize_text(query)
+    page_size = max(1, min(int(optional_number_value(limit) or 20), 100))
+    page_number = max(1, int(optional_number_value(page) or 1))
     rows = []
     for document in load_json(source, []):
         if vendor_id_value and document.get("vendor_id") != vendor_id_value:
@@ -4510,21 +5118,21 @@ def commercial_document_search_payload(company_id: str, vendor_id_value: str, qu
         haystack = normalize_text(f"{document.get('numero')} {client.get('nome')} {client.get('documento')} {client.get('codigo')}")
         if query_key and not search_text_matches(query, haystack):
             continue
+        updated_at = document.get("atualizado_em") or document.get("revisado_em") or document.get("criado_em") or ""
         rows.append({
             "id": document.get("id"),
             "numero": document.get("numero"),
             "cliente": client.get("nome"),
             "cliente_documento": client.get("documento"),
             "total": (document.get("resumo") or {}).get("total_orcamento"),
-            "atualizado_em": document.get("atualizado_em") or document.get("criado_em"),
+            "atualizado_em": updated_at,
             "documento": document,
             "label": f"{document.get('numero')} - {client.get('nome') or ''}",
         })
     rows.sort(key=lambda item: (str(item.get("atualizado_em") or ""), normalize_text(item.get("numero"))), reverse=True)
     total = len(rows)
-    page_size = max(1, min(int(optional_number_value(limit) or 20), 100))
     total_pages = max(1, math.ceil(total / page_size))
-    page_number = max(1, min(int(optional_number_value(page) or 1), total_pages))
+    page_number = min(page_number, total_pages)
     start = (page_number - 1) * page_size
     paged_rows = rows[start:start + page_size]
     return {
@@ -4891,7 +5499,7 @@ VENDOR_GOAL_OBJECTIVES = [
     ("vendas_liquidas", "Vendas Liquidas sua regiao", "currency"),
     ("reativacao_inativos", "Reativacao Inativos", "number"),
     ("clientes_com_vendas", "Quantidade Minima de Clientes com Vendas no Mes", "number"),
-    ("contatos_inativos_nunca", "Contatos diarios com Clientes Inativos / Nunca Comprou", "number"),
+    ("contatos_inativos_nunca", "Contatos diarios com Clientes Inativos / Nunca Comprou (por dia)", "number"),
     ("novos_clientes", "Novos Clientes", "currency"),
     ("sem_giro", "Vendas de Itens/Equipamentos Sem Giro", "percent"),
 ]
@@ -4905,14 +5513,15 @@ def default_vendor_goal_month():
         "reativacao_inativos": {"meta": 0.0, "peso": 10.0},
         "clientes_com_vendas": {"meta": 0.0, "peso": 20.0},
         "contatos_inativos_nunca": {"meta": 50.0, "peso": 10.0},
-        "novos_clientes": {"meta": 50.0, "peso": 0.0},
-        "sem_giro": {"meta": 0.0, "peso": 0.0},
+        "novos_clientes": {"meta": 50.0, "peso": 0.0, "qty_minima": 1.0, "valor_minimo": 0.0, "periodo": "mensal", "tipo_bonus": "valor"},
+        "sem_giro": {"meta": 0.0, "peso": 0.0, "qty_minima": 0.0, "valor_minimo": 0.0, "periodo": "mensal", "tipo_bonus": "percentual"},
     }
     return {
         "percentual_aumento": 0.0,
         "quantidade_minima_clientes": 0.0,
         "contatos_diarios_inativos": 50.0,
         "valor_novo_cliente": 50.0,
+        "bonus_customizados": [],
         "objetivos": {
             key: dict(default_objectives.get(key, {"meta": 0.0, "peso": 0.0}))
             for key, _label, _kind in VENDOR_GOAL_OBJECTIVES
@@ -5015,6 +5624,11 @@ def vendor_client_sales_goal_base(company_id: str, vendor_id_value: str, target_
         for base_year in last_two_years
         for month in range(1, 13)
     }
+    group_index = economic_group_index(company_id)
+    region_group_keys = {
+        economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
+        for client_id in region_client_ids
+    }
     for sale_company_id in vendor_sales_company_ids(company_id):
         for sale in load_json(sales_file(sale_company_id), []):
             if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
@@ -5024,10 +5638,10 @@ def vendor_client_sales_goal_base(company_id: str, vendor_id_value: str, target_
             if sale_year not in last_two_years or not sale_month or not (1 <= sale_month <= 12):
                 continue
             client_id = normalize_identifier(sale.get("ID_CL"))
-            if client_id not in region_client_ids:
-                continue
             client = client_index.get(client_id)
-            group_key = economic_client_key(client_id, client, sale)
+            group_key = economic_group_key_from_index(group_index, client_id, client, sale)
+            if group_key not in region_group_keys:
+                continue
             clients_by_month[(sale_year, sale_month)].add(group_key)
 
     month_rows = [
@@ -5161,6 +5775,11 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     except Exception:
         return {str(month): {} for month in range(1, 13)}
 
+    group_index = economic_group_index(company_id)
+    region_group_keys = {
+        economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
+        for client_id in region_client_ids
+    }
     achievements = {str(month): {key: 0.0 for key, _label, _kind in VENDOR_GOAL_OBJECTIVES} for month in range(1, 13)}
     _stock_by_ref, _costing_by_ref, last_sale_by_ref = product_info_maps(company_id)
     sales = []
@@ -5171,28 +5790,47 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
                 continue
             client_id = normalize_identifier(sale.get("ID_CL"))
+            client = client_index.get(client_id)
+            group_key = economic_group_key_from_index(group_index, client_id, client, sale)
             sale_date = record_date_value(sale.get("NF_EMI"))
             sale_year = record_year(sale.get("NF_EMI"))
             sale_month = record_month(sale.get("NF_EMI"))
             if not sale_date or not sale_year or not sale_month:
                 continue
-            if client_id in region_client_ids:
+            if group_key in region_group_keys:
                 sales.append((sale_date, client_id, sale_year, sale_month, sale_company_id, sale))
                 continue
             if vendor_name_key and normalize_text(sale.get("VN_NOM")) == vendor_name_key:
                 other_region_sales.append((sale_date, client_id, sale_year, sale_month, sale_company_id, sale))
 
     first_purchase_by_economic_group = {}
-    previous_purchase_by_client = {}
+    previous_purchase_by_group = {}
     reactivated_by_month = {str(month): set() for month in range(1, 13)}
     active_clients_by_month = {str(month): set() for month in range(1, 13)}
     new_clients_by_month = {str(month): set() for month in range(1, 13)}
-    product_previous_sale = {}
-    slow_item_percentages = {
-        sale_company_id: load_json(slow_items_file(sale_company_id), {})
+    stock_bonus_by_company = {
+        sale_company_id: {
+            normalize_text(record.get("Referencia")): number_value(record.get("Bonus"))
+            for record in stock_records_with_last_exit(sale_company_id)
+            if normalize_text(record.get("Referencia"))
+        }
         for sale_company_id in vendor_sales_company_ids(company_id)
         if sale_company_id in COMPANIES
     }
+    product_sale_dates_by_company = {}
+    for sale_company_id in vendor_sales_company_ids(company_id):
+        if sale_company_id not in COMPANIES:
+            continue
+        dates_by_ref = defaultdict(list)
+        for product_sale in load_json(sales_file(sale_company_id), []):
+            ref_key = normalize_text(product_sale.get("PR_COD"))
+            sale_date_value = record_date_value(product_sale.get("NF_EMI"))
+            if ref_key and sale_date_value:
+                dates_by_ref[ref_key].append(sale_date_value)
+        product_sale_dates_by_company[sale_company_id] = {
+            ref_key: sorted(values)
+            for ref_key, values in dates_by_ref.items()
+        }
     sem_giro_commission_by_month = {str(month): 0.0 for month in range(1, 13)}
 
     for _sale_date, _client_id, sale_year, sale_month, _sale_company_id, sale in other_region_sales:
@@ -5202,36 +5840,88 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
                 + sale_net_revenue(sale)
             )
 
+    sem_giro_details_by_month = {str(month): [] for month in range(1, 13)}
+    for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(
+        sales + other_region_sales,
+        key=lambda item: (item[0], normalize_text(item[5].get("PR_COD")), item[1]),
+    ):
+        ref_key = normalize_text(sale.get("PR_COD"))
+        if not ref_key:
+            continue
+        month_start = date(sale_year, sale_month, 1) if sale_year and sale_month else None
+        previous_month_end = month_start - timedelta(days=1) if month_start else None
+        previous_product_sale = None
+        if month_start:
+            for candidate_date in product_sale_dates_by_company.get(sale_company_id, {}).get(ref_key, []):
+                if candidate_date < month_start:
+                    previous_product_sale = candidate_date
+                else:
+                    break
+        days_without_movement_base = (previous_month_end - previous_product_sale).days if previous_product_sale and previous_month_end else 0
+        if previous_product_sale and sale_year == year and 1 <= sale_month <= 12 and days_without_movement_base > 180:
+            month_key = str(sale_month)
+            net_revenue = sale_net_revenue(sale)
+            month_objectives = ((goal_record.get("months") or {}).get(month_key) or {}).get("objetivos") or {}
+            sem_giro_goal = month_objectives.get("sem_giro") if isinstance(month_objectives.get("sem_giro"), dict) else {}
+            sale_qty = number_value(sale.get("PR_QTD"))
+            min_qty = number_value(sem_giro_goal.get("qty_minima"))
+            min_value = number_value(sem_giro_goal.get("valor_minimo"))
+            if (not min_qty or sale_qty >= min_qty) and (not min_value or net_revenue >= min_value):
+                bonus_percent = max(0.0, number_value(stock_bonus_by_company.get(sale_company_id, {}).get(ref_key)))
+                if bonus_percent <= 0:
+                    bonus_percent = max(0.0, number_value(sem_giro_goal.get("meta")))
+                if bonus_percent <= 0:
+                    bonus_percent = 1.5
+                gross_total = number_value(sale.get("PR_SBT"))
+                unit_value = gross_total / sale_qty if sale_qty else 0.0
+                bonus_value = net_revenue * bonus_percent / 100
+                achievements[month_key]["sem_giro"] += net_revenue
+                sem_giro_commission_by_month[month_key] += bonus_value
+                sem_giro_details_by_month[month_key].append({
+                    "nota_fiscal": normalize_record(sale.get("NF_NUM") or sale.get("ID_NF")),
+                    "data_emissao": format_date_br(sale_date),
+                    "codigo_cliente": normalize_record(client_id),
+                    "nome_cliente": normalize_record(sale.get("CL_NOM")),
+                    "referencia_produto": normalize_record(sale.get("PR_COD")),
+                    "descricao_produto": normalize_record(sale.get("PR_DES")),
+                    "dias_sem_movimento": format_days_without_movement(days_without_movement_base),
+                    "dias_sem_movimento_numero": days_without_movement_base,
+                    "quantidade": round(sale_qty, 3),
+                    "valor_unitario": round(unit_value, 4),
+                    "valor_total": round(gross_total, 2),
+                    "base_calculo": round(net_revenue, 2),
+                    "percentual_bonificacao": round(bonus_percent, 4),
+                    "bonificacao": round(bonus_value, 2),
+                })
     for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(sales, key=lambda item: (item[0], item[1])):
         client = client_index.get(client_id)
-        group_key = economic_client_key(client_id, client, sale)
+        ge_group_key = economic_group_master_id_from_index(group_index, client_id)
+        group_key = economic_group_key_from_index(group_index, client_id, client, sale)
         ref_key = normalize_text(sale.get("PR_COD"))
         first_purchase_by_economic_group.setdefault(group_key, sale_date)
         if sale_year != year or not 1 <= sale_month <= 12:
-            previous_purchase_by_client[client_id] = sale_date
-            if ref_key:
-                product_previous_sale[ref_key] = sale_date
+            previous_purchase_by_group[group_key] = sale_date
             continue
 
         month_key = str(sale_month)
         net_revenue = sale_net_revenue(sale)
         achievements[month_key]["vendas_liquidas"] += net_revenue
         active_clients_by_month[month_key].add(group_key)
-        previous_purchase = previous_purchase_by_client.get(client_id)
+        previous_purchase = previous_purchase_by_group.get(group_key)
         if previous_purchase and (sale_date - previous_purchase).days > 180:
-            reactivated_by_month[month_key].add(client_id)
-        if first_purchase_by_economic_group.get(group_key) == sale_date and not is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
+            reactivated_by_month[month_key].add(group_key)
+        client_import_date = record_date_value((client or {}).get("_importado_em"))
+        is_new_registered_client = bool((client or {}).get("_novo_cliente_cadastrado")) and client_import_date and sale_date >= client_import_date
+        if (
+            is_new_registered_client
+            and first_purchase_by_economic_group.get(group_key) == sale_date
+            and not is_excluded_group_sale(sale_company_id, sale.get("CL_NOM"))
+            and not is_group_company_client(client or {})
+            and not ge_group_key
+        ):
             new_clients_by_month[month_key].add(group_key)
 
-        previous_product_sale = product_previous_sale.get(ref_key)
-        if ref_key and previous_product_sale and previous_product_sale < sale_date and (sale_date - previous_product_sale).days > 365:
-            achievements[month_key]["sem_giro"] += net_revenue
-            item_config = slow_item_percentages.get(sale_company_id, {}).get(ref_key, {})
-            sem_giro_commission_by_month[month_key] += net_revenue * max(0.0, number_value(item_config.get("percentual"))) / 100
-
-        previous_purchase_by_client[client_id] = sale_date
-        if ref_key:
-            product_previous_sale[ref_key] = sale_date
+        previous_purchase_by_group[group_key] = sale_date
 
     for month in range(1, 13):
         month_key = str(month)
@@ -5244,11 +5934,14 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
         achievements[month_key]["contatos_inativos_nunca"] = vendor_day_by_day_monthly_count(company_id, vendor_id_value, year, month)
         achievements[month_key]["novos_clientes"] = len(new_clients_by_month[month_key]) * new_client_value
         achievements[month_key]["sem_giro_comissao"] = sem_giro_commission_by_month[month_key]
+        achievements[month_key]["sem_giro_detalhes"] = sem_giro_details_by_month[month_key]
         achievements[month_key]["vendas_liquidas_total"] = (
             number_value(achievements[month_key].get("vendas_liquidas"))
             + number_value(achievements[month_key].get("vendas_liquidas_outras_regioes"))
         )
         for key in achievements[month_key]:
+            if key == "sem_giro_detalhes":
+                continue
             achievements[month_key][key] = round(number_value(achievements[month_key][key]), 2)
     return achievements
 
@@ -5265,6 +5958,22 @@ def normalize_vendor_goal_record(record: dict, company_id: str, vendor_id_value:
         target_month["quantidade_minima_clientes"] = optional_number_value(source_month.get("quantidade_minima_clientes")) or 0.0
         target_month["contatos_diarios_inativos"] = optional_number_value(source_month.get("contatos_diarios_inativos")) or target_month["contatos_diarios_inativos"]
         target_month["valor_novo_cliente"] = optional_number_value(source_month.get("valor_novo_cliente")) or target_month["valor_novo_cliente"]
+        source_custom_bonuses = source_month.get("bonus_customizados") if isinstance(source_month.get("bonus_customizados"), list) else []
+        target_month["bonus_customizados"] = []
+        for index, bonus in enumerate(source_custom_bonuses):
+            if not isinstance(bonus, dict):
+                continue
+            title = normalize_record(bonus.get("titulo") or bonus.get("label") or f"Bonus adicional {index + 1}")
+            target_month["bonus_customizados"].append({
+                "id": normalize_record(bonus.get("id")) or f"bonus_custom_{index + 1}",
+                "titulo": title,
+                "qty_minima": optional_number_value(bonus.get("qty_minima")) or 0.0,
+                "valor_minimo": optional_number_value(bonus.get("valor_minimo")) or 0.0,
+                "periodo": str(bonus.get("periodo") or "mensal"),
+                "tipo_bonus": str(bonus.get("tipo_bonus") or "valor"),
+                "meta": optional_number_value(bonus.get("meta")) or 0.0,
+                "observacao": normalize_record(bonus.get("observacao")),
+            })
         source_objectives = source_month.get("objetivos") if isinstance(source_month.get("objetivos"), dict) else {}
         for key, _label, _kind in VENDOR_GOAL_OBJECTIVES:
             source_objective = source_objectives.get(key) if isinstance(source_objectives.get(key), dict) else {}
@@ -5280,6 +5989,10 @@ def normalize_vendor_goal_record(record: dict, company_id: str, vendor_id_value:
             target_month["objetivos"][key] = {
                 "meta": source_meta if source_meta is not None else default_meta,
                 "peso": source_weight if source_weight is not None else default_weight,
+                "qty_minima": optional_number_value(source_objective.get("qty_minima")) or number_value(default_objective.get("qty_minima")),
+                "valor_minimo": optional_number_value(source_objective.get("valor_minimo")) or number_value(default_objective.get("valor_minimo")),
+                "periodo": str(source_objective.get("periodo") or default_objective.get("periodo") or "mensal"),
+                "tipo_bonus": str(source_objective.get("tipo_bonus") or default_objective.get("tipo_bonus") or ("valor" if key == "novos_clientes" else "percentual")),
             }
         target_month["valor_novo_cliente"] = number_value(target_month["objetivos"]["novos_clientes"].get("meta"))
         target_month["contatos_diarios_inativos"] = number_value(target_month["objetivos"]["contatos_inativos_nunca"].get("meta")) or target_month["contatos_diarios_inativos"]
@@ -5323,6 +6036,12 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
         for key, _label, _kind in VENDOR_GOAL_OBJECTIVES:
             achieved = number_value((achievements.get(month_key) or {}).get(key))
             meta = number_value(month_record["objetivos"][key].get("meta"))
+            if key == "contatos_inativos_nunca":
+                daily_meta = meta
+                monthly_meta = daily_meta * month_business_day_count(year, month)
+                month_record["objetivos"][key]["meta_diaria"] = round(daily_meta, 2)
+                month_record["objetivos"][key]["meta_mensal"] = round(monthly_meta, 2)
+                meta = monthly_meta
             if key == "vendas_liquidas":
                 achieved_total = number_value((achievements.get(month_key) or {}).get("vendas_liquidas_total"))
                 achieved_other_regions = number_value((achievements.get(month_key) or {}).get("vendas_liquidas_outras_regioes"))
@@ -5341,6 +6060,7 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
             month_record["objetivos"][key]["percentual_atingido"] = round(max(0.0, min(percent, 999.0)), 2)
             if key == "sem_giro":
                 month_record["objetivos"][key]["comissao_valor"] = round(number_value((achievements.get(month_key) or {}).get("sem_giro_comissao")), 2)
+                month_record["objetivos"][key]["detalhes"] = (achievements.get(month_key) or {}).get("sem_giro_detalhes") or []
 
     return {
         "empresa": COMPANIES[company_id],
@@ -5609,6 +6329,170 @@ def vendor_client_search_payload(company_id: str, query: str, limit: int = 20):
         if len(matches) >= limit:
             break
     return {"clients": matches}
+
+
+def client_vendor_name(company_id: str, client_id: str, client: dict | None = None) -> str:
+    try:
+        vendors, _inserted = sync_vendors_from_sales(company_id)
+        active_vendors = [vendor for vendor in vendors if vendor.get("status") == "Ativo"]
+        rules = active_region_rules(company_id)
+        if rules and client:
+            matching = [rule for rule in rules if rule_matches_client(rule, client_id, client)]
+            if matching:
+                selected_rule = sorted(matching, key=region_rule_sort_key)[-1]
+                vendor_id_value = selected_rule.get("vendor_id")
+                vendor = next((item for item in active_vendors if item.get("id") == vendor_id_value), None)
+                if vendor and not str(selected_rule.get("tipo") or "").startswith("exclusao_"):
+                    return vendor.get("nome_completo") or ""
+        for vendor in active_vendors:
+            if client_id in vendor_legacy_region_client_ids(vendor, {client_id: client or {}}):
+                return vendor.get("nome_completo") or ""
+    except Exception:
+        return ""
+    return ""
+
+
+def client_vendor_name_from_context(client_id: str, client: dict, active_vendors: list, rules: list) -> str:
+    try:
+        if rules and client:
+            matching = [rule for rule in rules if rule_matches_client(rule, client_id, client)]
+            if matching:
+                selected_rule = sorted(matching, key=region_rule_sort_key)[-1]
+                vendor_id_value = selected_rule.get("vendor_id")
+                vendor = next((item for item in active_vendors if item.get("id") == vendor_id_value), None)
+                if vendor and not str(selected_rule.get("tipo") or "").startswith("exclusao_"):
+                    return vendor.get("nome_completo") or ""
+        for vendor in active_vendors:
+            if client_id in vendor_legacy_region_client_ids(vendor, {client_id: client or {}}):
+                return vendor.get("nome_completo") or ""
+    except Exception:
+        return ""
+    return ""
+
+
+def economic_group_client_record(company_id: str, client: dict, vendor_name: str | None = None) -> dict:
+    client_id = normalize_identifier(client.get("ID"))
+    return {
+        "codigo": client_id,
+        "nome": normalize_record(client.get("NOM")),
+        "documento": normalize_identifier(client.get("CGC")),
+        "uf": normalize_record(client.get("UF")).upper(),
+        "cidade": normalize_record(client.get("CID")),
+        "vendedor": vendor_name if vendor_name is not None else client_vendor_name(company_id, client_id, client),
+        "label": f"{client_id} - {normalize_record(client.get('NOM'))}",
+    }
+
+
+def economic_group_client_search_payload(company_id: str, query: str, limit: int = 20):
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    query_text = normalize_text(query)
+    matches = []
+    vendors, _inserted = sync_vendors_from_sales(company_id)
+    active_vendors = [vendor for vendor in vendors if vendor.get("status") == "Ativo"]
+    rules = active_region_rules(company_id)
+    for client in load_json(clients_file(company_id), []):
+        if not is_client_record(client):
+            continue
+        client_id = normalize_identifier(client.get("ID"))
+        haystack = f"{client_id} {client.get('NOM')} {client.get('FAN')} {normalize_identifier(client.get('CGC'))}"
+        if query_text and not search_text_matches(query, haystack):
+            continue
+        record = economic_group_client_record(
+            company_id,
+            client,
+            client_vendor_name_from_context(client_id, client, active_vendors, rules),
+        )
+        matches.append(record)
+        if len(matches) >= limit:
+            break
+    return {"clients": matches}
+
+
+def load_economic_groups(company_id: str) -> list[dict]:
+    groups = load_json(economic_groups_file(company_id), [])
+    return groups if isinstance(groups, list) else []
+
+
+def economic_group_index(company_id: str) -> dict:
+    index = {}
+    for group in load_economic_groups(company_id):
+        master = group.get("master") or {}
+        master_id = normalize_identifier(master.get("codigo"))
+        if master_id:
+            index[master_id] = group
+        for client in group.get("clientes") or []:
+            client_id = normalize_identifier(client.get("codigo"))
+            if client_id:
+                index[client_id] = group
+    return index
+
+
+def economic_group_key_for_client(company_id: str, client_id: str) -> str:
+    group = economic_group_index(company_id).get(normalize_identifier(client_id))
+    if not group:
+        return ""
+    master_id = normalize_identifier((group.get("master") or {}).get("codigo"))
+    return f"GE:{master_id or normalize_text(group.get('id'))}"
+
+
+def economic_group_payload(company_id: str, client_id: str = ""):
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    groups = load_economic_groups(company_id)
+    selected = None
+    normalized_client_id = normalize_identifier(client_id)
+    if normalized_client_id:
+        selected = economic_group_index(company_id).get(normalized_client_id)
+    return {
+        "empresa": COMPANIES[company_id],
+        "empresa_id": company_id,
+        "groups": groups,
+        "group": selected,
+    }
+
+
+def save_economic_group_payload(payload: dict):
+    company_id = str(payload.get("company") or "ionlab")
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    master = payload.get("master") if isinstance(payload.get("master"), dict) else {}
+    master_id = normalize_identifier(master.get("codigo"))
+    if not master_id:
+        raise ValueError("Selecione o cliente Master.")
+    client_map = {
+        normalize_identifier(client.get("ID")): client
+        for client in load_json(clients_file(company_id), [])
+        if normalize_identifier(client.get("ID"))
+    }
+    if master_id not in client_map:
+        raise ValueError("Cliente Master nao encontrado.")
+    master_record = economic_group_client_record(company_id, client_map[master_id])
+    clients = []
+    seen = {master_id}
+    for item in payload.get("clients") or []:
+        client_id = normalize_identifier(item.get("codigo"))
+        if not client_id or client_id in seen or client_id not in client_map:
+            continue
+        seen.add(client_id)
+        clients.append(economic_group_client_record(company_id, client_map[client_id]))
+    groups = load_economic_groups(company_id)
+    now = datetime.now().isoformat(timespec="seconds")
+    group_id = f"ge-{master_id}"
+    existing = next((item for item in groups if item.get("id") == group_id or normalize_identifier((item.get("master") or {}).get("codigo")) == master_id), None)
+    record = {
+        "id": group_id,
+        "master": master_record,
+        "clientes": clients,
+        "updated_at": now,
+    }
+    if existing:
+        existing.update(record)
+    else:
+        record["created_at"] = now
+        groups.append(record)
+    save_json(economic_groups_file(company_id), groups)
+    return {"message": "Grupo economico salvo com sucesso.", **economic_group_payload(company_id, master_id)}
 
 
 def region_client_label(client: dict) -> str:
@@ -5934,13 +6818,12 @@ def vendors_payload(company_id: str, query: str = ""):
     }
 
 
-def vendor_page_links_payload():
+def build_vendor_page_links_payload():
     links = []
     for company_id, company_name in COMPANIES.items():
-        try:
-            vendors, _inserted = sync_vendors_from_sales(company_id)
-        except Exception:
-            continue
+        vendors = load_json(vendors_file(company_id), [])
+        if not isinstance(vendors, list):
+            vendors = []
         for vendor in vendors:
             if vendor.get("status") != "Ativo":
                 continue
@@ -5962,6 +6845,13 @@ def vendor_page_links_payload():
         "total": len(links),
         "rows": links,
     }
+
+
+def vendor_page_links_payload():
+    dependencies = []
+    for company_id in COMPANIES:
+        dependencies.append(vendors_file(company_id))
+    return cached_payload(("vendor_page_links",), dependencies, build_vendor_page_links_payload)
 
 
 def save_vendor_payload(payload: dict):
@@ -6982,7 +7872,7 @@ def mercado_livre_sales_net_value(record: dict) -> float:
     return total
 
 
-def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_filter: str = "todos"):
+def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_filter: str = "todos", month_filter: str = "todos", chart_type: str = "sales-value", product_filter: str = ""):
     if company_id == "agrupado":
         company_ids = list(MERCADO_LIVRE_COMPANIES)
         company_name = "Agrupado"
@@ -6993,11 +7883,20 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
         raise ValueError("Empresa invalida para Mercado Livre.")
 
     year_filter = normalize_text(year_filter or "todos").lower()
+    month_filter = normalize_text(month_filter or "todos").lower()
+    chart_type = str(chart_type or "sales-value").strip().lower()
+    product_filter = normalize_record(product_filter)
+    if chart_type not in {"sales-value", "sales-count", "pf-pj", "top-sku"}:
+        chart_type = "sales-value"
     dependencies = [mercado_livre_sales_file(current_company_id) for current_company_id in company_ids]
-    cache_key = ("mercado_livre_sales_dashboard", tuple(company_ids), year_filter)
+    cache_key = ("mercado_livre_sales_dashboard", tuple(company_ids), year_filter, month_filter, chart_type, product_filter)
 
     def build():
         monthly = defaultdict(float)
+        monthly_sales = defaultdict(set)
+        monthly_doc_types = defaultdict(lambda: {"pf": set(), "pj": set()})
+        sku_sales = defaultdict(set)
+        sku_monthly_sales = defaultdict(lambda: defaultdict(set))
         years = set()
         rows_count = 0
         ignored_without_date = 0
@@ -7011,7 +7910,23 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
                     continue
                 years.add(sold_at.year)
                 rows_count += 1
+                sale_number = normalize_record(mercado_livre_sales_value(record, "N. de venda", "N.� de venda", "N.º de venda", "NÂº de venda"))
+                sale_key = normalize_text(sale_number) or mercado_livre_sales_key(record)
+                sku = normalize_record(mercado_livre_sales_value(record, "SKU")) or "Sem SKU"
+                doc_text = normalize_text(mercado_livre_sales_value(record, "Tipo e numero do documento", "Tipo e número do documento", "Tipo e n�mero do documento"))
                 monthly[(sold_at.year, sold_at.month)] += mercado_livre_sales_net_value(record)
+                if sale_key:
+                    monthly_sales[(sold_at.year, sold_at.month)].add(sale_key)
+                    if "CNPJ" in doc_text:
+                        monthly_doc_types[(sold_at.year, sold_at.month)]["pj"].add(sale_key)
+                    elif "CPF" in doc_text:
+                        monthly_doc_types[(sold_at.year, sold_at.month)]["pf"].add(sale_key)
+                    year_matches = year_filter in ("todos", "all") or str(sold_at.year) == str(year_filter)
+                    month_matches = month_filter in ("todos", "all") or sold_at.month == int(optional_number_value(month_filter) or 0)
+                    if year_matches and month_matches:
+                        sku_sales[sku].add(sale_key)
+                    if sale_key:
+                        sku_monthly_sales[sku][(sold_at.year, sold_at.month)].add(sale_key)
 
         if not years:
             current_year = datetime.now().year
@@ -7021,14 +7936,25 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
         month_labels = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
         points = []
+        selected_month = None if month_filter in ("todos", "all") else int(optional_number_value(month_filter) or 0) or None
+        months_to_show = [selected_month] if selected_month and 1 <= selected_month <= 12 else list(range(1, 13))
+        product_options = [
+            {"sku": sku, "label": sku, "sales_count": len(sales)}
+            for sku, sales in sku_sales.items()
+            if len(sales) > 0
+        ]
+        product_options.sort(key=lambda item: (item["sales_count"], normalize_text(item["label"])))
         if selected_year in ("todos", "all"):
             for year in sorted_years:
-                for month in range(1, 13):
+                for month in months_to_show:
                     points.append({
                         "label": f"{month_labels[month - 1]}/{year}",
                         "year": year,
                         "month": month,
                         "value": round(monthly.get((year, month), 0.0), 2),
+                        "sales_count": len(monthly_sales.get((year, month), set())),
+                        "pf": len(monthly_doc_types.get((year, month), {}).get("pf", set())),
+                        "pj": len(monthly_doc_types.get((year, month), {}).get("pj", set())),
                     })
         else:
             try:
@@ -7039,23 +7965,94 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
             if year not in years:
                 years.add(year)
                 sorted_years = sorted(years)
-            for month in range(1, 13):
+            for month in months_to_show:
                 points.append({
                     "label": month_labels[month - 1],
                     "year": year,
                     "month": month,
                     "value": round(monthly.get((year, month), 0.0), 2),
+                    "sales_count": len(monthly_sales.get((year, month), set())),
+                    "pf": len(monthly_doc_types.get((year, month), {}).get("pf", set())),
+                    "pj": len(monthly_doc_types.get((year, month), {}).get("pj", set())),
                 })
 
-        total = round(sum(point["value"] for point in points), 2)
+        response_chart_type = chart_type
+        if product_filter:
+            points = []
+            selected_product_monthly = sku_monthly_sales.get(product_filter, {})
+            if selected_year in ("todos", "all"):
+                for year in sorted_years:
+                    for month in months_to_show:
+                        points.append({
+                            "label": f"{month_labels[month - 1]}/{year}",
+                            "year": year,
+                            "month": month,
+                            "value": len(selected_product_monthly.get((year, month), set())),
+                            "sales_count": len(selected_product_monthly.get((year, month), set())),
+                        })
+            else:
+                try:
+                    year = int(selected_year)
+                except ValueError:
+                    year = sorted_years[-1]
+                    selected_year = str(year)
+                for month in months_to_show:
+                    points.append({
+                        "label": month_labels[month - 1],
+                        "year": year,
+                        "month": month,
+                        "value": len(selected_product_monthly.get((year, month), set())),
+                        "sales_count": len(selected_product_monthly.get((year, month), set())),
+                    })
+            response_chart_type = "product-monthly"
+            chart_title = f"Produto {product_filter}"
+            chart_subtitle = "Quantidade de vendas mes a mes para o SKU selecionado"
+            total = sum(point["value"] for point in points)
+            value_kind = "number"
+        elif chart_type == "sales-count":
+            for point in points:
+                point["value"] = point.get("sales_count", 0)
+            chart_title = "Quantidade de vendas"
+            chart_subtitle = "Quantidade de numeros de venda distintos"
+            total = sum(point["value"] for point in points)
+            value_kind = "number"
+        elif chart_type == "pf-pj":
+            for point in points:
+                point["value"] = (point.get("pf", 0) or 0) + (point.get("pj", 0) or 0)
+            chart_title = "PF/PJ"
+            chart_subtitle = "Quantidade de vendas por tipo de documento"
+            total = sum(point["value"] for point in points)
+            value_kind = "grouped"
+        elif chart_type == "top-sku":
+            points = [
+                {"label": sku, "value": len(sales), "sales_count": len(sales)}
+                for sku, sales in sku_sales.items()
+                if len(sales) > 0
+            ]
+            points.sort(key=lambda item: (-item["value"], normalize_text(item["label"])))
+            points = points[:15]
+            chart_title = "Top SKU"
+            chart_subtitle = "Top 15 SKUs por quantidade de vendas distintas"
+            total = sum(point["value"] for point in points)
+            value_kind = "number"
+        else:
+            total = round(sum(point["value"] for point in points), 2)
+            chart_title = "Vendas Mercado Livre"
+            chart_subtitle = "Valor liquido por mes"
+            value_kind = "currency"
         return {
             "empresa": company_name,
             "empresa_id": company_id,
             "year": selected_year,
+            "month": month_filter,
+            "chart_type": response_chart_type,
             "years": sorted_years,
+            "products": product_options,
+            "selected_product": product_filter,
             "chart": {
-                "title": "Vendas",
-                "subtitle": "Valor liquido por mes",
+                "title": chart_title,
+                "subtitle": chart_subtitle,
+                "kind": value_kind,
                 "points": points,
                 "total": total,
             },
@@ -7456,6 +8453,11 @@ def import_stock(company_id: str, file_name: str, file_bytes: bytes):
         raise ValueError("Empresa invalida.")
 
     raw_records, sheet_name = read_spreadsheet_records(file_name, file_bytes)
+    previous_bonus_by_reference = {
+        normalize_text(record.get("Referencia")): record.get("Bonus")
+        for record in load_json(stock_file(company_id), [])
+        if normalize_text(record.get("Referencia")) and record.get("Bonus") not in (None, "")
+    }
     stock_by_reference = {}
     skipped = 0
     for raw in raw_records:
@@ -7489,6 +8491,7 @@ def import_stock(company_id: str, file_name: str, file_bytes: bytes):
                 "Quantidade": 0.0,
                 "V.Unitario": None,
                 "Total": None,
+                "Bonus": previous_bonus_by_reference.get(key, optional_number_value(raw.get("Bonus"))),
                 "End. Fisico": normalize_record(raw.get("End. Físico") or raw.get("End. Fisico")),
                 "_empresa_id": company_id,
                 "_empresa_nome": COMPANIES[company_id],
@@ -7499,6 +8502,7 @@ def import_stock(company_id: str, file_name: str, file_bytes: bytes):
 
     records = sorted(stock_by_reference.values(), key=lambda item: normalize_text(item.get("Referencia")))
     save_json(stock_file(company_id), records)
+    default_bonus_count = apply_stock_bonus_defaults(company_id)
 
     summary = {
         "empresa": COMPANIES[company_id],
@@ -7508,6 +8512,7 @@ def import_stock(company_id: str, file_name: str, file_bytes: bytes):
         "referencias_atualizadas": len(records),
         "referencias_excluidas": "Base substituida pela ultima importacao",
         "linhas_ignoradas": skipped,
+        "bonus_preenchidos": default_bonus_count,
         "importado_em": datetime.now().isoformat(timespec="seconds"),
     }
     logs = load_json(stock_import_log_file(company_id), [])
@@ -8588,7 +9593,7 @@ def import_costing_fabricated(company_id: str, file_name: str, file_bytes: bytes
     records.sort(key=lambda item: normalize_text(item.get("Referencia")))
     save_json(costing_fabricated_file(company_id), records)
 
-    return {
+    summary = {
         "empresa": COMPANIES[company_id],
         "arquivo": file_name,
         "aba": sheet_name,
@@ -8602,6 +9607,10 @@ def import_costing_fabricated(company_id: str, file_name: str, file_bytes: bytes
         "linhas_ignoradas_duplicadas": skipped_duplicates,
         "importado_em": now,
     }
+    logs = load_json(costing_import_log_file(company_id), [])
+    logs.append({"tipo": "custeio_fabricado", **summary})
+    save_json(costing_import_log_file(company_id), logs)
+    return summary
 
 
 def recalculate_costing_fabricated(company_id: str, cost_increase):
@@ -9032,7 +10041,7 @@ def import_sales(company_id: str, file_name: str, file_bytes: bytes):
     }
 
     logs = load_json(import_log_file(company_id), [])
-    logs.append(summary)
+    logs.append({"tipo": "vendas", **summary})
     try:
         save_json(import_log_file(company_id), logs)
     except PermissionError:
@@ -9075,6 +10084,7 @@ def import_clients(company_id: str, file_name: str, file_bytes: bytes):
         record["_dedupe_key"] = key
         record["_documento_normalizado"] = normalize_identifier(record.get("CGC"))
         record["_importado_em"] = datetime.now().isoformat(timespec="seconds")
+        record["_novo_cliente_cadastrado"] = True
         inserted.append(record)
         existing_keys.add(key)
 
@@ -9098,6 +10108,61 @@ def import_clients(company_id: str, file_name: str, file_bytes: bytes):
     save_json(client_import_log_file(company_id), logs)
 
     return summary
+
+
+def import_status_log_candidates(company_id: str, import_type: str) -> list[dict]:
+    if import_type == "clientes":
+        return load_json(client_import_log_file(company_id), [])
+    if import_type == "estoque":
+        return load_json(stock_import_log_file(company_id), [])
+    if import_type in {"custeio", "custeio_fabricado"}:
+        return load_json(costing_import_log_file(company_id), [])
+    return load_json(import_log_file(company_id), [])
+
+
+def import_log_matches_type(record: dict, import_type: str) -> bool:
+    record_type = str(record.get("tipo") or record.get("tipo_importacao") or "").strip()
+    if record_type == import_type:
+        return True
+    if import_type == "vendas":
+        return "notas_importadas" in record or "classificacao_atualizada" in record
+    if import_type == "em_transito":
+        return record_type == "em_transito" or "itens_importados" in record and "Processo" not in record and record.get("referencias_excluidas")
+    if import_type == "tabela_precos":
+        return record_type == "tabela_precos" or bool(record.get("lembrete_ipi"))
+    if import_type == "tabela_precos_ipi":
+        return record_type == "tabela_precos_ipi" or "ultima_atualizacao_ipi" in record
+    if import_type == "cadastro_produtos":
+        return record_type == "cadastro_produtos"
+    if import_type == "custeio":
+        return record_type in {"", "custeio"} and "indice_custeio" in record
+    if import_type == "custeio_fabricado":
+        return record_type == "custeio_fabricado" or "percentual_aumento_custo" in record
+    if import_type == "mercado_livre_ads":
+        return record_type in {"anuncios", "ficha_tecnica"}
+    if import_type == "mercado_livre_sales":
+        return record_type == "vendas_mercado_livre"
+    return False
+
+
+def import_status_payload(company_id: str, import_type: str):
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    import_type = normalize_text(import_type).replace(" ", "_").casefold()
+    logs = import_status_log_candidates(company_id, import_type)
+    if not isinstance(logs, list):
+        logs = []
+    candidates = [item for item in logs if isinstance(item, dict) and import_log_matches_type(item, import_type)]
+    latest = candidates[-1] if candidates else None
+    imported_at = (latest or {}).get("importado_em") or (latest or {}).get("ultima_atualizacao_ipi") or ""
+    return {
+        "empresa": COMPANIES[company_id],
+        "empresa_id": company_id,
+        "tipo": import_type,
+        "ultima_importacao": latest,
+        "importado_em": imported_at,
+        "arquivo": (latest or {}).get("arquivo") or "",
+    }
 
 
 class CRMHandler(BaseHTTPRequestHandler):
@@ -9145,8 +10210,14 @@ class CRMHandler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["ionlab"])[0]
             query = params.get("q", [""])[0].strip()
+            min_days = int(params.get("min_days", ["365"])[0] or 365)
             try:
-                return self.send_json(slow_items_payload(company_id, query))
+                payload = cached_payload(
+                    ("slow_items", company_id, query, min_days),
+                    [stock_file(company_id), stock_bonus_file(company_id), sales_file(company_id), slow_items_file(company_id)],
+                    lambda: slow_items_payload(company_id, query, min_days),
+                )
+                return self.send_json(payload)
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -9191,8 +10262,11 @@ class CRMHandler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["agrupado"])[0]
             year_filter = params.get("year", ["todos"])[0]
+            month_filter = params.get("month", ["todos"])[0]
+            chart_type = params.get("chart", ["sales-value"])[0]
+            product_filter = params.get("product", [""])[0]
             try:
-                return self.send_json(mercado_livre_sales_dashboard_payload(company_id, year_filter))
+                return self.send_json(mercado_livre_sales_dashboard_payload(company_id, year_filter, month_filter, chart_type, product_filter))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -9232,8 +10306,9 @@ class CRMHandler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["ionlab"])[0]
             query = params.get("q", [""])[0].strip()
+            min_days = int(params.get("min_days", ["365"])[0] or 365)
             try:
-                content = slow_items_export_xlsx(company_id, query)
+                content = slow_items_export_xlsx(company_id, query, min_days)
                 filename = f"itens_sem_giro_{company_id}.xlsx"
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -9496,6 +10571,24 @@ class CRMHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+        if path == "/api/economic-groups/client-search":
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            query = params.get("q", [""])[0]
+            try:
+                return self.send_json(economic_group_client_search_payload(company_id, query))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/economic-groups":
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            client_id = params.get("client_id", [""])[0]
+            try:
+                return self.send_json(economic_group_payload(company_id, client_id))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
         if path == "/api/vendor-page-links":
             try:
                 return self.send_json(vendor_page_links_payload())
@@ -9606,9 +10699,9 @@ class CRMHandler(BaseHTTPRequestHandler):
             company_id = params.get("company", ["ionlab"])[0]
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
-            limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
-            page = int(optional_number_value(params.get("page", [1])[0]) or 1)
             try:
+                limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
+                page = int(optional_number_value(params.get("page", [1])[0]) or 1)
                 return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "orcamento", limit, page))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -9618,9 +10711,9 @@ class CRMHandler(BaseHTTPRequestHandler):
             company_id = params.get("company", ["ionlab"])[0]
             vendor_id_value = params.get("vendor_id", [""])[0]
             query = params.get("q", [""])[0]
-            limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
-            page = int(optional_number_value(params.get("page", [1])[0]) or 1)
             try:
+                limit = int(optional_number_value(params.get("limit", [20])[0]) or 20)
+                page = int(optional_number_value(params.get("page", [1])[0]) or 1)
                 return self.send_json(commercial_document_search_payload(company_id, vendor_id_value, query, "pedido", limit, page))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -9770,12 +10863,38 @@ class CRMHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+        if path == "/api/vendor-about-goal":
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            vendor_id_value = params.get("vendor_id", [""])[0]
+            year = params.get("year", [CURRENT_YEAR])[0]
+            month = params.get("month", [date.today().month])[0]
+            try:
+                payload = cached_payload(
+                    ("vendor_about_goal", company_id, vendor_id_value, str(year), str(month)),
+                    vendor_dashboard_dependencies(company_id),
+                    lambda: vendor_about_goal_payload(company_id, vendor_id_value, year, month),
+                )
+                return self.send_json(payload)
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
         if path == "/api/vendor-region-clients":
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["ionlab"])[0]
             vendor_id_value = params.get("vendor_id", [""])[0]
             try:
-                return self.send_json(vendor_region_clients_payload(company_id, vendor_id_value, params))
+                status_key = params.get("status", ["never"])[0]
+                uf_key = params.get("uf", [""])[0]
+                ddd_key = params.get("ddd", [""])[0]
+                city_key = params.get("city", [""])[0]
+                query_key = params.get("q", [""])[0]
+                payload = cached_payload(
+                    ("vendor_region_clients", company_id, vendor_id_value, status_key, uf_key, ddd_key, city_key, query_key),
+                    vendor_dashboard_dependencies(company_id),
+                    lambda: vendor_region_clients_payload(company_id, vendor_id_value, params),
+                )
+                return self.send_json(payload)
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -9918,6 +11037,15 @@ class CRMHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+        if path == "/api/import-status":
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            import_type = params.get("type", [""])[0]
+            try:
+                return self.send_json(import_status_payload(company_id, import_type))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
         if path.startswith("/api/stats/"):
             company_id = path.rsplit("/", 1)[-1]
             if company_id not in COMPANIES:
@@ -9987,6 +11115,14 @@ class CRMHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+        if path == "/api/economic-groups":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
+                return self.send_json(save_economic_group_payload(payload))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
         if path == "/api/vendor-goals":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -10008,6 +11144,14 @@ class CRMHandler(BaseHTTPRequestHandler):
                 content_length = int(self.headers.get("Content-Length", "0"))
                 payload = json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
                 return self.send_json(save_slow_items_payload(payload))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/stock-bonus":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
+                return self.send_json(save_stock_bonus_payload(payload))
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 

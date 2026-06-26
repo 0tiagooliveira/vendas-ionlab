@@ -1,0 +1,23 @@
+﻿PACOTE DE ATUALIZACAO CRM IONLAB - SEGURO PARA BANCO QUENTE
+Versao: 20260626-print-regras-uma-pagina1
+Gerado em: 26/06/2026 13:38:53
+
+VALIDACAO:
+- NAO contem pasta data.
+- NAO contem bases JSON de vendas, clientes, estoque, usuarios ou configuracoes do banco quente.
+- NAO contem backups, logs, arquivos temporarios, planilhas ou node_modules.
+- NAO contem scripts auxiliares da pasta tools.
+
+COMO APLICAR:
+1. Fazer backup da pasta publicada atual.
+2. Parar o servidor do CRM publicado.
+3. Extrair este ZIP em uma pasta temporaria.
+4. Copiar/substituir no sistema publicado somente o conteudo da pasta crm_atualizacao.
+5. Manter intacta a pasta data do banco quente.
+6. Iniciar novamente o CRM.
+
+Arquivos incluidos:
+- server.py
+- static\app.js, static\index.html, static\styles.css e assets
+- arquivos .bat de inicializacao
+- documentos de orientacao

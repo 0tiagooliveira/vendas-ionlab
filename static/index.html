@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CRM Ionlab</title>
-    <link rel="stylesheet" href="/styles.css?v=20260626-vendedor-documentos">
+    <link rel="stylesheet" href="/styles.css?v=20260626-print-regras-uma-pagina1">
   </head>
   <body>
     <section class="login-screen auth-hidden" id="login-screen">
@@ -127,6 +127,7 @@
             </div>
           </div>
           <div class="topbar-actions">
+            <button class="secondary-action hidden" id="vendor-page-goals-print" type="button">Imprimir</button>
             <div class="user-chip" id="current-user-chip"></div>
             <button class="secondary-action" id="logout-button" type="button">Sair</button>
             <button class="home-return-button hidden" id="home-return-button" type="button">Voltar para Principal</button>
@@ -419,12 +420,24 @@
             </div>
           </section>
 
+          <section class="vendor-page-seller-card hidden" id="vendor-page-seller-card">
+            <div>
+              <span>Vendedor</span>
+              <strong id="vendor-page-seller-name">Vendedor</strong>
+            </div>
+            <label class="vendor-page-goals-month-card hidden" id="vendor-page-goals-month-card">
+              <span>Mes</span>
+              <select id="vendor-page-goals-month"></select>
+            </label>
+          </section>
+
           <nav class="vendor-workspace-nav" aria-label="Rotinas do vendedor">
             <button class="active" type="button" data-vendor-workspace="day">Day by Day</button>
             <button type="button" data-vendor-workspace="agenda">Agenda</button>
             <button type="button" data-vendor-workspace="contact-report">Relatorio de contatos</button>
             <button type="button" data-vendor-workspace="clients">Clientes da sua região</button>
             <button type="button" data-vendor-workspace="quick-consult">Consulta rapida</button>
+            <button type="button" data-vendor-workspace="slow-items">Itens Sem movimento</button>
             <button type="button" data-vendor-workspace="quotes">Orcamentos/Pedidos</button>
             <button type="button" data-vendor-workspace="sent-quotes">Enviados</button>
             <button type="button" data-vendor-workspace="indicators">Indicadores</button>
@@ -576,18 +589,43 @@
           </section>
 
           <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-goals">
+            <div class="vendor-print-cover">
+              <div class="vendor-print-brand">
+                <img src="/assets/ion_logo.jpg" alt="Ionlab">
+                <div>
+                  <strong>CRM IONLAB</strong>
+                  <span>Relatorio comercial</span>
+                </div>
+              </div>
+              <h1 id="vendor-goals-print-title">Relatorio de Comissao e Bonificacao de Vendas</h1>
+              <h2 id="vendor-goals-print-vendor">Vendedor</h2>
+              <p>
+                Este relatorio tem como objetivo apresentar, de forma clara e transparente, o desempenho individual de cada vendedor no periodo avaliado, bem como os valores correspondentes as comissoes e bonificacoes apuradas conforme as politicas comerciais vigentes da empresa.
+              </p>
+              <p>
+                As informacoes aqui demonstradas foram calculadas com base nas vendas efetivamente realizadas, nos criterios de elegibilidade e nas regras estabelecidas para pagamento de comissoes e campanhas de incentivo. Este documento visa proporcionar total transparencia no processo de remuneracao variavel, valorizando o desempenho, o comprometimento e os resultados alcancados por cada colaborador.
+              </p>
+              <p>
+                Os valores apresentados devem ser analisados juntamente com as regras comerciais vigentes, metas cadastradas e eventuais validacoes administrativas necessarias para fechamento do periodo.
+              </p>
+            </div>
             <div class="chart-title-row">
               <div>
                 <p class="eyebrow">Performance</p>
                 <h3>Metas e Objetivos</h3>
               </div>
-              <label>
-                Mes
-                <select id="vendor-page-goals-month"></select>
-              </label>
             </div>
             <div class="vendor-goals-summary" id="vendor-page-goals-summary"></div>
             <div class="vendor-page-goals-list" id="vendor-page-goals-list"></div>
+            <div class="vendor-print-page-number vendor-print-page-number-one">1/3</div>
+            <div class="vendor-about-shell vendor-page-goals-about" id="vendor-page-about-goal-content"></div>
+            <div class="vendor-print-signature">
+              <p id="vendor-goals-print-place-date">Local e data</p>
+              <div></div>
+              <strong id="vendor-goals-print-signature-name">Nome do vendedor</strong>
+              <span>Assinatura</span>
+            </div>
+            <div class="table-status" id="vendor-page-about-goal-status">Resumo das regras carregado junto com as metas.</div>
             <div class="table-status" id="vendor-page-goals-status">Selecione o mes para visualizar as metas.</div>
           </section>
         </section>
@@ -770,6 +808,7 @@
                 </label>
 
                 <button class="primary-action" type="submit">Importar clientes</button>
+                <button class="secondary-action" id="clients-who-cad-button" type="button">Quem é Quem</button>
               </form>
 
               <div class="result-panel" id="clients-result-panel">
@@ -778,6 +817,80 @@
                 <p class="muted">Depois de importar, o resumo aparecera aqui.</p>
               </div>
             </div>
+
+            <section class="table-panel economic-group-panel hidden" id="economic-group-panel">
+              <div class="section-header table-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Clientes</p>
+                  <h3>Quem é Quem</h3>
+                  <p class="muted">Cadastre empresas pertencentes ao mesmo grupo economico para o sistema tratar como GE.</p>
+                </div>
+                <button class="secondary-action" id="economic-group-close" type="button">Fechar</button>
+              </div>
+              <div class="economic-group-layout">
+                <div class="economic-group-card">
+                  <h4>Cliente Master</h4>
+                  <label class="blocked-client-field">
+                    Código do cliente Master
+                    <input id="economic-master-search" type="search" placeholder="Buscar por codigo, nome ou CNPJ">
+                    <div class="prospect-suggestions" id="economic-master-suggestions"></div>
+                  </label>
+                  <div class="economic-client-fields">
+                    <label>Nome do Cliente<input id="economic-master-name" type="text" readonly></label>
+                    <label>UF<input id="economic-master-uf" type="text" readonly></label>
+                    <label>Vendedor<input id="economic-master-vendor" type="text" readonly></label>
+                  </div>
+                </div>
+                <div class="economic-group-card">
+                  <h4>Grupo Economico</h4>
+                  <label class="blocked-client-field">
+                    Código do cliente
+                    <input id="economic-client-search" type="search" placeholder="Buscar por codigo, nome ou CNPJ">
+                    <div class="prospect-suggestions" id="economic-client-suggestions"></div>
+                  </label>
+                  <div class="economic-client-fields">
+                    <label>Nome do Cliente<input id="economic-client-name" type="text" readonly></label>
+                    <label>UF<input id="economic-client-uf" type="text" readonly></label>
+                    <label>Vendedor<input id="economic-client-vendor" type="text" readonly></label>
+                  </div>
+                  <button class="secondary-action" id="economic-client-add" type="button">Adicionar empresa</button>
+                </div>
+              </div>
+              <div class="table-scroll compact">
+                <table class="economic-group-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>UF</th>
+                      <th>Vendedor</th>
+                      <th>Acao</th>
+                    </tr>
+                  </thead>
+                  <tbody id="economic-group-body"></tbody>
+                </table>
+              </div>
+              <div class="vendor-actions">
+                <button class="primary-action" id="economic-group-save" type="button">Salvar</button>
+                <button class="secondary-action" id="economic-group-clear" type="button">Limpar</button>
+              </div>
+              <div class="table-status" id="economic-group-status">Busque o cliente Master para carregar ou criar um GE.</div>
+              <div class="economic-groups-saved-list">
+                <h4>Grupos Econômicos Salvos</h4>
+                <div class="table-scroll compact">
+                  <table class="economic-group-table">
+                    <thead>
+                      <tr>
+                        <th>Cliente Master</th>
+                        <th>Empresas do GE</th>
+                        <th>Atualizado em</th>
+                        <th>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody id="economic-groups-saved-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
           </div>
 
           <div class="routine" id="stock-routine">
@@ -1098,6 +1211,7 @@
                 Pesquisa
                 <input id="clients-table-search" type="search" placeholder="Nome, documento, cidade...">
               </label>
+              <button class="secondary-action" id="clients-who-button" type="button">Quem é Quem</button>
               <button class="secondary-action" id="clients-table-export-button" type="button">Exportar para Excel</button>
             </div>
           </div>
@@ -1129,7 +1243,29 @@
                 <input id="stock-table-search" type="search" placeholder="Referencia, descricao, local...">
               </label>
               <button class="secondary-action" id="stock-table-export-button" type="button">Exportar</button>
+              <button class="primary-action" id="stock-bonus-save-button" type="button">Salvar Bonus</button>
             </div>
+          </div>
+
+          <div class="stock-bonus-default-panel">
+            <div>
+              <p class="eyebrow">% padrão Bônus</p>
+              <strong>Atualização em lote por dias sem movimento</strong>
+              <span>Substitui o bônus dos itens com venda há mais de 6 meses dentro do intervalo selecionado.</span>
+            </div>
+            <label>
+              % padrão Bônus
+              <input id="stock-default-bonus-percent" type="text" inputmode="decimal" placeholder="Ex.: 1,5">
+            </label>
+            <label>
+              Dias inicial
+              <input id="stock-default-bonus-days-start" type="number" min="181" step="1" placeholder="181">
+            </label>
+            <label>
+              Dias final
+              <input id="stock-default-bonus-days-end" type="number" min="181" step="1" placeholder="365">
+            </label>
+            <button class="primary-action" id="stock-default-bonus-update-button" type="button">Atualizar</button>
           </div>
 
           <div class="stock-summary-grid" id="stock-summary-grid">
@@ -1325,6 +1461,30 @@
             </div>
           </section>
 
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-slow-items">
+            <div class="chart-title-row">
+              <div>
+                <p class="eyebrow">Estoque</p>
+                <h3>Itens Sem movimento</h3>
+                <p class="muted">Itens em estoque sem venda ha mais de 6 meses, ordenados do mais antigo para o mais recente.</p>
+              </div>
+              <div class="table-tools">
+                <input id="vendor-slow-items-search" type="search" placeholder="Referencia ou descricao">
+                <button class="secondary-action" id="vendor-slow-items-load" type="button">Atualizar</button>
+                <button class="secondary-action" id="vendor-slow-items-export" type="button">Exportar</button>
+              </div>
+            </div>
+            <div class="table-status" id="vendor-slow-items-status">Clique em atualizar para carregar os itens.</div>
+            <div class="table-panel">
+              <div class="table-scroll">
+                <table>
+                  <thead id="vendor-slow-items-table-head"></thead>
+                  <tbody id="vendor-slow-items-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
           <div id="quote-panel-anchor"></div>
           <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-quotes">
             <div class="quote-hero">
@@ -1500,7 +1660,7 @@
                 <p class="eyebrow">Dashboard</p>
                 <h3>Vendas Mercado Livre</h3>
               </div>
-              <div class="table-tools">
+              <div class="table-tools ml-dashboard-filters">
                 <label>
                   Empresa
                   <select id="ml-dashboard-company"></select>
@@ -1509,7 +1669,21 @@
                   Ano
                   <select id="ml-dashboard-year"></select>
                 </label>
+                <label>
+                  Mes
+                  <select id="ml-dashboard-month"></select>
+                </label>
+                <label>
+                  Produto
+                  <select id="ml-dashboard-product"></select>
+                </label>
               </div>
+            </div>
+            <div class="segmented-control ml-dashboard-chart-tabs">
+              <button class="active" type="button" data-ml-dashboard-chart="sales-value">Vendas Mercado Livre</button>
+              <button type="button" data-ml-dashboard-chart="sales-count">Quantidade de vendas</button>
+              <button type="button" data-ml-dashboard-chart="pf-pj">PF/PJ</button>
+              <button type="button" data-ml-dashboard-chart="top-sku">Top SKU</button>
             </div>
             <div class="table-status" id="ml-dashboard-status">Carregando dashboard...</div>
             <div class="chart-panel" id="ml-dashboard-chart"></div>
@@ -1998,6 +2172,24 @@
                   <option value="all">Todos</option>
                 </select>
               </label>
+              <label>
+                UF
+                <select id="regions-uf-filter">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+              <label>
+                Cidade
+                <select id="regions-city-filter">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+              <label>
+                DDD
+                <select id="regions-ddd-filter">
+                  <option value="">Todos</option>
+                </select>
+              </label>
             </div>
           </div>
 
@@ -2185,6 +2377,21 @@
       </section>
     </div>
 
+    <div class="import-progress-overlay hidden" id="import-progress-overlay" role="status" aria-live="polite">
+      <section class="import-progress-panel">
+        <div class="import-progress-brand" aria-hidden="true">
+          <span class="import-progress-ring"></span>
+          <img src="/assets/ion_logo.jpg" alt="">
+        </div>
+        <p class="eyebrow">CRM Ionlab</p>
+        <h3 id="import-progress-title">Importando arquivo</h3>
+        <div class="import-progress-track">
+          <span id="import-progress-bar"></span>
+        </div>
+        <p id="import-progress-message">Preparando importacao...</p>
+      </section>
+    </div>
+
     <script>
       window.addEventListener("error", (event) => {
         const message = event.message || "Erro desconhecido";
@@ -2203,7 +2410,7 @@
         document.body.appendChild(box);
       });
     </script>
-    <script src="/app.js?v=20260626-vendedor-documentos"></script>
+    <script src="/app.js?v=20260626-print-regras-uma-pagina1"></script>
   </body>
 </html>
 
