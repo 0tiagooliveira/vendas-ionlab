@@ -1,0 +1,2174 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CRM Ionlab</title>
+    <link rel="stylesheet" href="/styles.css?v=20260618-botoes-home-ajuste1">
+  </head>
+  <body>
+    <section class="login-screen auth-hidden" id="login-screen">
+      <form class="login-card" id="login-form">
+        <img src="/assets/ion_logo.jpg" alt="Ionlab">
+        <p class="eyebrow">CRM Ionlab</p>
+        <h1>Acesso ao sistema</h1>
+        <label>
+          Login
+          <input id="login-user" type="text" autocomplete="username" required>
+        </label>
+        <label>
+          Senha
+          <input id="login-password" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="primary-action" type="submit">Entrar</button>
+        <p class="muted" id="login-status">Usuario inicial: master / master</p>
+      </form>
+    </section>
+
+    <section class="login-screen auth-hidden" id="password-change-screen">
+      <form class="login-card" id="password-change-form">
+        <img src="/assets/ion_logo.jpg" alt="Ionlab">
+        <p class="eyebrow">Seguranca</p>
+        <h1>Definir nova senha</h1>
+        <p class="muted">Para continuar, crie uma senha nova para o seu acesso.</p>
+        <label>
+          Nova senha
+          <input id="password-change-new" type="password" autocomplete="new-password" required minlength="6">
+        </label>
+        <label>
+          Confirmar senha
+          <input id="password-change-confirm" type="password" autocomplete="new-password" required minlength="6">
+        </label>
+        <button class="primary-action" type="submit">Salvar nova senha</button>
+        <button class="secondary-action" id="password-change-logout" type="button">Sair</button>
+        <p class="muted" id="password-change-status">A senha precisa ter pelo menos 6 caracteres.</p>
+      </form>
+    </section>
+
+    <div class="app-shell auth-hidden" id="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">
+            <img src="/assets/ion_logo.jpg" alt="Ionlab">
+          </div>
+          <div>
+            <strong>Ionlab</strong>
+            <span>Gestao comercial</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-view="home">
+            <span class="nav-icon">P</span>
+            Principal
+          </button>
+          <button class="nav-item" data-view="dashboard">
+            <span class="nav-icon">#</span>
+            Dashboard
+          </button>
+          <button class="nav-item" data-view="prospect">
+            <span class="nav-icon">%</span>
+            Prospect
+          </button>
+          <button class="nav-item" data-view="cadastros">
+            <span class="nav-icon">+</span>
+            Cadastros
+          </button>
+          <button class="nav-item" data-view="sales-table">
+            <span class="nav-icon">$</span>
+            Vendas
+          </button>
+          <button class="nav-item" data-view="clients-table">
+            <span class="nav-icon">@</span>
+            Clientes
+          </button>
+          <button class="nav-item" data-view="stock-table">
+            <span class="nav-icon">=</span>
+            Estoque
+          </button>
+          <button class="nav-item" data-view="in-transit-table">
+            <span class="nav-icon">T</span>
+            Em Transito
+          </button>
+          <button class="nav-item" data-view="prices-table">
+            <span class="nav-icon">P</span>
+            Tabela de Preços
+          </button>
+          <button class="nav-item" data-view="mercado-livre">
+            <span class="nav-icon">ML</span>
+            Mercado Livre
+          </button>
+          <button class="nav-item" data-view="costing-table">
+            <span class="nav-icon">C</span>
+            Custeio
+          </button>
+          <button class="nav-item" data-view="regions">
+            <span class="nav-icon">R</span>
+            Regiões
+          </button>
+          <button class="nav-item" data-view="follow-up">
+            <span class="nav-icon">F</span>
+            Follow-UP
+          </button>
+          <button class="nav-item" data-view="blocked-clients">
+            <span class="nav-icon">!</span>
+            Bloqueios
+          </button>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <section class="topbar">
+          <div class="topbar-title">
+            <img class="topbar-logo" src="/assets/ion_logo.jpg" alt="Ionlab">
+            <div>
+              <p class="eyebrow">CRM Ionlab</p>
+              <h1 id="page-title">Pagina principal</h1>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <div class="user-chip" id="current-user-chip"></div>
+            <button class="secondary-action" id="logout-button" type="button">Sair</button>
+            <button class="home-return-button hidden" id="home-return-button" type="button">Voltar para Principal</button>
+            <div class="company-strip" id="company-strip"></div>
+          </div>
+        </section>
+
+        <section class="view visible" id="home-view">
+          <div class="hero">
+            <div>
+              <p class="eyebrow">Rotinas</p>
+              <h2>Painel central de gestão comercial.</h2>
+              <p class="muted">Indicadores, acessos e rotinas organizados para uma operação mais clara e ágil.</p>
+            </div>
+            <div class="hero-actions">
+              <div class="vendor-panel-action" id="home-vendor-panel-box">
+                <div class="vendor-panel-action-head">
+                  <strong>Painel Individual</strong>
+                  <span id="home-vendor-panel-summary">Carregando vendedores...</span>
+                </div>
+                <div class="vendor-panel-button-list" id="home-vendor-panel-list"></div>
+              </div>
+              <button class="primary-action" data-view="dashboard">Dashboard</button>
+              <button class="primary-action" data-view="prospect">Prospect</button>
+              <button class="primary-action" data-view="cadastros">Cadastros</button>
+              <button class="secondary-action" data-view="sales-table">Vendas</button>
+              <button class="secondary-action" data-view="clients-table">Clientes</button>
+              <button class="secondary-action" data-view="stock-table">Estoque</button>
+              <button class="secondary-action" data-view="in-transit-table">Em Transito</button>
+              <button class="secondary-action" data-view="prices-table">Tabela de Preços</button>
+              <button class="secondary-action" data-view="mercado-livre">Mercado Livre</button>
+              <button class="secondary-action" data-view="costing-table">Custeio</button>
+              <button class="secondary-action" data-view="regions">Regiões</button>
+              <button class="secondary-action" data-view="follow-up">Follow-UP Atendimentos</button>
+              <button class="secondary-action" data-view="blocked-clients">Bloqueios</button>
+            </div>
+          </div>
+
+          <div class="stats-grid" id="stats-grid"></div>
+        </section>
+
+        <section class="view" id="dashboard-view">
+          <div class="section-header dashboard-heading">
+            <div>
+              <p class="eyebrow">Dashboard</p>
+              <h2>Indicadores comerciais</h2>
+            </div>
+            <label class="dashboard-company">
+              Empresa
+              <select id="dashboard-company"></select>
+            </label>
+          </div>
+
+          <div class="dashboard-chart-menu" aria-label="Graficos do dashboard">
+            <button class="dashboard-chart-button active" type="button" data-dashboard-chart="uf">
+              <span>Clientes por UF</span>
+              <small>Clientes e faturamento por estado</small>
+            </button>
+            <button class="dashboard-chart-button" type="button" data-dashboard-chart="activity">
+              <span>Clientes Ativos/Inativos por UF</span>
+              <small>Atividade anual desde 2021</small>
+            </button>
+            <button class="dashboard-chart-button" type="button" data-dashboard-chart="vendor-regions">
+              <span>Vendedores X Regiões Atendidas</span>
+              <small>UF, DDD e cidades por vendedor</small>
+            </button>
+            <button class="dashboard-chart-button" type="button" data-dashboard-chart="annual-sales">
+              <span>Vendas Anuais</span>
+              <small>Faturamento anual por empresa</small>
+            </button>
+            <button class="dashboard-chart-button" type="button" data-dashboard-chart="monthly-evolution">
+              <span>Evolucao Mensal</span>
+              <small>Faturamento mes a mes por ano</small>
+            </button>
+            <button class="dashboard-chart-button" type="button" data-dashboard-chart="family-sales">
+              <span>Faturamento por Familia</span>
+              <small>Faturamento por AGRP</small>
+            </button>
+          </div>
+
+          <section class="dashboard-chart-panel visible" id="dashboard-chart-uf">
+            <div class="dashboard-grid">
+              <section class="chart-panel">
+                <div class="chart-title-row">
+                  <div>
+                    <p class="eyebrow">Distribuicao geografica</p>
+                    <h3 id="uf-chart-title">Clientes por estado</h3>
+                    <p class="muted chart-subtitle" id="uf-chart-subtitle"></p>
+                  </div>
+                  <div class="chart-total" id="uf-chart-total">0</div>
+                </div>
+                <div class="uf-chart" id="uf-chart"></div>
+              </section>
+
+              <aside class="insight-panel">
+                <div class="insight-card">
+                  <span>Total de clientes</span>
+                  <strong id="dashboard-total-clients">0</strong>
+                </div>
+                <div class="insight-card">
+                  <span>UFs atendidas</span>
+                  <strong id="dashboard-active-ufs">0</strong>
+                </div>
+                <div class="insight-card accent">
+                  <span>Maior concentracao</span>
+                  <strong id="dashboard-top-uf">-</strong>
+                </div>
+                <div class="insight-card">
+                  <span>Faturamento liquido</span>
+                  <strong id="dashboard-total-revenue">R$ 0</strong>
+                </div>
+                <div class="insight-card accent">
+                  <span>Maior UF em faturamento</span>
+                  <strong id="dashboard-top-revenue-uf">-</strong>
+                </div>
+                <div class="insight-note" id="dashboard-note"></div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="dashboard-chart-panel" id="dashboard-chart-activity">
+            <section class="chart-panel active-chart-panel">
+              <div class="chart-title-row">
+                <div>
+                  <p class="eyebrow">Atividade comercial</p>
+                  <h3 id="activity-chart-title">Clientes Ativos/Inativos por UF - Ionlab</h3>
+                  <p class="muted chart-subtitle">Ativo = cliente com pelo menos uma compra no ano.</p>
+                </div>
+                <div class="activity-legend">
+                  <span><i class="legend-active"></i>Ativos</span>
+                  <span><i class="legend-inactive"></i>Inativos</span>
+                </div>
+              </div>
+              <div class="activity-chart" id="activity-chart"></div>
+            </section>
+          </section>
+
+          <section class="dashboard-chart-panel" id="dashboard-chart-vendor-regions">
+            <section class="chart-panel">
+              <div class="chart-title-row">
+                <div>
+                  <p class="eyebrow">Vendedores</p>
+                  <h3>Vendedores X Regiões Atendidas</h3>
+                  <p class="muted chart-subtitle">Calculo feito pela UF, DDD e cidade do cliente, independente do vendedor da nota fiscal.</p>
+                </div>
+                <label class="dashboard-company">
+                  Vendedor
+                  <select id="dashboard-vendor-select"></select>
+                </label>
+              </div>
+              <div class="vendor-region-summary" id="vendor-region-summary"></div>
+              <div class="vendor-region-controls">
+                <div class="segmented-control" id="vendor-region-dimension">
+                  <button class="active" type="button" data-region-dimension="ufs">UF atendida</button>
+                  <button type="button" data-region-dimension="ddds">DDD atendido</button>
+                  <button type="button" data-region-dimension="cidades">Cidades atendidas</button>
+                  <button type="button" data-region-dimension="agrupado">Agrupado</button>
+                </div>
+                <div class="segmented-control" id="vendor-region-indicator">
+                  <button class="active" type="button" data-region-indicator="quant">Indicadores Quantitativos</button>
+                  <button type="button" data-region-indicator="sales">Indicadores de Vendas</button>
+                  <button type="button" data-region-indicator="annual-sales">Grafico Anual Faturamento</button>
+                </div>
+              </div>
+              <div class="vendor-region-sections" id="vendor-region-sections"></div>
+              <div class="table-status" id="vendor-region-status">Selecione um vendedor para visualizar as regiões atendidas.</div>
+            </section>
+          </section>
+
+          <section class="dashboard-chart-panel" id="dashboard-chart-annual-sales">
+            <section class="chart-panel active-chart-panel">
+              <div class="chart-title-row">
+                <div>
+                  <p class="eyebrow">Vendas Anuais</p>
+                  <h3 id="dashboard-annual-title">Faturamento anual</h3>
+                  <p class="muted chart-subtitle" id="dashboard-annual-subtitle">Faturamento liquido: PR_SBT - V_FRETE_NF - V_DESCONTO.</p>
+                </div>
+                <label class="dashboard-company">
+                  Ano
+                  <select id="dashboard-annual-year"></select>
+                </label>
+              </div>
+              <div class="dashboard-annual-grid">
+                <section class="dashboard-annual-card">
+                  <div class="sales-chart-title">
+                    <h5>Faturamento anual por empresa</h5>
+                    <span id="dashboard-annual-total">R$ 0</span>
+                  </div>
+                  <div id="dashboard-annual-chart"></div>
+                </section>
+              </div>
+              <div class="table-status" id="dashboard-annual-status">Selecione empresa e ano para visualizar.</div>
+            </section>
+          </section>
+
+          <section class="dashboard-chart-panel" id="dashboard-chart-monthly-evolution">
+            <section class="chart-panel active-chart-panel">
+              <div class="chart-title-row">
+                <div>
+                  <p class="eyebrow">Evolucao Mensal</p>
+                  <h3 id="dashboard-monthly-title">Faturamento mensal</h3>
+                  <p class="muted chart-subtitle" id="dashboard-monthly-subtitle">Faturamento liquido: PR_SBT - V_FRETE_NF - V_DESCONTO.</p>
+                </div>
+                <div class="dashboard-filter-stack">
+                  <label class="dashboard-company">
+                    Ano
+                    <select id="dashboard-monthly-year"></select>
+                  </label>
+                  <label class="dashboard-company">
+                    Origem
+                    <select id="dashboard-monthly-origin">
+                      <option value="all">Todas as origens</option>
+                      <option value="imported">Importado</option>
+                      <option value="fabricated_br">Fabricados BR</option>
+                    </select>
+                  </label>
+                  <label class="dashboard-company">
+                    AGRP
+                    <select id="dashboard-monthly-agrp">
+                      <option value="all">Todos os AGRP</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <section class="dashboard-annual-card">
+                <div class="sales-chart-title">
+                  <h5>Evolucao Mensal</h5>
+                  <span id="dashboard-monthly-total">R$ 0</span>
+                </div>
+                <div id="dashboard-monthly-chart"></div>
+              </section>
+              <div class="table-status" id="dashboard-monthly-status">Selecione empresa e ano para visualizar.</div>
+            </section>
+          </section>
+
+          <section class="dashboard-chart-panel" id="dashboard-chart-family-sales">
+            <section class="chart-panel active-chart-panel">
+              <div class="chart-title-row">
+                <div>
+                  <p class="eyebrow">Faturamento por Familia</p>
+                  <h3 id="dashboard-family-title">Faturamento por AGRP</h3>
+                  <p class="muted chart-subtitle" id="dashboard-family-subtitle">Faturamento liquido: PR_SBT - V_FRETE_NF - V_DESCONTO.</p>
+                </div>
+                <div class="dashboard-filter-stack">
+                  <label class="dashboard-company">
+                    Ano
+                    <select id="dashboard-family-year"></select>
+                  </label>
+                  <label class="dashboard-company">
+                    Origem
+                    <select id="dashboard-family-origin">
+                      <option value="all">Todas as origens</option>
+                      <option value="imported">Importado</option>
+                      <option value="fabricated_br">Fabricados BR</option>
+                    </select>
+                  </label>
+                  <label class="dashboard-company">
+                    AGRP
+                    <select id="dashboard-family-agrp"></select>
+                  </label>
+                </div>
+              </div>
+              <section class="dashboard-annual-card">
+                <div class="sales-chart-title">
+                  <h5>Faturamento por AGRP</h5>
+                  <span id="dashboard-family-total">R$ 0</span>
+                </div>
+                <div id="dashboard-family-chart"></div>
+              </section>
+              <div class="table-status" id="dashboard-family-status">Selecione empresa, ano e AGRP para visualizar.</div>
+            </section>
+          </section>
+        </section>
+
+        <section class="view" id="vendor-page-view">
+          <section class="vendor-portal-hero">
+            <div class="vendor-hero-copy">
+              <p class="eyebrow">Area do vendedor</p>
+              <h2 id="vendor-page-title">Painel individual</h2>
+              <p id="vendor-page-subtitle">Indicadores exclusivos da carteira atendida.</p>
+              <div class="vendor-hero-tags" aria-label="Resumo do painel">
+                <span>Carteira regional</span>
+                <span>Atendimentos</span>
+                <span>Indicadores</span>
+              </div>
+            </div>
+            <div class="vendor-portal-badge">
+              <span>CRM</span>
+              <strong id="vendor-page-company">Ionlab</strong>
+            </div>
+          </section>
+
+          <nav class="vendor-workspace-nav" aria-label="Rotinas do vendedor">
+            <button class="active" type="button" data-vendor-workspace="day">Day by Day</button>
+            <button type="button" data-vendor-workspace="agenda">Agenda</button>
+            <button type="button" data-vendor-workspace="contact-report">Relatorio de contatos</button>
+            <button type="button" data-vendor-workspace="clients">Clientes da sua região</button>
+            <button type="button" data-vendor-workspace="quick-consult">Consulta rapida</button>
+            <button type="button" data-vendor-workspace="quotes">Orcamentos/Pedidos</button>
+            <button type="button" data-vendor-workspace="sent-quotes">Enviados</button>
+            <button type="button" data-vendor-workspace="indicators">Indicadores</button>
+            <button type="button" data-vendor-workspace="goals">Metas e Objetivos</button>
+          </nav>
+
+          <section class="vendor-portal-panel vendor-workspace-panel active" id="vendor-workspace-day">
+            <div class="daybyday-shell">
+              <div class="daybyday-header">
+                <div>
+                  <p class="eyebrow">Rotina diária</p>
+                  <h3>Day by Day</h3>
+                </div>
+                <div class="vendor-actions">
+                  <button class="secondary-action" id="vendor-daybyday-refresh" type="button">Atualizar</button>
+                  <button class="secondary-action hidden" id="daybyday-back-list" type="button">Voltar</button>
+                  <button class="secondary-action" id="daybyday-history-button" type="button">Historico</button>
+                </div>
+              </div>
+              <div class="vendor-goals-summary" id="vendor-daybyday-summary"></div>
+              <div class="table-status" id="vendor-daybyday-status">Carregando rotina diaria...</div>
+              <div id="vendor-daybyday-content"></div>
+              <div class="table-panel hidden" id="daybyday-history-panel"></div>
+            </div>
+          </section>
+
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-agenda">
+            <div class="chart-title-row">
+              <div>
+                <p class="eyebrow">Agenda</p>
+                <h3>Contatos agendados</h3>
+              </div>
+              <button class="secondary-action" id="vendor-agenda-refresh" type="button">Atualizar</button>
+            </div>
+            <div class="table-status" id="vendor-agenda-status">Carregando agenda...</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="vendor-agenda-head"></thead>
+                <tbody id="vendor-agenda-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-contact-report">
+            <div class="chart-title-row">
+              <div>
+                <p class="eyebrow">Relatorio</p>
+                <h3>Contatos realizados</h3>
+              </div>
+            </div>
+            <div class="table-tools">
+              <label>
+                Inicio
+                <input id="vendor-contact-report-start" type="date">
+              </label>
+              <label>
+                Fim
+                <input id="vendor-contact-report-end" type="date">
+              </label>
+              <label>
+                Cliente
+                <input id="vendor-contact-report-client" type="search" placeholder="Cliente ou codigo">
+              </label>
+              <button class="secondary-action" id="vendor-contact-report-load" type="button">Carregar</button>
+            </div>
+            <div class="table-status" id="vendor-contact-report-status">Informe os filtros para carregar.</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="vendor-contact-report-head"></thead>
+                <tbody id="vendor-contact-report-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="vendor-portal-panel vendor-client-region-panel vendor-workspace-panel" id="vendor-workspace-clients">
+            <div class="chart-title-row">
+              <div>
+                <p class="eyebrow">Carteira</p>
+                <h3>Clientes da sua Região</h3>
+              </div>
+            </div>
+            <div class="vendor-region-clients" id="vendor-region-clients-panel">
+              <div class="vendor-region-controls">
+                <div class="segmented-control">
+                  <button class="active" type="button" data-vendor-client-status="all">Todos</button>
+                  <button type="button" data-vendor-client-status="never">Nunca Comprou</button>
+                  <button type="button" data-vendor-client-status="inactive">Inativos</button>
+                  <button type="button" data-vendor-client-status="active">Ativos</button>
+                </div>
+                <div class="vendor-client-filters">
+                  <label>
+                    Cliente
+                    <input id="vendor-client-filter-search" type="search" placeholder="Codigo ou nome">
+                  </label>
+                  <label>
+                    UF
+                    <select id="vendor-client-filter-uf"></select>
+                  </label>
+                  <label>
+                    DDD
+                    <select id="vendor-client-filter-ddd"></select>
+                  </label>
+                  <label>
+                    Cidade
+                    <select id="vendor-client-filter-city"></select>
+                  </label>
+                </div>
+              </div>
+              <div class="vendor-client-summary" id="vendor-region-clients-summary"></div>
+              <div class="table-scroll">
+                <table class="vendor-clients-table">
+                  <thead id="vendor-region-clients-head"></thead>
+                  <tbody id="vendor-region-clients-body"></tbody>
+                </table>
+              </div>
+              <div class="table-status" id="vendor-region-clients-status"></div>
+            </div>
+          </section>
+
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-indicators">
+            <div class="vendor-region-summary" id="vendor-page-summary"></div>
+            <section class="vendor-daily-contacts-card" id="vendor-daily-contacts-card">
+              <div class="sales-chart-title">
+                <h5>Contatos diários</h5>
+                <label class="vendor-daily-month-filter">
+                  Mês
+                  <input id="vendor-daily-contact-month" type="month">
+                </label>
+                <span id="vendor-daily-contacts-total">Carregando...</span>
+              </div>
+              <div class="vendor-daily-contact-chart" id="vendor-daily-contact-chart"></div>
+              <div class="table-status" id="vendor-daily-contact-status">Carregando contatos diários...</div>
+            </section>
+            <div class="vendor-region-controls">
+              <div class="segmented-control" id="vendor-page-dimension">
+                <button class="active" type="button" data-region-dimension="ufs">UF atendida</button>
+                <button type="button" data-region-dimension="ddds">DDD atendido</button>
+                <button type="button" data-region-dimension="cidades">Cidades atendidas</button>
+                <button type="button" data-region-dimension="agrupado">Agrupado</button>
+              </div>
+              <div class="segmented-control" id="vendor-page-indicator">
+                <button class="active" type="button" data-region-indicator="quant">Indicadores Quantitativos</button>
+                <button type="button" data-region-indicator="sales">Indicadores de Vendas</button>
+                <button type="button" data-region-indicator="annual-sales">Grafico Anual Faturamento</button>
+              </div>
+            </div>
+            <div class="vendor-region-sections" id="vendor-page-sections"></div>
+            <div class="table-status" id="vendor-page-status">Carregando pagina do vendedor...</div>
+          </section>
+
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-goals">
+            <div class="chart-title-row">
+              <div>
+                <p class="eyebrow">Performance</p>
+                <h3>Metas e Objetivos</h3>
+              </div>
+              <label>
+                Mes
+                <select id="vendor-page-goals-month"></select>
+              </label>
+            </div>
+            <div class="vendor-goals-summary" id="vendor-page-goals-summary"></div>
+            <div class="vendor-page-goals-list" id="vendor-page-goals-list"></div>
+            <div class="table-status" id="vendor-page-goals-status">Selecione o mes para visualizar as metas.</div>
+          </section>
+        </section>
+
+        <section class="view" id="prospect-view">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Prospect</p>
+              <h2>Pesquisa dinamica de clientes</h2>
+            </div>
+          </div>
+
+          <form class="prospect-panel" id="prospect-form">
+            <label>
+              Empresa
+              <select id="prospect-company" name="company" required></select>
+            </label>
+            <label>
+              UF
+              <select id="prospect-uf" name="uf">
+                <option value="">Todas</option>
+              </select>
+            </label>
+            <label>
+              Cidade
+              <select id="prospect-city" name="city">
+                <option value="">Todas</option>
+              </select>
+            </label>
+            <label class="prospect-client-field">
+              Cliente
+              <input id="prospect-client-search" type="search" placeholder="Codigo ou nome do cliente">
+              <input id="prospect-client-id" name="client_id" type="hidden">
+              <div class="prospect-suggestions" id="prospect-client-suggestions"></div>
+            </label>
+            <label>
+              Mes inicial
+              <select id="prospect-start-month" name="start_month" required></select>
+            </label>
+            <label>
+              Mes final
+              <select id="prospect-end-month" name="end_month" required></select>
+            </label>
+            <label>
+              Ano inicial
+              <select id="prospect-start-year" name="start_year" required></select>
+            </label>
+            <label>
+              Ano final
+              <select id="prospect-end-year" name="end_year" required></select>
+            </label>
+            <label>
+              Referencia
+              <input id="prospect-reference" name="reference" list="prospect-reference-list" type="search" placeholder="Todas">
+              <datalist id="prospect-reference-list"></datalist>
+            </label>
+            <label>
+              Tipo de cliente
+              <select id="prospect-client-type" name="client_type">
+                <option value="all">Todos</option>
+                <option value="active">Ativo</option>
+                <option value="inactive">Inativo</option>
+                <option value="never">Nunca Comprou</option>
+              </select>
+            </label>
+            <div class="prospect-actions">
+              <button class="primary-action" type="submit">Pesquisar</button>
+            </div>
+          </form>
+
+          <div class="prospect-summary" id="prospect-summary">
+            <article>
+              <span>Base filtrada</span>
+              <strong>0</strong>
+            </article>
+            <article>
+              <span>Ativos</span>
+              <strong>0</strong>
+            </article>
+            <article>
+              <span>Inativos</span>
+              <strong>0</strong>
+            </article>
+            <article>
+              <span>Faturamento liquido</span>
+              <strong>R$ 0</strong>
+            </article>
+          </div>
+
+          <div class="table-panel prospect-results">
+            <div class="table-status" id="prospect-status">Preencha o periodo e clique em pesquisar.</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="prospect-table-head"></thead>
+                <tbody id="prospect-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="cadastros-view">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Cadastros</p>
+              <h2>Importacoes cadastrais</h2>
+            </div>
+          </div>
+
+          <div class="routine-tabs" aria-label="Rotinas de cadastro">
+            <button class="routine-tab active" type="button" data-routine="sales">Notas fiscais de vendas</button>
+            <button class="routine-tab" type="button" data-routine="clients">Clientes</button>
+            <button class="routine-tab" type="button" data-routine="stock">Estoque</button>
+            <button class="routine-tab" type="button" data-routine="in-transit">Em Transito</button>
+            <button class="routine-tab" type="button" data-routine="prices-import">Tabela de Preços</button>
+            <button class="routine-tab" type="button" data-routine="products">Produtos</button>
+            <button class="routine-tab" type="button" data-routine="slow-items">Itens sem giro</button>
+            <button class="routine-tab" type="button" data-routine="costing">Custeio Importados</button>
+            <button class="routine-tab" type="button" data-routine="costing-fabricated">Custeio Fabricado</button>
+            <button class="routine-tab" type="button" data-view="vendors">Vendedores</button>
+            <button class="routine-tab" type="button" data-view="regions">Regiões</button>
+            <button class="routine-tab" type="button" data-routine="users">Usuários</button>
+          </div>
+
+          <div class="routine visible" id="sales-routine">
+            <div class="workflow">
+              <form id="sales-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="sales-company-select" required></select>
+                </label>
+
+                <label>
+                  Arquivo de vendas
+                  <input name="file" type="file" accept=".xlsx,.xls" required>
+                </label>
+
+                <button class="primary-action" type="submit">Importar notas</button>
+                <div class="export-filter-box">
+                  <label>
+                    Data inicial
+                    <input id="sales-export-start-date" type="text" inputmode="numeric" placeholder="dd/mm/aaaa">
+                  </label>
+                  <label>
+                    Data final
+                    <input id="sales-export-end-date" type="text" inputmode="numeric" placeholder="dd/mm/aaaa">
+                  </label>
+                  <label>
+                    Cliente
+                    <input id="sales-export-client" type="search" placeholder="Nome, codigo ou documento">
+                  </label>
+                  <label>
+                    Referencia Produto
+                    <input id="sales-export-product" type="search" placeholder="Referencia ou nome do produto">
+                  </label>
+                </div>
+                <button class="secondary-action" id="sales-recalculate-cost-button" type="button">Recalcular custo</button>
+                <button class="secondary-action" id="sales-missing-cost-button" type="button">Log Sem Custo</button>
+                <button class="secondary-action" id="sales-export-button" type="button">Exportar planilha</button>
+              </form>
+
+              <div class="result-panel" id="sales-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">Depois de importar, o resumo aparecera aqui.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="clients-routine">
+            <div class="workflow">
+              <form id="clients-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="clients-company-select" required></select>
+                </label>
+
+                <label>
+                  Arquivo de clientes
+                  <input name="file" type="file" accept=".xlsx,.xls" required>
+                </label>
+
+                <button class="primary-action" type="submit">Importar clientes</button>
+              </form>
+
+              <div class="result-panel" id="clients-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">Depois de importar, o resumo aparecera aqui.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="stock-routine">
+            <div class="workflow">
+              <form id="stock-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="stock-company-select" required></select>
+                </label>
+
+                <label>
+                  Arquivo de estoque
+                  <input name="file" type="file" required>
+                </label>
+
+                <button class="primary-action" type="submit">Importar estoque</button>
+                <button class="secondary-action" id="stock-recalculate-value-button" type="button">Recalcular valor do estoque</button>
+                <button class="secondary-action" id="stock-missing-cost-button" type="button">Log sem custo</button>
+                <button class="secondary-action" id="stock-export-button" type="button">Exportar estoque</button>
+              </form>
+
+              <div class="result-panel" id="stock-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">A cada importacao, o estoque sera substituido pelo saldo atual do arquivo.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="in-transit-routine">
+            <div class="workflow">
+              <form id="in-transit-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="in-transit-company-select" required></select>
+                </label>
+                <label>
+                  Arquivo Em Transito
+                  <input name="file" type="file" required>
+                </label>
+                <button class="primary-action" type="submit">Importar Em Transito</button>
+                <button class="secondary-action" id="in-transit-export-button" type="button">Exportar Em Transito</button>
+              </form>
+              <div class="result-panel" id="in-transit-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">A cada importacao, a base Em Transito sera atualizada pelo arquivo selecionado.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="prices-import-routine">
+            <div class="workflow">
+              <form id="prices-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="prices-import-company-select" required></select>
+                </label>
+
+                <label>
+                  Arquivo da tabela de preços
+                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                </label>
+
+                <button class="primary-action" type="submit">Importar tabela de preços</button>
+                <button class="secondary-action" type="button" data-view="prices-table">Ver tabela de preços</button>
+              </form>
+              <form id="prices-ipi-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="prices-ipi-company-select" required></select>
+                </label>
+                <label>
+                  Arquivo de IPI
+                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                </label>
+                <button class="secondary-action" type="submit">Atualizar IPI</button>
+              </form>
+
+              <div class="result-panel" id="prices-import-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">A cada importação, a tabela de preços da empresa será substituída pelo arquivo selecionado.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="products-routine">
+            <div class="workflow">
+              <form id="products-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="products-company-select" required></select>
+                </label>
+                <label>
+                  Arquivo de produtos
+                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                </label>
+                <button class="primary-action" type="submit">Importar produtos</button>
+                <button class="secondary-action" id="products-export-button" type="button">Exportar produtos</button>
+              </form>
+              <div class="result-panel" id="products-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">Importe o cadastro de produtos para consulta e exportacao.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="slow-items-routine">
+            <div class="workflow">
+              <div class="import-panel">
+                <label>
+                  Empresa
+                  <select id="slow-items-company"></select>
+                </label>
+                <label>
+                  Pesquisa
+                  <input id="slow-items-search" type="search" placeholder="Referencia ou descricao">
+                </label>
+                <button class="secondary-action" id="slow-items-load-button" type="button">Carregar</button>
+                <button class="primary-action" id="slow-items-save-button" type="button">Salvar percentuais</button>
+                <button class="secondary-action" id="slow-items-export-button" type="button">Exportar</button>
+              </div>
+              <div class="result-panel">
+                <p class="eyebrow">Itens sem giro</p>
+                <h3>Classificacao de oportunidades</h3>
+                <p class="muted" id="slow-items-status">Carregue a lista para editar percentuais.</p>
+              </div>
+            </div>
+            <div class="table-panel">
+              <div class="table-scroll">
+                <table>
+                  <thead id="slow-items-table-head"></thead>
+                  <tbody id="slow-items-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="costing-routine">
+            <div class="workflow">
+              <form id="costing-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="costing-company-select" required></select>
+                </label>
+
+                <label>
+                  Indice de Custeio
+                  <input name="indice_custeio" id="costing-index-input" type="text" inputmode="decimal" value="8,0" placeholder="Ex: 8,0" required>
+                </label>
+
+                <label>
+                  Arquivo de custeio
+                  <input name="file" type="file" required>
+                </label>
+
+                <button class="primary-action" type="submit">Importar custeio</button>
+                <button class="secondary-action" id="costing-recalculate-button" type="button">Recalcular indice</button>
+                <button class="secondary-action" id="costing-export-button" type="button">Exportar custeio</button>
+              </form>
+
+              <div class="result-panel" id="costing-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">Somente referencias com origem Importado serao gravadas. Novas importacoes nunca excluem referencias ja cadastradas.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="costing-fabricated-routine">
+            <div class="workflow">
+              <form id="costing-fabricated-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="costing-fabricated-company-select" required></select>
+                </label>
+
+                <label>
+                  % aumento Custo
+                  <input name="cost_increase" id="costing-fabricated-increase-input" type="text" inputmode="decimal" value="0,0" placeholder="Ex: 8,0">
+                </label>
+
+                <label>
+                  Arquivo de custeio fabricado
+                  <input name="file" type="file" required>
+                </label>
+
+                <button class="primary-action" type="submit">Importar custeio fabricado</button>
+                <button class="secondary-action" id="costing-fabricated-recalculate-button" type="button">Recalcular custo</button>
+                <button class="secondary-action" id="costing-fabricated-export-button" type="button">Exportar custeio</button>
+              </form>
+
+              <div class="result-panel" id="costing-fabricated-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">Somente referencias com origem Fabricado BR serao gravadas. Novas importacoes nunca excluem referencias ja cadastradas.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="routine" id="users-routine">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Sistema</p>
+              <h2>Usuarios e permissoes</h2>
+              <p class="muted">Cadastre usuarios e defina permissoes por rotina.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Pesquisa
+                <input id="users-search" type="search" placeholder="Nome, login ou tipo">
+              </label>
+              <button class="primary-action" id="user-new-button" type="button">Novo usuario</button>
+            </div>
+          </div>
+
+          <div class="block-layout users-layout">
+            <form id="user-form" class="vendor-form">
+              <input id="user-id" type="hidden">
+              <label>
+                Nome
+                <input id="user-name" type="text" required placeholder="Nome do usuario">
+              </label>
+              <label>
+                Login
+                <input id="user-login" type="text" required placeholder="login">
+              </label>
+              <label>
+                E-mail
+                <input id="user-email" type="email" placeholder="email@empresa.com.br">
+              </label>
+              <label>
+                Senha
+                <input id="user-password" type="password" placeholder="Preencha para definir ou alterar">
+              </label>
+              <label class="checkbox-row">
+                <input id="user-force-password-change" type="checkbox">
+                <span>Exigir nova senha no primeiro acesso</span>
+              </label>
+              <label>
+                Status
+                <select id="user-status">
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                </select>
+              </label>
+              <label>
+                Tipo
+                <select id="user-type">
+                  <option value="usuario">Usuario</option>
+                  <option value="master">Master</option>
+                </select>
+              </label>
+              <div class="permission-groups" id="user-permission-groups"></div>
+              <div class="vendor-actions">
+                <button class="primary-action" type="submit">Salvar usuario</button>
+                <button class="secondary-action" id="user-clear-button" type="button">Limpar</button>
+              </div>
+              <p class="muted" id="user-form-status"></p>
+            </form>
+
+            <div class="table-panel">
+              <div class="table-status" id="users-status">Carregando usuarios...</div>
+              <div class="table-scroll">
+                <table>
+                  <thead id="users-table-head"></thead>
+                  <tbody id="users-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section>
+
+        <section class="view" id="sales-table-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Vendas</p>
+              <h2>Tabela de notas fiscais de vendas</h2>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="sales-table-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="sales-table-search" type="search" placeholder="Cliente, nota, produto...">
+              </label>
+            </div>
+          </div>
+
+          <div class="table-panel">
+            <div class="table-status" id="sales-table-status">Carregando vendas...</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="sales-table-head"></thead>
+                <tbody id="sales-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="clients-table-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Clientes</p>
+              <h2>Tabela de cadastro de clientes</h2>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="clients-table-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="clients-table-search" type="search" placeholder="Nome, documento, cidade...">
+              </label>
+              <button class="secondary-action" id="clients-table-export-button" type="button">Exportar para Excel</button>
+            </div>
+          </div>
+
+          <div class="table-panel">
+            <div class="table-status" id="clients-table-status">Carregando clientes...</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="clients-table-head"></thead>
+                <tbody id="clients-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="stock-table-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Estoque</p>
+              <h2>Tabela de estoque atual</h2>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="stock-table-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="stock-table-search" type="search" placeholder="Referencia, descricao, local...">
+              </label>
+              <button class="secondary-action" id="stock-table-export-button" type="button">Exportar</button>
+            </div>
+          </div>
+
+          <div class="stock-summary-grid" id="stock-summary-grid">
+            <article>
+              <span>Total de SKU em Estoque</span>
+              <strong id="stock-total-sku">0</strong>
+              <small id="stock-cost-status">Com custo: 0 | Sem custo: 0</small>
+            </article>
+            <article class="stock-value-card">
+              <span>Valor Total em Estoque</span>
+              <strong id="stock-total-value">R$ 0,000</strong>
+            </article>
+          </div>
+
+          <div class="table-panel">
+            <div class="table-status" id="stock-table-status">Carregando estoque...</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="stock-table-head"></thead>
+                <tbody id="stock-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="in-transit-table-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Estoque</p>
+              <h2>Em Transito</h2>
+              <p class="muted">Itens com previsao de importacao e chegada.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="in-transit-table-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="in-transit-table-search" type="search" placeholder="Referencia, descricao, NF...">
+              </label>
+              <button class="secondary-action" id="in-transit-table-export-button" type="button">Exportar</button>
+            </div>
+          </div>
+          <div class="table-panel">
+            <div class="table-status" id="in-transit-table-status">Carregando itens em transito...</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="in-transit-table-head"></thead>
+                <tbody id="in-transit-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="prices-table-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Cadastros</p>
+              <h2>Tabela de precos</h2>
+              <p class="muted">Itens importados da planilha base de precos.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="prices-table-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="prices-table-search" type="search" placeholder="Referencia, descricao, valor...">
+              </label>
+              <button class="secondary-action" id="prices-table-export-button" type="button">Exportar</button>
+            </div>
+          </div>
+
+          <div class="table-panel">
+            <div class="table-status" id="prices-table-status">Carregando tabela de precos...</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="prices-table-head"></thead>
+                <tbody id="prices-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </section>
+
+        <section class="view" id="products-table-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Cadastros</p>
+              <h2>Cadastro de Produtos</h2>
+              <p class="muted">Base de referencias, descricoes e classificacoes de produtos.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="products-table-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="products-table-search" type="search" placeholder="Referencia, descricao, familia...">
+              </label>
+              <button class="secondary-action" id="products-table-export-button" type="button">Exportar</button>
+            </div>
+          </div>
+          <div class="table-panel">
+            <div class="table-status" id="products-table-status">Carregando produtos...</div>
+            <div class="table-scroll">
+              <table>
+                <thead id="products-table-head"></thead>
+                <tbody id="products-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="mercado-livre-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Mercado Livre</p>
+              <h2>Gestao Mercado Livre</h2>
+              <p class="muted">Anuncios, ficha tecnica, vendas e gestao geral por SKU.</p>
+            </div>
+          </div>
+          <div class="routine-tabs" aria-label="Abas Mercado Livre">
+            <button class="routine-tab active" type="button" data-ml-tab="ads">Anuncios e Ficha Tecnica</button>
+            <button class="routine-tab" type="button" data-ml-tab="sales">Vendas</button>
+            <button class="routine-tab" type="button" data-ml-tab="dashboard">Dashboard</button>
+            <button class="routine-tab" type="button" data-ml-tab="general">Gestao Geral</button>
+          </div>
+
+          <section class="ml-panel active" id="ml-ads-panel">
+            <div class="workflow">
+              <form id="ml-ads-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="ml-ads-company"></select>
+                </label>
+                <label>
+                  Tipo
+                  <select name="kind" id="ml-ads-kind">
+                    <option value="anuncios">Anuncios</option>
+                    <option value="ficha_tecnica">Ficha Tecnica</option>
+                  </select>
+                </label>
+                <label>
+                  Arquivo
+                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                </label>
+                <button class="primary-action" type="submit">Importar arquivo</button>
+              </form>
+              <div class="result-panel" id="ml-ads-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">Importe anuncios ou ficha tecnica do Mercado Livre.</p>
+              </div>
+            </div>
+            <div class="routine-tabs" id="ml-company-tabs"></div>
+            <div class="routine-tabs" id="ml-kind-tabs"></div>
+            <div class="routine-tabs" id="ml-file-tabs"></div>
+            <div class="section-header table-heading compact-heading">
+              <div class="table-status" id="ml-ads-status">Carregando Mercado Livre...</div>
+              <div class="table-tools">
+                <input id="ml-ads-search" type="search" placeholder="SKU, titulo, estado...">
+                <button class="secondary-action hidden" id="ml-summary-export-button" type="button">Exportar resumo</button>
+              </div>
+            </div>
+            <div class="table-panel">
+              <div class="table-scroll">
+                <table>
+                  <thead id="ml-ads-table-head"></thead>
+                  <tbody id="ml-ads-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-quick-consult">
+            <div class="chart-title-row">
+              <div>
+                <p class="eyebrow">Consulta</p>
+                <h3>Consulta rapida de produto</h3>
+              </div>
+            </div>
+            <label class="blocked-client-field">
+              Produto
+              <input id="quick-consult-search" type="search" placeholder="Referencia ou descricao">
+              <div class="prospect-suggestions" id="quick-consult-suggestions"></div>
+            </label>
+            <div id="quick-consult-result">
+              <div class="table-status">Selecione um item para ver a consulta.</div>
+            </div>
+          </section>
+
+          <div id="quote-panel-anchor"></div>
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-quotes">
+            <div class="quote-hero">
+              <div>
+                <p class="eyebrow">Comercial</p>
+                <h3 id="quote-workspace-title">Orcamentos/Pedidos</h3>
+                <p id="quote-workspace-subtitle">Monte o orcamento, confira disponibilidade e gere o PDF para envio ao cliente.</p>
+              </div>
+              <div class="quote-number-card">
+                <span>Numero</span>
+                <strong id="quote-number"></strong>
+              </div>
+            </div>
+            <input id="quote-description-type" type="hidden" value="resumida">
+            <div class="quote-workbench">
+              <section class="quote-panel quote-client-panel">
+                <div class="quote-panel-heading">
+                  <div>
+                    <span>1</span>
+                    <h4>Cliente</h4>
+                  </div>
+                  <small>Busque pelo codigo, nome ou CNPJ.</small>
+                </div>
+                <label class="blocked-client-field">
+                  Codigo/Nome
+                  <input id="quote-client-search" type="search" placeholder="Buscar cliente">
+                  <div class="prospect-suggestions" id="quote-client-suggestions"></div>
+                </label>
+                <div class="quote-form-grid">
+                  <label>Nome<input id="quote-client-name" type="text"></label>
+                  <label>Telefone<input id="quote-client-phone" type="text"></label>
+                  <label>WhatsApp<input id="quote-client-whatsapp" type="text"></label>
+                  <label>Email<input id="quote-client-email" type="email"></label>
+                  <label>Comprador<input id="quote-client-buyer" type="text"></label>
+                </div>
+              </section>
+              <section class="quote-panel quote-product-panel">
+                <div class="quote-panel-heading">
+                  <div>
+                    <span>2</span>
+                    <h4>Produto</h4>
+                  </div>
+                  <small>Confira preco, desconto e disponibilidade antes de adicionar.</small>
+                </div>
+                <label class="blocked-client-field">
+                  Referencia
+                  <input id="quote-product-search" type="search" placeholder="Buscar produto">
+                  <div class="prospect-suggestions" id="quote-product-suggestions"></div>
+                </label>
+                <div class="table-status hidden" id="quote-product-alert"></div>
+                <div class="quote-add-item-panel">
+                  <label>Quantidade<input id="quote-product-quantity" type="number" min="0" step="0.001" value="1"></label>
+                  <label>Desconto %<input id="quote-product-discount" type="number" min="0" step="0.01" value="0"></label>
+                  <button class="primary-action" id="quote-add-item" type="button">Adicionar item</button>
+                </div>
+              </section>
+            </div>
+            <div class="quote-items-panel">
+              <div class="quote-panel-heading">
+                <div>
+                  <span>3</span>
+                  <h4>Itens do documento</h4>
+                </div>
+                <small>Edite quantidade e desconto direto na linha.</small>
+              </div>
+              <div class="table-scroll">
+                <table class="quote-items-table">
+                  <thead>
+                    <tr>
+                      <th>#</th><th>Referencia</th><th>Descricao</th><th>Detalhada</th><th>Marca</th><th>Qtd</th><th>Unitario</th><th>Desc.</th><th>IPI</th><th>Valor IPI</th><th>Total</th><th>Disponibilidade</th><th>Acao</th>
+                    </tr>
+                  </thead>
+                  <tbody id="quote-items-body"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="quote-footer">
+              <div class="quote-summary-panel">
+                <article><span>Itens</span><strong id="quote-total-items">R$ 0,00</strong></article>
+                <article><span>IPI</span><strong id="quote-total-ipi">R$ 0,00</strong></article>
+                <article class="quote-total-card"><span>Total</span><strong id="quote-total-budget">R$ 0,00</strong></article>
+              </div>
+              <div class="quote-actions">
+                <button class="primary-action" id="quote-close" type="button">Encerrar orcamento</button>
+                <button class="primary-action hidden" id="quote-convert-order" type="button">Converter em pedido</button>
+                <button class="primary-action hidden" id="order-save" type="button">Salvar pedido</button>
+                <a class="secondary-action hidden" id="quote-pdf-link" href="#" target="_blank" rel="noopener">Baixar PDF</a>
+              </div>
+            </div>
+            <p class="muted" id="quote-status">Carregando ambiente de orcamentos...</p>
+          </section>
+
+          <section class="vendor-portal-panel vendor-workspace-panel" id="vendor-workspace-sent-quotes">
+            <div class="chart-title-row">
+              <div>
+                <p class="eyebrow">Enviados</p>
+                <h3>Orcamentos/Pedidos Enviados</h3>
+              </div>
+            </div>
+            <div class="table-tools">
+              <label class="blocked-client-field">
+                Orcamento
+                <input id="quote-saved-search" type="search" placeholder="Numero, cliente ou CNPJ">
+                <div class="prospect-suggestions" id="quote-saved-suggestions"></div>
+              </label>
+              <button class="secondary-action" id="quote-saved-open" type="button">Abrir orcamento</button>
+              <label class="blocked-client-field">
+                Pedido
+                <input id="order-saved-search" type="search" placeholder="Numero, cliente ou CNPJ">
+                <div class="prospect-suggestions" id="order-saved-suggestions"></div>
+              </label>
+              <button class="secondary-action" id="order-saved-open" type="button">Abrir pedido</button>
+            </div>
+            <p class="muted" id="sent-quote-status">Busque um orcamento ou pedido salvo para abrir na tela de edicao.</p>
+          </section>
+
+          <section class="ml-panel" id="ml-sales-panel">
+            <div class="workflow">
+              <form id="ml-sales-import-form" class="import-panel">
+                <label>
+                  Empresa
+                  <select name="company" id="ml-sales-company"></select>
+                </label>
+                <label>
+                  Arquivo de vendas
+                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                </label>
+                <button class="primary-action" type="submit">Importar vendas</button>
+              </form>
+              <div class="result-panel" id="ml-sales-result-panel">
+                <p class="eyebrow">Resultado</p>
+                <h3>Aguardando importacao</h3>
+                <p class="muted">Importe a planilha de vendas do Mercado Livre.</p>
+              </div>
+            </div>
+            <div class="section-header table-heading compact-heading">
+              <div class="table-status" id="ml-sales-status">Carregando vendas...</div>
+              <div class="table-tools">
+                <input id="ml-sales-search" type="search" placeholder="Pedido, SKU, cliente...">
+              </div>
+            </div>
+            <div class="table-panel">
+              <div class="table-scroll">
+                <table>
+                  <thead id="ml-sales-table-head"></thead>
+                  <tbody id="ml-sales-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="ml-panel" id="ml-dashboard-panel">
+            <div class="section-header table-heading compact-heading">
+              <div>
+                <p class="eyebrow">Dashboard</p>
+                <h3>Vendas Mercado Livre</h3>
+              </div>
+              <div class="table-tools">
+                <label>
+                  Empresa
+                  <select id="ml-dashboard-company"></select>
+                </label>
+                <label>
+                  Ano
+                  <select id="ml-dashboard-year"></select>
+                </label>
+              </div>
+            </div>
+            <div class="table-status" id="ml-dashboard-status">Carregando dashboard...</div>
+            <div class="chart-panel" id="ml-dashboard-chart"></div>
+          </section>
+
+          <section class="ml-panel" id="ml-general-panel">
+            <div class="section-header table-heading compact-heading">
+              <div class="table-status" id="ml-general-status">Carregando gestao geral...</div>
+              <div class="table-tools">
+                <input id="ml-general-search" type="search" placeholder="SKU, anuncio, ficha...">
+                <button class="secondary-action" id="ml-general-export-button" type="button">Exportar</button>
+              </div>
+            </div>
+            <div class="table-panel">
+              <div class="table-scroll">
+                <table>
+                  <thead id="ml-general-table-head"></thead>
+                  <tbody id="ml-general-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="costing-table-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Cadastros</p>
+              <h2>Custeio</h2>
+              <p class="muted">Bases separadas por origem para consulta e exportacao.</p>
+            </div>
+          </div>
+
+          <div class="routine-tabs costing-internal-tabs" aria-label="Bases de custeio">
+            <button class="routine-tab active" type="button" data-costing-table="costing">Importados</button>
+            <button class="routine-tab" type="button" data-costing-table="costing-fabricated">Fabricados no Brasil</button>
+          </div>
+
+          <div class="costing-internal-panel" data-costing-panel="costing">
+            <div class="section-header table-heading compact-heading">
+              <div>
+                <p class="eyebrow">Custeio</p>
+                <h3>Importados</h3>
+              </div>
+              <div class="table-tools">
+                <label>
+                  Empresa
+                  <select id="costing-table-company"></select>
+                </label>
+                <label>
+                  Pesquisa
+                  <input id="costing-table-search" type="search" placeholder="Referencia, descricao, AGRP...">
+                </label>
+                <button class="secondary-action" id="costing-table-export-button" type="button">Exportar</button>
+              </div>
+            </div>
+
+            <div class="table-panel">
+              <div class="table-status" id="costing-table-status">Carregando custeio...</div>
+              <div class="table-scroll">
+                <table>
+                  <thead id="costing-table-head"></thead>
+                  <tbody id="costing-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="costing-internal-panel hidden" data-costing-panel="costing-fabricated">
+            <div class="section-header table-heading compact-heading">
+              <div>
+                <p class="eyebrow">Custeio</p>
+                <h3>Fabricados no Brasil</h3>
+                <p class="muted">Itens da planilha origem classificados como Fabricado BR.</p>
+              </div>
+              <div class="table-tools">
+              <label>
+                Empresa
+                <select id="costing-fabricated-table-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="costing-fabricated-table-search" type="search" placeholder="Referencia, descricao, AGRP...">
+              </label>
+              <button class="secondary-action" id="costing-fabricated-table-export-button" type="button">Exportar</button>
+              </div>
+            </div>
+
+            <div class="table-panel">
+              <div class="table-status" id="costing-fabricated-table-status">Carregando custeio fabricado...</div>
+              <div class="table-scroll">
+                <table>
+                  <thead id="costing-fabricated-table-head"></thead>
+                  <tbody id="costing-fabricated-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="vendors-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Cadastros</p>
+              <h2>Cadastro de vendedores</h2>
+              <p class="muted">Os vendedores encontrados nas notas fiscais entram como inativos e podem ser ativados pelo usuario master.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Permissao atual
+                <select id="vendor-actor-role">
+                  <option value="master">Usuario Master</option>
+                  <option value="supervisor">Vendedor Lider/Supervisor</option>
+                  <option value="vendedor">Vendedor</option>
+                </select>
+              </label>
+              <label>
+                Empresa
+                <select id="vendors-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="vendors-search" type="search" placeholder="Nome, telefone, email...">
+              </label>
+            </div>
+          </div>
+
+          <div class="vendor-page-tabs">
+            <button class="vendor-page-tab active" type="button" data-vendor-section="register">Cadastro de vendedores</button>
+            <button class="vendor-page-tab" type="button" data-vendor-section="regions">Regioes</button>
+            <button class="vendor-page-tab" type="button" data-vendor-section="goals">Metas e Objetivos</button>
+            <button class="vendor-page-tab" type="button" data-vendor-section="monthly-items">Itens/Equipamentos do Mes</button>
+          </div>
+
+          <div class="vendor-section-panel active" id="vendor-section-register">
+          <div class="vendor-register-shell" id="vendor-register-shell">
+            <div class="vendor-list-page" id="vendor-list-page">
+              <div class="vendor-list-hero">
+                <div>
+                  <p class="eyebrow">Vendedores</p>
+                  <h2>Lista de vendedores</h2>
+                  <p class="muted">Selecione um vendedor para abrir uma tela de edicao limpa e organizada.</p>
+                </div>
+                <button class="primary-action" id="vendor-new-from-list" type="button">Novo vendedor</button>
+              </div>
+              <div class="table-panel">
+                <div class="table-heading compact-table-heading">
+                  <div class="table-status" id="vendors-status">Carregando vendedores...</div>
+                  <div class="vendor-status-tabs" aria-label="Filtro de status dos vendedores">
+                    <button class="active" type="button" data-vendor-status-filter="Ativo">Ativos</button>
+                    <button type="button" data-vendor-status-filter="Inativo">Inativos</button>
+                  </div>
+                  <select id="vendors-status-filter" hidden>
+                    <option value="Ativo" selected>Ativos</option>
+                    <option value="Inativo">Inativos</option>
+                  </select>
+                </div>
+                <div class="table-scroll">
+                  <table class="vendors-table">
+                    <thead id="vendors-head"></thead>
+                    <tbody id="vendors-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="vendor-editor-page" id="vendor-editor-page">
+              <div class="vendor-editor-hero">
+                <div>
+                  <p class="eyebrow">Editar vendedor</p>
+                  <h2 id="vendor-editor-title">Novo vendedor</h2>
+                  <p class="muted">Organize dados, acessos e status do vendedor. As regioes agora ficam na pagina Regioes.</p>
+                </div>
+                <div class="vendor-editor-side">
+                  <div class="vendor-uf-summary">
+                    <span>UF selecionadas</span>
+                    <strong id="vendor-selected-uf-summary">Nenhuma UF</strong>
+                  </div>
+                  <button class="secondary-action" id="vendor-back-to-list" type="button">Voltar para lista</button>
+                </div>
+              </div>
+              <form id="vendor-form" class="vendor-form">
+              <input id="vendor-id" type="hidden">
+              <input id="vendor-current-photo" type="hidden">
+              <div class="vendor-form-tabs">
+                <button class="vendor-form-tab active" type="button" data-vendor-tab="vendor-main">Dados do vendedor</button>
+                <button class="vendor-form-tab" type="button" data-vendor-tab="vendor-clients">Clientes atendidos</button>
+              </div>
+              <div class="vendor-tab-panel visible" id="vendor-main-panel">
+                <label>
+                  Foto do vendedor
+                  <input id="vendor-photo" type="file" accept="image/*">
+                </label>
+                <div class="vendor-photo-preview" id="vendor-photo-preview">Sem foto</div>
+                <label>
+                  Nome completo
+                  <input id="vendor-name" type="text" required placeholder="Nome do vendedor">
+                </label>
+                <label>
+                  Tipo de usuario
+                  <select id="vendor-user-type">
+                    <option value="Vendedor">Vendedor</option>
+                    <option value="Vendedor Lider/Supervisor">Vendedor Lider/Supervisor</option>
+                  </select>
+                </label>
+                <label>
+                  Telefone
+                  <input id="vendor-phone" type="tel" placeholder="(00) 0000-0000">
+                </label>
+                <label>
+                  WhatsApp
+                  <input id="vendor-whatsapp" type="tel" placeholder="(00) 00000-0000">
+                </label>
+                <label>
+                  Email
+                  <input id="vendor-email" type="email" placeholder="email@empresa.com.br">
+                </label>
+                <label>
+                  Login de acesso
+                  <input id="vendor-login" type="text" placeholder="usuario.sistema">
+                </label>
+                <label>
+                  Usuário vinculado
+                  <select id="vendor-linked-user">
+                    <option value="">Selecione um usuário cadastrado</option>
+                  </select>
+                </label>
+                <label>
+                  Senha de acesso
+                  <input id="vendor-password" type="password" placeholder="Preencha para definir ou alterar">
+                </label>
+                <label>
+                  Status
+                  <select id="vendor-status">
+                    <option value="Inativo">Inativo</option>
+                    <option value="Ativo">Ativo</option>
+                  </select>
+                </label>
+                <div class="vendor-access">
+                  <span>Empresas que podera visualizar e incluir informacoes</span>
+                  <div id="vendor-access-options"></div>
+                </div>
+              </div>
+              <div class="vendor-tab-panel" id="vendor-clients-panel">
+                <div class="vendor-client-workbench">
+                  <div class="vendor-panel-card vendor-region-card">
+                    <span>UF que o vendedor podera atender</span>
+                    <div class="vendor-uf-grid" id="vendor-uf-options"></div>
+                  </div>
+
+                  <div class="vendor-panel-card vendor-current-cities-card">
+                    <label>
+                      Cidades com clientes cadastrados
+                      <select id="vendor-assigned-city-select" multiple size="7"></select>
+                    </label>
+                    <div class="vendor-city-manager">
+                      <div>
+                        <span>Cidades do vendedor para exclusao</span>
+                        <small id="vendor-city-filter-status">Mostrando todas as cidades.</small>
+                      </div>
+                      <input id="vendor-city-filter" type="search" placeholder="Buscar cidade, UF ou DDD para remover">
+                      <div class="assignment-list vendor-city-list" id="vendor-city-list"></div>
+                      <div class="vendor-actions">
+                        <button class="secondary-action danger" id="vendor-remove-selected-cities" type="button">Remover selecionados</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="vendor-panel-card vendor-add-cities-card">
+                    <label>
+                      Cidades disponiveis para adicionar
+                      <select id="vendor-city-select" multiple size="10"></select>
+                    </label>
+                    <div class="vendor-ddd-box" id="vendor-ddd-box"></div>
+                    <div class="vendor-actions">
+                      <button class="secondary-action" id="vendor-add-city" type="button">Adicionar cidade</button>
+                      <button class="secondary-action danger" id="vendor-clear-assignments" type="button">Limpar</button>
+                    </div>
+                  </div>
+
+                  <div class="vendor-panel-card vendor-excluded-cities-card">
+                    <span>Cidades Excluídas das UF desse vendedor</span>
+                    <small id="vendor-excluded-city-status">Selecione uma UF para visualizar.</small>
+                    <div class="assignment-list compact-assignment-list" id="vendor-excluded-city-list"></div>
+                  </div>
+
+                  <div class="vendor-panel-card">
+                    <span>A selecionar vendedor</span>
+                    <div class="assignment-list compact-assignment-list" id="vendor-unassigned-city-list"></div>
+                  </div>
+
+                  <div class="vendor-panel-card vendor-availability-panel">
+                    <span>UF/Cidades disponiveis sem vendedor</span>
+                    <label>
+                      Filtrar UF
+                      <select id="vendor-available-uf-filter"></select>
+                    </label>
+                    <div class="assignment-list compact-assignment-list" id="vendor-available-city-list"></div>
+                  </div>
+                </div>
+                <label class="blocked-client-field">
+                  Clientes especificos
+                  <input id="vendor-client-search" type="search" placeholder="Digite codigo ou parte do nome">
+                  <div class="prospect-suggestions" id="vendor-client-suggestions"></div>
+                </label>
+                <button class="secondary-action" id="vendor-add-specific-client" type="button">Adicionar cliente</button>
+                <div class="assignment-list" id="vendor-specific-client-list"></div>
+              </div>
+              <div class="vendor-actions">
+                <button class="primary-action" type="submit">Salvar vendedor</button>
+                <button class="secondary-action" id="vendor-clear" type="button">Novo</button>
+              </div>
+              <p class="muted" id="vendor-form-status"></p>
+            </form>
+            </div>
+          </div>
+          </div>
+
+          <div class="vendor-section-panel" id="vendor-section-regions">
+            <section class="vendor-goals-panel">
+              <div class="table-heading">
+                <div>
+                  <p class="eyebrow">Regioes</p>
+                  <h2>Clientes do vendedor</h2>
+                  <p class="muted">Lista calculada pela pagina Regioes, considerando UF, DDD, cidades e clientes especificos salvos para o vendedor.</p>
+                </div>
+                <div class="table-tools">
+                  <label>
+                    Vendedor
+                    <select id="vendor-regions-vendor"></select>
+                  </label>
+                  <label>
+                    Pesquisa
+                    <input id="vendor-regions-search" type="search" placeholder="Cliente, codigo, UF, cidade...">
+                  </label>
+                </div>
+              </div>
+              <div class="vendor-region-register-summary" id="vendor-regions-summary">
+                <div><span>UF</span><strong>0</strong></div>
+                <div><span>Cidades</span><strong>0</strong></div>
+                <div><span>DDD</span><strong>0</strong></div>
+                <div><span>Clientes</span><strong>0</strong></div>
+              </div>
+              <div class="vendor-region-manager">
+                <div class="vendor-region-manager-head">
+                  <div>
+                    <p class="eyebrow">Carteira do vendedor</p>
+                    <h3>UF, DDD e cidades destinadas</h3>
+                    <p class="muted">Selecione uma UF para ver os DDD e cidades. Marque o que deseja retirar da carteira deste vendedor.</p>
+                  </div>
+                  <button class="secondary-action danger" id="vendor-regions-exclude-button" type="button">Excluir selecionados</button>
+                </div>
+                <div class="vendor-region-manager-grid">
+                  <label>
+                    UF do vendedor
+                    <select id="vendor-regions-uf-filter"></select>
+                  </label>
+                  <div>
+                    <span class="region-step-label">DDD dessa UF</span>
+                    <div class="assignment-list compact-assignment-list" id="vendor-regions-ddd-list"></div>
+                  </div>
+                  <div>
+                    <span class="region-step-label">Cidades dessa UF</span>
+                    <input id="vendor-regions-city-filter" type="search" placeholder="Buscar cidade">
+                    <div class="assignment-list compact-assignment-list" id="vendor-regions-city-list"></div>
+                  </div>
+                </div>
+                <div class="table-status" id="vendor-regions-manager-status">Selecione um vendedor para carregar a carteira.</div>
+              </div>
+              <div class="table-status" id="vendor-regions-status">Selecione um vendedor para visualizar os clientes da carteira.</div>
+              <div class="table-scroll">
+                <table class="vendor-regions-client-table">
+                  <thead id="vendor-regions-head"></thead>
+                  <tbody id="vendor-regions-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <div class="vendor-section-panel" id="vendor-section-goals">
+            <section class="vendor-goals-panel">
+              <div class="section-header table-heading">
+                <div>
+                  <p class="eyebrow">Vendedores</p>
+                  <h2>Metas e Objetivos</h2>
+                  <p class="muted">Defina metas mensais, pesos e comissao por vendedor.</p>
+                </div>
+                <div class="table-tools">
+                  <label>
+                    Vendedor
+                    <select id="vendor-goals-vendor"></select>
+                  </label>
+                  <label>
+                    Ano
+                    <select id="vendor-goals-year"></select>
+                  </label>
+                  <label>
+                    Mes
+                    <select id="vendor-goals-month"></select>
+                  </label>
+                  <label>
+                    % Comissão
+                    <input id="vendor-goals-commission" type="text" inputmode="decimal" value="1,0">
+                  </label>
+                </div>
+              </div>
+
+              <div class="vendor-goals-summary" id="vendor-goals-summary"></div>
+              <div class="vendor-goals-months" id="vendor-goals-months"></div>
+              <div class="vendor-actions">
+                <button class="primary-action" id="vendor-goals-save" type="button">Salvar metas</button>
+                <button class="secondary-action" id="vendor-goals-reload" type="button">Recarregar calculo</button>
+                <button class="secondary-action" id="vendor-goals-replicate" type="button">Replicar proximos meses</button>
+              </div>
+              <p class="muted" id="vendor-goals-status">Selecione um vendedor para configurar as metas.</p>
+            </section>
+          </div>
+
+          <div class="vendor-section-panel" id="vendor-section-monthly-items">
+            <section class="vendor-goals-panel">
+              <div class="section-header table-heading">
+                <div>
+                  <p class="eyebrow">Vendedores</p>
+                  <h2>Itens/Equipamentos do Mes</h2>
+                  <p class="muted">Defina os itens que os vendedores deverao promover em cada mes.</p>
+                </div>
+                <div class="table-tools">
+                  <label>
+                    Empresa
+                    <select id="monthly-items-company"></select>
+                  </label>
+                  <label>
+                    Ano
+                    <select id="monthly-items-year"></select>
+                  </label>
+                  <label>
+                    Mes
+                    <select id="monthly-items-month"></select>
+                  </label>
+                </div>
+              </div>
+              <label class="blocked-client-field">
+                Buscar item por referencia ou descricao
+                <input id="monthly-item-search" type="search" placeholder="Digite a referencia ou parte da descricao">
+                <div class="prospect-suggestions" id="monthly-item-suggestions"></div>
+              </label>
+              <div class="vendor-actions">
+                <button class="primary-action" id="monthly-items-save" type="button">Salvar lista</button>
+                <button class="secondary-action" id="monthly-items-reload" type="button">Recarregar</button>
+              </div>
+              <div class="table-status" id="monthly-items-status">Selecione empresa, ano e mes para carregar a lista.</div>
+              <div class="table-scroll compact">
+                <table class="monthly-items-table">
+                  <thead>
+                    <tr>
+                      <th>Referencia</th>
+                      <th>Descricao</th>
+                      <th>Estoque</th>
+                      <th>DT Ultima Venda</th>
+                      <th>Valor Unitario Tabela de Precos</th>
+                      <th>Acao</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monthly-items-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="regions-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Comercial</p>
+              <h2>Regiao</h2>
+              <p class="muted">Defina o vendedor responsavel por UF, cidade, DDD ou cliente. Clique na UF para abrir cidades; clique na cidade para abrir DDD; clique no DDD para abrir clientes.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="regions-company"></select>
+              </label>
+              <label>
+                Vendedor
+                <select id="regions-vendor-filter">
+                  <option value="all">Todos</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="region-hierarchy-panel">
+            <div class="region-hierarchy-header">
+              <div>
+                <p class="eyebrow">Unidades da Federacao - UF</p>
+                <h3>Mapa de vendedores por regiao</h3>
+                <p class="muted">A regra mais especifica prevalece: cliente sobrepoe DDD, DDD sobrepoe cidade, cidade sobrepoe UF.</p>
+              </div>
+              <div class="table-status" id="regions-status">Carregando regioes...</div>
+            </div>
+            <div class="region-hierarchy-table" id="region-hierarchy-root"></div>
+          </div>
+        </section>
+
+        <section class="view" id="follow-up-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Day by Day</p>
+              <h2>Follow-UP Atendimentos</h2>
+              <p class="muted">Consulte as fichas salvas pelos vendedores e acompanhe retornos, motivos e proximos contatos.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="follow-up-company"></select>
+              </label>
+              <label>
+                Vendedor
+                <select id="follow-up-vendor">
+                  <option value="">Todos</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <section class="follow-up-panel">
+            <div class="follow-up-filters">
+              <label>
+                Região
+                <select id="follow-up-region">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+              <label>
+                UF
+                <select id="follow-up-uf">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+              <label>
+                Cidade
+                <select id="follow-up-city">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+              <label>
+                Cliente
+                <input id="follow-up-client" type="search" placeholder="Nome, codigo ou resumo">
+              </label>
+              <label>
+                Inicio
+                <input id="follow-up-start" type="date">
+              </label>
+              <label>
+                Fim
+                <input id="follow-up-end" type="date">
+              </label>
+              <label>
+                Probabilidade
+                <select id="follow-up-probability">
+                  <option value="">Todas</option>
+                  <option value="0">0 - Sem chance</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                  <option value="9">9</option>
+                  <option value="10">10 - Grande chance</option>
+                </select>
+              </label>
+              <label>
+                Agenda
+                <select id="follow-up-scheduled">
+                  <option value="">Todos</option>
+                  <option value="yes">Com novo contato</option>
+                  <option value="no">Sem novo contato</option>
+                </select>
+              </label>
+              <button class="primary-action" id="follow-up-load" type="button">Buscar</button>
+              <button class="secondary-action" id="follow-up-export" type="button">Exportar para Excel</button>
+            </div>
+
+            <div class="follow-up-summary" id="follow-up-summary"></div>
+            <div class="table-status" id="follow-up-status">Informe os filtros para carregar.</div>
+            <div class="table-scroll">
+              <table class="follow-up-table">
+                <thead id="follow-up-head"></thead>
+                <tbody id="follow-up-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="blocked-clients-view">
+          <div class="section-header table-heading">
+            <div>
+              <p class="eyebrow">Cadastros</p>
+              <h2>Clientes bloqueados</h2>
+              <p class="muted">Informe o codigo do cliente, confira o nome e selecione o motivo do bloqueio.</p>
+            </div>
+            <div class="table-tools">
+              <label>
+                Empresa
+                <select id="blocked-company"></select>
+              </label>
+              <label>
+                Pesquisa
+                <input id="blocked-search" type="search" placeholder="Cliente, codigo, motivo...">
+              </label>
+            </div>
+          </div>
+
+          <div class="block-layout">
+            <div class="block-forms">
+              <form id="blocked-form" class="vendor-form">
+                <label class="blocked-client-field">
+                  Cliente
+                  <input id="blocked-client-code" type="search" required placeholder="Digite parte do nome ou codigo">
+                  <div class="prospect-suggestions" id="blocked-client-suggestions"></div>
+                </label>
+                <div class="client-found" id="blocked-client-name">Digite o codigo para localizar o cliente.</div>
+                <label>
+                  Motivo
+                  <select id="blocked-reason" required></select>
+                </label>
+                <button class="primary-action" type="submit">Bloquear cliente</button>
+                <p class="muted" id="blocked-form-status"></p>
+              </form>
+
+              <form id="block-reason-form" class="vendor-form">
+                <label>
+                  Novo motivo de bloqueio
+                  <input id="new-block-reason" type="text" placeholder="Ex.: Pendencia documental">
+                </label>
+                <button class="secondary-action" type="submit">Adicionar motivo</button>
+                <p class="muted" id="block-reason-status"></p>
+              </form>
+            </div>
+
+            <div class="table-panel">
+              <div class="table-status" id="blocked-status">Carregando bloqueios...</div>
+              <div class="table-scroll">
+                <table class="blocked-table">
+                  <thead id="blocked-head"></thead>
+                  <tbody id="blocked-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+</main>
+    </div>
+
+    <script>
+      window.addEventListener("error", (event) => {
+        const message = event.message || "Erro desconhecido";
+        const box = document.getElementById("startup-error-box") || document.createElement("div");
+        box.id = "startup-error-box";
+        box.style.cssText = "position:fixed;left:16px;right:16px;top:16px;z-index:99999;background:#fff1f2;border:1px solid #fecdd3;color:#7f1d1d;padding:12px 14px;border-radius:8px;font:14px Segoe UI,Arial,sans-serif;box-shadow:0 12px 28px rgba(127,29,29,.18)";
+        box.textContent = `Erro de inicializacao: ${message}`;
+        document.body.appendChild(box);
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        const reason = event.reason && (event.reason.message || String(event.reason)) || "Erro desconhecido";
+        const box = document.getElementById("startup-error-box") || document.createElement("div");
+        box.id = "startup-error-box";
+        box.style.cssText = "position:fixed;left:16px;right:16px;top:16px;z-index:99999;background:#fff1f2;border:1px solid #fecdd3;color:#7f1d1d;padding:12px 14px;border-radius:8px;font:14px Segoe UI,Arial,sans-serif;box-shadow:0 12px 28px rgba(127,29,29,.18)";
+        box.textContent = `Erro de inicializacao: ${reason}`;
+        document.body.appendChild(box);
+      });
+    </script>
+    <script src="/app.js?v=20260618-botoes-home-ajuste1"></script>
+  </body>
+</html>
+
+
