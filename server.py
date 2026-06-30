@@ -783,6 +783,56 @@ def vendor_sales_company_ids(company_id: str) -> list[str]:
     return [company_id]
 
 
+def vendor_page_dependencies(company_id: str, vendor_id_value: str) -> list[Path]:
+    dependencies = [
+        vendors_file(company_id),
+        clients_file(company_id),
+        blocked_clients_file(company_id),
+        region_assignments_file(company_id),
+        economic_groups_file(company_id),
+    ]
+    dependencies.extend(sales_file(current_company_id) for current_company_id in vendor_sales_company_ids(company_id))
+    return dependencies
+
+
+def vendor_goals_dependencies(company_id: str, fast_mode: bool) -> list[Path]:
+    dependencies = [
+        vendors_file(company_id),
+        vendor_goals_file(company_id),
+        clients_file(company_id),
+        blocked_clients_file(company_id),
+        region_assignments_file(company_id),
+        economic_groups_file(company_id),
+        vendor_day_by_day_file(company_id),
+        vendor_day_by_day_operational_file(company_id),
+    ]
+    for current_company_id in vendor_sales_company_ids(company_id):
+        dependencies.append(sales_file(current_company_id))
+        if not fast_mode:
+            dependencies.append(stock_bonus_file(current_company_id))
+            dependencies.append(stock_file(current_company_id))
+    return dependencies
+
+
+def vendor_day_by_day_dependencies(company_id: str, vendor_id_value: str, day_key: str = "") -> list[Path]:
+    day_value = day_by_day_date_value(day_key)
+    current_key = day_value.isoformat()
+    previous_key = previous_day_by_day_business_day(day_value).isoformat()
+    dependencies = [
+        vendors_file(company_id),
+        clients_file(company_id),
+        blocked_clients_file(company_id),
+        region_assignments_file(company_id),
+        economic_groups_file(company_id),
+        vendor_day_by_day_file(company_id),
+        vendor_day_by_day_operational_file(company_id),
+        vendor_day_by_day_queue_file(company_id, current_key, vendor_id_value),
+        vendor_day_by_day_queue_file(company_id, previous_key, vendor_id_value),
+    ]
+    dependencies.extend(sales_file(current_company_id) for current_company_id in vendor_sales_company_ids(company_id))
+    return dependencies
+
+
 def vendor_dashboard_dependencies(company_id: str) -> list[Path]:
     dependencies = [
         clients_file(company_id),
@@ -3094,7 +3144,7 @@ def vendor_day_by_day_monthly_count(company_id: str, vendor_id_value: str, year:
     return total
 
 
-def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: str = ""):
+def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: str = ""):
     started_at = time.perf_counter()
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
@@ -3330,6 +3380,15 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
         total_ms=round((time.perf_counter() - started_at) * 1000, 2),
     )
     return response
+
+
+def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: str = ""):
+    normalized_day_key = day_by_day_date_value(day_key).isoformat()
+    return cached_payload(
+        ("vendor_day_by_day", company_id, vendor_id_value, normalized_day_key),
+        vendor_day_by_day_dependencies(company_id, vendor_id_value, normalized_day_key),
+        lambda: build_vendor_day_by_day_payload(company_id, vendor_id_value, normalized_day_key),
+    )
 
 
 def vendor_day_by_day_previous_contacts(data: dict, vendor_id_value: str, day_key: str) -> list[dict]:
@@ -4386,7 +4445,7 @@ def save_vendor_region_exclusions_payload(payload: dict):
     return {"message": "Exclusao salva com sucesso.", **vendor_region_management_payload(company_id, vendor_id_value)}
 
 
-def vendor_page_payload(company_id: str, vendor_id_value: str):
+def build_vendor_page_payload(company_id: str, vendor_id_value: str):
     started_at = time.perf_counter()
     sync_started_at = time.perf_counter()
     vendors, _inserted = sync_vendors_from_sales(company_id)
@@ -4406,6 +4465,14 @@ def vendor_page_payload(company_id: str, vendor_id_value: str):
         total_ms=round((time.perf_counter() - started_at) * 1000, 2),
     )
     return payload
+
+
+def vendor_page_payload(company_id: str, vendor_id_value: str):
+    return cached_payload(
+        ("vendor_page", company_id, vendor_id_value),
+        vendor_page_dependencies(company_id, vendor_id_value),
+        lambda: build_vendor_page_payload(company_id, vendor_id_value),
+    )
 
 
 def vendor_about_goal_region_rows(company_id: str, vendor: dict, client_index: dict) -> list[dict]:
@@ -6310,7 +6377,7 @@ def normalize_vendor_goal_record(record: dict, company_id: str, vendor_id_value:
     return normalized
 
 
-def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=None, month_value=None, fast_value=None):
+def build_vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=None, month_value=None, fast_value=None):
     started_at = time.perf_counter()
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
@@ -6414,6 +6481,17 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
         fast=1 if fast_mode else 0,
     )
     return response
+
+
+def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=None, month_value=None, fast_value=None):
+    fast_mode = str(fast_value or "").strip().lower() in {"1", "true", "sim", "yes"}
+    year = int(optional_number_value(year_value) or CURRENT_YEAR)
+    month = str(month_value or "")
+    return cached_payload(
+        ("vendor_goals", company_id, vendor_id_value, str(year), month, "1" if fast_mode else "0"),
+        vendor_goals_dependencies(company_id, fast_mode),
+        lambda: build_vendor_goals_payload(company_id, vendor_id_value, year_value, month_value, fast_value),
+    )
 
 
 def save_vendor_goals_payload(payload: dict):
