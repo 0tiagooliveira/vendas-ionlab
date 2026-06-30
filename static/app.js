@@ -425,25 +425,41 @@ async function fetchJson(url, options) {
   const progressTicket = shouldAutoProgress
     ? beginAutoLoadingProgress(method === "GET" ? "Carregando dados..." : "Processando solicitacao...")
     : null;
+  const fetchOnce = async (targetUrl) => fetch(targetUrl, {
+    ...fetchOptions,
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      ...(localStorage.getItem(authTokenKey) ? { "X-Auth-Token": localStorage.getItem(authTokenKey) } : {}),
+      ...(requestOptions.headers || {}),
+    },
+  });
   try {
-    const response = await fetch(requestUrl, {
-      ...fetchOptions,
-      cache: method === "GET" && ttl ? "default" : "no-store",
-      headers: {
-        Accept: "application/json",
-        ...(localStorage.getItem(authTokenKey) ? { "X-Auth-Token": localStorage.getItem(authTokenKey) } : {}),
-        ...(requestOptions.headers || {}),
-      },
-    });
+    let response = await fetchOnce(requestUrl);
     const text = await response.text();
     let payload;
     try {
       payload = text ? JSON.parse(text) : {};
     } catch (error) {
       const isHtml = text.trim().startsWith("<");
-      throw new Error(isHtml
-        ? `O servidor retornou uma pagina em vez de dados na rota ${url}. Atualize a pagina e tente novamente.`
-        : "A resposta do servidor nao esta em formato valido.");
+      if (method === "GET" && isHtml && !force) {
+        const retryUrl = new URL(requestUrl, window.location.origin);
+        retryUrl.searchParams.set("_", String(Date.now()));
+        response = await fetchOnce(retryUrl.toString());
+        const retryText = await response.text();
+        try {
+          payload = retryText ? JSON.parse(retryText) : {};
+        } catch (retryError) {
+          const retryIsHtml = retryText.trim().startsWith("<");
+          throw new Error(retryIsHtml
+            ? `O servidor retornou uma pagina em vez de dados na rota ${url}. Atualize a pagina e tente novamente.`
+            : "A resposta do servidor nao esta em formato valido.");
+        }
+      } else {
+        throw new Error(isHtml
+          ? `O servidor retornou uma pagina em vez de dados na rota ${url}. Atualize a pagina e tente novamente.`
+          : "A resposta do servidor nao esta em formato valido.");
+      }
     }
     if (!response.ok) {
       throw new Error(payload.error || "Nao foi possivel concluir a operacao.");
