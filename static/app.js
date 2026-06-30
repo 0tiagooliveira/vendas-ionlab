@@ -124,6 +124,7 @@ let currentVendorDayByDayClient = null;
 let currentVendorAgendaPayload = null;
 let currentVendorContactReportPayload = null;
 let currentVendorDailyContactsPayload = null;
+let currentVendorMonthlyClientsPayload = null;
 let homeVendorPanelCache = new Map();
 let homeVendorPanelInFlight = new Map();
 let currentVendorRegionDimension = "ufs";
@@ -219,7 +220,7 @@ let currentFollowUpOptions = null;
 let followUpTimer = null;
 
 const authTokenKey = "crm_auth_token";
-const appAssetVersion = "20260626-metas-fast2";
+const appAssetVersion = "20260629-performance-cache1";
 const apiMemoryCache = new Map();
 const fastCacheMs = 30 * 60 * 1000;
 const closedPeriodCacheMs = 60 * 60 * 1000;
@@ -287,6 +288,41 @@ function cacheTtlForUrl(cacheUrl) {
 
 function clearApiCache() {
   apiMemoryCache.clear();
+}
+
+async function refreshPreparedData() {
+  const button = document.getElementById("refresh-data-button");
+  const originalText = button?.textContent || "Atualizar dados";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Atualizando...";
+  }
+  try {
+    await fetchJson("/api/cache/clear", { method: "POST", progress: true });
+    clearApiCache();
+    invalidateLoadedViews();
+    const visibleView = document.querySelector(".view.visible")?.id?.replace(/-view$/, "") || "home";
+    if (vendorPageRoute()) {
+      clearVendorWorkspaceCache();
+      currentVendorRegionPayload = null;
+      currentVendorDayByDayPayload = null;
+      currentVendorSlowItemsCacheKey = "";
+      await loadVendorPage();
+    } else {
+      setView(visibleView);
+      if (visibleView === "home") {
+        renderStats();
+        renderHomeVendorPages();
+      }
+    }
+  } catch (error) {
+    alert(error.message || "Nao foi possivel atualizar os dados.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
 function clearVendorWorkspaceCache() {
@@ -765,6 +801,7 @@ function renderCompanies() {
       select.value = "onix";
     }
   });
+  setupMercadoLivreSalesMonthSelect();
   const mercadoLivreDashboardCompany = document.getElementById("ml-dashboard-company");
   if (mercadoLivreDashboardCompany) {
     const allowedMlCompanies = new Set(["onix", "vitralab", "nativalab"]);
@@ -4537,6 +4574,141 @@ function renderVendorDailyContactsChart(payload) {
   status.textContent = `${payload.empresa}: ${formatNumber.format(rows.length)} dia(s) com contatos no mês selecionado.`;
 }
 
+function setupVendorMonthlyClientsFilters(payload = null) {
+  const yearSelect = document.getElementById("vendor-monthly-clients-year");
+  const monthSelect = document.getElementById("vendor-monthly-clients-month");
+  if (!yearSelect || !monthSelect) {
+    return;
+  }
+  const currentYear = new Date().getFullYear();
+  const years = payload?.years?.length ? payload.years : Array.from({ length: 5 }, (_, index) => currentYear - 3 + index);
+  const selectedYear = yearSelect.value || String(payload?.year || currentYear);
+  yearSelect.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join("");
+  yearSelect.value = [...yearSelect.options].some((option) => option.value === selectedYear)
+    ? selectedYear
+    : String(currentYear);
+  const selectedMonth = monthSelect.value || "agrupado";
+  monthSelect.innerHTML = `
+    <option value="agrupado">Agrupado</option>
+    ${Array.from({ length: 12 }, (_, index) => {
+      const month = index + 1;
+      return `<option value="${month}">${monthLabel(month)}</option>`;
+    }).join("")}
+  `;
+  monthSelect.value = [...monthSelect.options].some((option) => option.value === selectedMonth)
+    ? selectedMonth
+    : "agrupado";
+}
+
+async function loadVendorMonthlyClientsChart(force = false) {
+  const route = vendorPageRoute();
+  const chart = document.getElementById("vendor-monthly-clients-chart");
+  const status = document.getElementById("vendor-monthly-clients-status");
+  const total = document.getElementById("vendor-monthly-clients-total");
+  const yearSelect = document.getElementById("vendor-monthly-clients-year");
+  const monthSelect = document.getElementById("vendor-monthly-clients-month");
+  if (!route || !chart || !status || !total || !yearSelect || !monthSelect) {
+    return;
+  }
+  setupVendorMonthlyClientsFilters();
+  const year = yearSelect.value || String(new Date().getFullYear());
+  const month = monthSelect.value || "agrupado";
+  const cacheKey = `${route.company}|${route.vendorId}|${year}|${month}`;
+  if (currentVendorMonthlyClientsPayload?.cacheKey === cacheKey && !force) {
+    renderVendorMonthlyClientsChart(currentVendorMonthlyClientsPayload.payload);
+    return;
+  }
+  chart.innerHTML = "";
+  status.textContent = "Carregando clientes atendidos por mes...";
+  total.textContent = "Carregando...";
+  try {
+    const payload = await fetchJson(`/api/vendor-monthly-buying-clients?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}&year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`, { force });
+    currentVendorMonthlyClientsPayload = { cacheKey, payload };
+    setupVendorMonthlyClientsFilters(payload);
+    renderVendorMonthlyClientsChart(payload);
+  } catch (error) {
+    chart.innerHTML = "";
+    total.textContent = "Sem dados";
+    status.textContent = error.message;
+  }
+}
+
+function renderVendorMonthlyClientsChart(payload) {
+  const chart = document.getElementById("vendor-monthly-clients-chart");
+  const status = document.getElementById("vendor-monthly-clients-status");
+  const total = document.getElementById("vendor-monthly-clients-total");
+  if (!chart || !status || !total) {
+    return;
+  }
+  const rows = payload.rows || [];
+  const maxValue = Math.max(1, ...rows.map((row) => Number(row.clientes || 0)));
+  total.textContent = `${formatNumber.format(payload.total || 0)} cliente(s) com compra`;
+  if (!rows.length) {
+    chart.innerHTML = '<div class="empty-state">Nenhum cliente com compra encontrado para o filtro selecionado.</div>';
+    status.textContent = "Nenhum cliente com compra encontrado.";
+    return;
+  }
+  const width = Math.max(520, rows.length * 82);
+  const height = 270;
+  const padding = { top: 34, right: 30, bottom: 48, left: 44 };
+  const usableWidth = width - padding.left - padding.right;
+  const usableHeight = height - padding.top - padding.bottom;
+  const points = rows.map((row, index) => {
+    const value = Number(row.clientes || 0);
+    const x = padding.left + (rows.length === 1 ? usableWidth / 2 : (index / (rows.length - 1)) * usableWidth);
+    const y = padding.top + usableHeight - ((value / maxValue) * usableHeight);
+    return { row, value, x, y };
+  });
+  const pathData = points.map((point, index) => `${index ? "L" : "M"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+  const areaData = `${pathData} L ${points[points.length - 1].x.toFixed(2)} ${padding.top + usableHeight} L ${points[0].x.toFixed(2)} ${padding.top + usableHeight} Z`;
+  const gridLines = Array.from({ length: 4 }, (_, index) => {
+    const y = padding.top + (usableHeight / 3) * index;
+    return `<line class="vendor-line-grid" x1="${padding.left}" y1="${y.toFixed(2)}" x2="${width - padding.right}" y2="${y.toFixed(2)}"></line>`;
+  }).join("");
+  chart.innerHTML = `
+    <div class="vendor-monthly-client-line-wrap">
+      <svg class="vendor-monthly-client-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Clientes atendidos por mes">
+        <defs>
+          <linearGradient id="vendor-client-line-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#1d4ed8" stop-opacity="0.22"></stop>
+            <stop offset="100%" stop-color="#0f8f9f" stop-opacity="0.03"></stop>
+          </linearGradient>
+        </defs>
+        ${gridLines}
+        <path class="vendor-line-area" d="${areaData}"></path>
+        <path class="vendor-line-path" d="${pathData}"></path>
+        ${points.map((point) => {
+          const label = escapeHtml(point.row.label || monthLabel(point.row.month));
+          const tooltip = `${label}/${payload.year}: ${formatNumber.format(point.value)} cliente(s) da regiao com compra`;
+          const valueLabel = point.value ? formatNumber.format(point.value) : "";
+          const valueY = Math.max(14, point.y - 12);
+          const labelY = height - 18;
+          return `
+            <g class="vendor-line-point" title="${tooltip}">
+              <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="5.5"></circle>
+              <text class="vendor-line-value" x="${point.x.toFixed(2)}" y="${valueY.toFixed(2)}">${valueLabel}</text>
+              <text class="vendor-line-label" x="${point.x.toFixed(2)}" y="${labelY}">${label}</text>
+            </g>
+          `;
+        }).join("")}
+      </svg>
+    </div>
+    <div class="vendor-monthly-client-line-legend">
+      ${rows.map((row) => {
+        const value = Number(row.clientes || 0);
+        const label = escapeHtml(row.label || monthLabel(row.month));
+        return `
+          <article>
+            <strong>${label}</strong>
+            <span>${formatNumber.format(value)}</span>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+  status.textContent = `${payload.empresa}: ${payload.criterio || "Clientes unicos da carteira com compra no periodo."}`;
+}
+
 function setVendorRegionDimension(dimension) {
   currentVendorRegionDimension = dimension;
   document.querySelectorAll("[data-region-dimension]").forEach((button) => {
@@ -4561,6 +4733,14 @@ function renderVendorRegionCharts() {
   const labels = { ufs: "UF atendida", ddds: "DDD atendido", cidades: "Cidades atendidas", agrupado: "Agrupado" };
   const rows = payload[currentVendorRegionDimension] || [];
   const { sections } = vendorRegionElements();
+  const clientsDayCard = document.getElementById("vendor-monthly-clients-card");
+  const showClientsDay = currentVendorRegionIndicator === "clients-day";
+  clientsDayCard?.classList.toggle("hidden", !showClientsDay);
+  if (showClientsDay) {
+    sections.innerHTML = "";
+    loadVendorMonthlyClientsChart();
+    return;
+  }
   if (currentVendorRegionIndicator === "quant") {
     sections.innerHTML = vendorQuantCharts(labels[currentVendorRegionDimension], rows, payload.anos, payload.meses_fechados || payload.meses);
     return;
@@ -5555,10 +5735,23 @@ function localVendorId(company, name) {
   return `${company}-${normalizeLocalText(name).toLowerCase().slice(0, 48)}`;
 }
 
-function localVendorRows(company) {
-  const stored = localStorage.getItem(vendorStorageKey(company));
-  if (stored) {
+function readLocalJson(key, fallback) {
+  const stored = localStorage.getItem(key);
+  if (!stored) {
+    return fallback;
+  }
+  try {
     return JSON.parse(stored);
+  } catch (_error) {
+    localStorage.removeItem(key);
+    return fallback;
+  }
+}
+
+function localVendorRows(company) {
+  const storedRows = readLocalJson(vendorStorageKey(company), null);
+  if (storedRows) {
+    return storedRows;
   }
 
   const rows = (vendorSeedNames[company] || []).map((name) => ({
@@ -5586,8 +5779,7 @@ function saveLocalVendorRows(company, rows) {
 }
 
 function localUserRows() {
-  const stored = localStorage.getItem("crm-usuarios-cache");
-  return stored ? JSON.parse(stored) : [];
+  return readLocalJson("crm-usuarios-cache", []);
 }
 
 async function loadVendorLinkedUserOptions(selectedUserId = "") {
@@ -5722,9 +5914,9 @@ function defaultBlockReasons() {
 }
 
 function localBlockReasons() {
-  const stored = localStorage.getItem(blockReasonsStorageKey());
-  if (stored) {
-    return JSON.parse(stored);
+  const storedRows = readLocalJson(blockReasonsStorageKey(), null);
+  if (storedRows) {
+    return storedRows;
   }
   const rows = defaultBlockReasons();
   localStorage.setItem(blockReasonsStorageKey(), JSON.stringify(rows));
@@ -5740,8 +5932,7 @@ function blockedStorageKey(company) {
 }
 
 function localBlockedRows(company) {
-  const stored = localStorage.getItem(blockedStorageKey(company));
-  return stored ? JSON.parse(stored) : [];
+  return readLocalJson(blockedStorageKey(company), []);
 }
 
 function saveLocalBlockedRows(company, rows) {
@@ -7335,6 +7526,28 @@ function monthLabel(month) {
   return ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"][Number(month) - 1] || String(month);
 }
 
+function setupMercadoLivreSalesMonthSelect() {
+  const select = document.getElementById("ml-sales-month");
+  if (!select || select.dataset.ready === "true") {
+    return;
+  }
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const years = [];
+  for (let year = 2025; year <= currentYear + 1; year += 1) {
+    years.push(year);
+  }
+  select.innerHTML = '<option value="">Selecione o mes</option>' + years.flatMap((year) => (
+    Array.from({ length: 12 }, (_, index) => {
+      const month = index + 1;
+      const value = `${year}-${String(month).padStart(2, "0")}`;
+      return `<option value="${value}">${monthLabel(month)} / ${year}</option>`;
+    })
+  )).join("");
+  select.value = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  select.dataset.ready = "true";
+}
+
 function setVendorSection(sectionName) {
   document.querySelectorAll(".vendor-page-tab").forEach((button) => {
     button.classList.toggle("active", button.dataset.vendorSection === sectionName);
@@ -7543,11 +7756,37 @@ function renderVendorGoalsVendorOptions(selectedVendorId = "") {
     return;
   }
   const activeVendors = currentVendors.filter((vendor) => vendor.status === "Ativo");
-  select.innerHTML = activeVendors.map((vendor) =>
+  select.innerHTML = '<option value="">Selecione um vendedor</option>' + activeVendors.map((vendor) =>
     `<option value="${escapeHtml(vendor.id)}">${escapeHtml(vendor.nome_completo || "Vendedor")}</option>`
   ).join("");
   if (selectedVendorId && activeVendors.some((vendor) => vendor.id === selectedVendorId)) {
     select.value = selectedVendorId;
+  } else {
+    select.value = "";
+  }
+}
+
+function clearVendorGoalsForm(message = "Selecione um vendedor para configurar as metas.") {
+  currentVendorGoalsPayload = null;
+  const vendorSelect = document.getElementById("vendor-goals-vendor");
+  if (vendorSelect) {
+    vendorSelect.value = "";
+  }
+  const commission = document.getElementById("vendor-goals-commission");
+  if (commission) {
+    commission.value = "";
+  }
+  const summary = document.getElementById("vendor-goals-summary");
+  if (summary) {
+    summary.innerHTML = "";
+  }
+  const months = document.getElementById("vendor-goals-months");
+  if (months) {
+    months.innerHTML = "";
+  }
+  const status = document.getElementById("vendor-goals-status");
+  if (status) {
+    status.textContent = message;
   }
 }
 
@@ -7913,6 +8152,10 @@ async function loadVendorGoals() {
   const vendorId = vendorSelect?.value || "";
   const year = yearSelect?.value || new Date().getFullYear();
   const status = document.getElementById("vendor-goals-status");
+  if (!vendorId) {
+    clearVendorGoalsForm("Selecione um vendedor para carregar as metas e objetivos.");
+    return;
+  }
   status.textContent = "Carregando metas e objetivos...";
   try {
     const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(company)}&vendor_id=${encodeURIComponent(vendorId)}&year=${encodeURIComponent(year)}`);
@@ -7964,6 +8207,10 @@ async function saveVendorGoals() {
     status.textContent = "Somente Usuario Master ou Vendedor Lider/Supervisor pode alterar metas.";
     return;
   }
+  if (!document.getElementById("vendor-goals-vendor")?.value) {
+    status.textContent = "Selecione um vendedor antes de salvar as metas.";
+    return;
+  }
   status.textContent = "Salvando metas...";
   try {
     const payload = await fetchJson("/api/vendor-goals", {
@@ -7971,8 +8218,7 @@ async function saveVendorGoals() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(collectVendorGoalsPayload()),
     });
-    status.textContent = payload.message;
-    await loadVendorGoals();
+    clearVendorGoalsForm(`${payload.message} Selecione outro vendedor para carregar novas metas.`);
   } catch (error) {
     status.textContent = error.message;
   }
@@ -8888,6 +9134,11 @@ function openEconomicGroupPanel(clientId = "") {
   setTimeout(() => document.getElementById("economic-master-search")?.focus(), 50);
 }
 
+function exportEconomicGroups() {
+  const company = economicGroupCompany();
+  window.location.href = `/api/export-economic-groups?company=${encodeURIComponent(company)}&_=${Date.now()}`;
+}
+
 async function recalculateStockValue() {
   const button = document.getElementById("stock-recalculate-value-button");
   const panel = document.getElementById("stock-result-panel");
@@ -9507,14 +9758,20 @@ async function renderMercadoLivreSalesImportResult(summary) {
     <p class="eyebrow">Resultado</p>
     <h3>${escapeHtml(summary.empresa)}</h3>
     <p class="muted">${escapeHtml(summary.arquivo)} - aba ${escapeHtml(summary.aba)} - cabecalho na linha ${formatNumber.format(summary.linha_cabecalho || 0)}</p>
+    <p class="muted"><strong>Periodo importado:</strong> ${escapeHtml(summary.periodo || "Nao informado")}</p>
     <div class="result-grid">
       <div class="result-item"><span>Linhas lidas</span><strong>${formatNumber.format(summary.linhas_lidas || 0)}</strong></div>
+      <div class="result-item"><span>Vendas removidas do mes</span><strong>${formatNumber.format(summary.linhas_removidas_periodo || 0)}</strong></div>
       <div class="result-item"><span>Novas vendas</span><strong>${formatNumber.format(summary.linhas_incluidas || 0)}</strong></div>
       <div class="result-item"><span>Vendas alteradas</span><strong>${formatNumber.format(summary.linhas_alteradas || 0)}</strong></div>
       <div class="result-item"><span>Sem alteracao</span><strong>${formatNumber.format(summary.linhas_sem_alteracao || 0)}</strong></div>
+      <div class="result-item"><span>Linhas fora do mes</span><strong>${formatNumber.format(summary.linhas_fora_periodo || 0)}</strong></div>
       <div class="result-item"><span>Total na empresa</span><strong>${formatNumber.format(summary.total_vendas_empresa || 0)}</strong></div>
     </div>
   `;
+  currentMercadoLivreSalesCacheKey = "";
+  currentMercadoLivreDashboardCacheKey = "";
+  currentMercadoLivreGeneralCacheKey = "";
   loadMercadoLivreSales();
 }
 
@@ -10621,10 +10878,12 @@ function toggleFollowUpDetail(index) {
 }
 
 async function init() {
+  document.getElementById("startup-error-box")?.remove();
   document.getElementById("login-form").addEventListener("submit", handleLogin);
   document.getElementById("password-change-form").addEventListener("submit", handlePasswordChange);
   document.getElementById("password-change-logout").addEventListener("click", logout);
   document.getElementById("logout-button").addEventListener("click", logout);
+  document.getElementById("refresh-data-button")?.addEventListener("click", refreshPreparedData);
   repairReconstructedLayout();
   if (!await checkAuthSession()) {
     return;
@@ -10789,6 +11048,8 @@ async function init() {
   document.getElementById("vendor-agenda-refresh").addEventListener("click", loadVendorAgenda);
   document.getElementById("vendor-contact-report-load").addEventListener("click", loadVendorContactReport);
   document.getElementById("vendor-daily-contact-month")?.addEventListener("change", loadVendorDailyContactsChart);
+  document.getElementById("vendor-monthly-clients-year")?.addEventListener("change", () => loadVendorMonthlyClientsChart(true));
+  document.getElementById("vendor-monthly-clients-month")?.addEventListener("change", () => loadVendorMonthlyClientsChart(true));
   document.getElementById("vendor-page-goals-month").addEventListener("change", loadVendorPageGoals);
   document.getElementById("vendor-page-goals-print")?.addEventListener("click", printVendorGoalsReport);
   document.getElementById("vendor-about-goal-refresh")?.addEventListener("click", () => loadVendorAboutGoal(true));
@@ -10830,6 +11091,7 @@ async function init() {
   document.getElementById("economic-client-add")?.addEventListener("click", addEconomicClient);
   document.getElementById("economic-group-save")?.addEventListener("click", saveEconomicGroup);
   document.getElementById("economic-group-clear")?.addEventListener("click", clearEconomicGroup);
+  document.getElementById("economic-group-export")?.addEventListener("click", exportEconomicGroups);
   document.getElementById("stock-table-export-button").addEventListener("click", exportStockTable);
   document.getElementById("stock-bonus-save-button")?.addEventListener("click", saveStockBonuses);
   document.getElementById("stock-default-bonus-update-button")?.addEventListener("click", updateDefaultStockBonusByDays);

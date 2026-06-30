@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CRM Ionlab</title>
-    <link rel="stylesheet" href="/styles.css?v=20260626-metas-fast2">
+    <link rel="stylesheet" href="/styles.css?v=20260629-performance-cache1">
   </head>
   <body>
     <section class="login-screen auth-hidden" id="login-screen">
@@ -128,6 +128,7 @@
           </div>
           <div class="topbar-actions">
             <button class="secondary-action hidden" id="vendor-page-goals-print" type="button">Imprimir</button>
+            <button class="secondary-action refresh-data-action" id="refresh-data-button" type="button">Atualizar dados</button>
             <div class="user-chip" id="current-user-chip"></div>
             <button class="secondary-action" id="logout-button" type="button">Sair</button>
             <button class="home-return-button hidden" id="home-return-button" type="button">Voltar para Principal</button>
@@ -582,8 +583,27 @@
                 <button class="active" type="button" data-region-indicator="quant">Indicadores Quantitativos</button>
                 <button type="button" data-region-indicator="sales">Indicadores de Vendas</button>
                 <button type="button" data-region-indicator="annual-sales">Grafico Anual Faturamento</button>
+                <button type="button" data-region-indicator="clients-day">Clientes/Dia</button>
               </div>
             </div>
+            <section class="vendor-daily-contacts-card hidden" id="vendor-monthly-clients-card">
+              <div class="sales-chart-title">
+                <h5>Clientes atendidos por mês</h5>
+                <label class="vendor-daily-month-filter">
+                  Ano
+                  <select id="vendor-monthly-clients-year"></select>
+                </label>
+                <label class="vendor-daily-month-filter">
+                  Mês
+                  <select id="vendor-monthly-clients-month">
+                    <option value="agrupado">Agrupado</option>
+                  </select>
+                </label>
+                <span id="vendor-monthly-clients-total">Carregando...</span>
+              </div>
+              <div class="vendor-monthly-clients-chart" id="vendor-monthly-clients-chart"></div>
+              <div class="table-status" id="vendor-monthly-clients-status">Carregando clientes por mês...</div>
+            </section>
             <div class="vendor-region-sections" id="vendor-page-sections"></div>
             <div class="table-status" id="vendor-page-status">Carregando pagina do vendedor...</div>
           </section>
@@ -759,7 +779,7 @@
 
                 <label>
                   Arquivo de vendas
-                  <input name="file" type="file" accept=".xlsx,.xls" required>
+                  <input name="file" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.tsv,.ods" required>
                 </label>
 
                 <button class="primary-action" type="submit">Importar notas</button>
@@ -804,7 +824,7 @@
 
                 <label>
                   Arquivo de clientes
-                  <input name="file" type="file" accept=".xlsx,.xls" required>
+                  <input name="file" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.tsv,.ods" required>
                 </label>
 
                 <button class="primary-action" type="submit">Importar clientes</button>
@@ -872,6 +892,7 @@
               <div class="vendor-actions">
                 <button class="primary-action" id="economic-group-save" type="button">Salvar</button>
                 <button class="secondary-action" id="economic-group-clear" type="button">Limpar</button>
+                <button class="secondary-action" id="economic-group-export" type="button">Exportar</button>
               </div>
               <div class="table-status" id="economic-group-status">Busque o cliente Master para carregar ou criar um GE.</div>
               <div class="economic-groups-saved-list">
@@ -952,7 +973,7 @@
 
                 <label>
                   Arquivo da tabela de preços
-                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                  <input name="file" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.tsv,.ods" required>
                 </label>
 
                 <button class="primary-action" type="submit">Importar tabela de preços</button>
@@ -965,7 +986,7 @@
                 </label>
                 <label>
                   Arquivo de IPI
-                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                  <input name="file" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.tsv,.ods" required>
                 </label>
                 <button class="secondary-action" type="submit">Atualizar IPI</button>
               </form>
@@ -987,7 +1008,7 @@
                 </label>
                 <label>
                   Arquivo de produtos
-                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                  <input name="file" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.tsv,.ods" required>
                 </label>
                 <button class="primary-action" type="submit">Importar produtos</button>
                 <button class="secondary-action" id="products-export-button" type="button">Exportar produtos</button>
@@ -1414,7 +1435,7 @@
                 </label>
                 <label>
                   Arquivo
-                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                  <input name="file" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.tsv,.ods" required>
                 </label>
                 <button class="primary-action" type="submit">Importar arquivo</button>
               </form>
@@ -1627,8 +1648,12 @@
                   <select name="company" id="ml-sales-company"></select>
                 </label>
                 <label>
+                  Mes
+                  <select name="month" id="ml-sales-month" required></select>
+                </label>
+                <label>
                   Arquivo de vendas
-                  <input name="file" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.ods" required>
+                  <input name="file" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.tsv,.ods" required>
                 </label>
                 <button class="primary-action" type="submit">Importar vendas</button>
               </form>
@@ -2410,7 +2435,7 @@
         document.body.appendChild(box);
       });
     </script>
-    <script src="/app.js?v=20260626-metas-fast2"></script>
+    <script src="/app.js?v=20260629-performance-cache1"></script>
   </body>
 </html>
 

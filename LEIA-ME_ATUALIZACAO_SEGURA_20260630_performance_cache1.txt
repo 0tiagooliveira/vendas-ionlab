@@ -1,0 +1,14 @@
+﻿PACOTE DE ATUALIZACAO SEGURA DO CRM
+
+Use este pacote para atualizar o sistema publicado.
+
+IMPORTANTE:
+- Este pacote NAO contem a pasta data.
+- Nao substitui usuarios, vendedores, clientes, vendas, estoque, bloqueios, Follow-UP ou orcamentos do site quente.
+- Antes de aplicar, faca backup da pasta data do site publicado.
+- Nunca use pacote "site completo" para atualizar um sistema que ja esta em uso.
+
+Arquivos incluidos:
+- server.py
+- static/
+- ferramentas e arquivos .bat de abertura

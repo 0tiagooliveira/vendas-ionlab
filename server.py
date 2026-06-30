@@ -41,6 +41,7 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = BASE_DIR / "data"
 SERVER_LOG_FILE = DATA_DIR / "server_logs" / "server.log"
+PERSISTENT_CACHE_DIR = DATA_DIR / "_cache"
 JSON_CACHE = {}
 PAYLOAD_CACHE = {}
 SHARED_PAYLOAD_CACHE = {}
@@ -619,8 +620,7 @@ def save_json(path: Path, payload):
         }
     except Exception:
         JSON_CACHE.pop(str(path.resolve()), None)
-    PAYLOAD_CACHE.clear()
-    SHARED_PAYLOAD_CACHE.clear()
+    clear_payload_caches(include_disk=True)
 
 
 def load_vendor_day_by_day_data(company_id: str, default=None):
@@ -664,13 +664,55 @@ def file_signature(paths: list[Path]) -> tuple:
     return tuple(signature)
 
 
+def persistent_cache_file(cache_key: tuple) -> Path:
+    digest = hashlib.sha256(repr(cache_key).encode("utf-8")).hexdigest()
+    return PERSISTENT_CACHE_DIR / f"{digest}.json"
+
+
+def clear_payload_caches(include_disk: bool = False):
+    PAYLOAD_CACHE.clear()
+    SHARED_PAYLOAD_CACHE.clear()
+    if not include_disk:
+        return
+    try:
+        if PERSISTENT_CACHE_DIR.exists():
+            for cache_file in PERSISTENT_CACHE_DIR.glob("*.json"):
+                try:
+                    cache_file.unlink()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def cached_payload(cache_key: tuple, dependencies: list[Path], builder):
     signature = file_signature(dependencies)
     cached = PAYLOAD_CACHE.get(cache_key)
     if cached and cached["signature"] == signature:
         return copy.deepcopy(cached["payload"])
+    cache_file = persistent_cache_file(cache_key)
+    if cache_file.exists():
+        try:
+            cached_disk = json.loads(cache_file.read_text(encoding="utf-8"))
+            if cached_disk.get("signature") == json.loads(json.dumps(signature)):
+                payload = cached_disk.get("payload")
+                PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": copy.deepcopy(payload)}
+                return copy.deepcopy(payload)
+        except Exception:
+            try:
+                cache_file.unlink()
+            except Exception:
+                pass
     payload = builder()
     PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": copy.deepcopy(payload)}
+    try:
+        PERSISTENT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(
+            json.dumps({"signature": signature, "payload": payload}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
     return payload
 
 
@@ -1353,7 +1395,11 @@ def slow_items_payload(company_id: str, query: str = "", min_days_without_moveme
 
 def is_slow_item_agrp_excluded(value) -> bool:
     agrp_key = normalize_text(value)
-    return agrp_key == "MATERIAPRIMA" or "PECADEREPOSICAO" in agrp_key
+    return (
+        not agrp_key
+        or agrp_key in {"SEMAGRP", "MATERIAPRIMA", "USOECONSUMO", "EMBALAGEM"}
+        or "PECADEREPOSICAO" in agrp_key
+    )
 
 
 def save_slow_items_payload(payload: dict):
@@ -3728,6 +3774,61 @@ def vendor_home_month_goals(company_id: str, vendor_id_value: str, year: int, mo
         goals["vendas_liquidas_mes"] = vendor_month_sales_goal_value(company_id, vendor_id_value, year, month)
         goals["contatos_diarios"] = DAY_BY_DAY_DAILY_TARGET
     return goals
+
+
+def vendor_monthly_buying_clients_payload(company_id: str, vendor_id_value: str, params: dict | None = None):
+    params = params or {}
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    year = int(optional_number_value((params.get("year") or [CURRENT_YEAR])[0]) or CURRENT_YEAR)
+    month_value = str((params.get("month") or ["agrupado"])[0] or "agrupado").strip().lower()
+    target_months = None
+    if month_value not in {"agrupado", "todos", "all", ""}:
+        selected_month = int(optional_number_value(month_value) or 0)
+        if not 1 <= selected_month <= 12:
+            raise ValueError("Mes invalido.")
+        target_months = [selected_month]
+
+    vendors = load_json(vendors_file(company_id), [])
+    vendor = next(
+        (
+            item for item in vendors
+            if item.get("status") == "Ativo" and str(item.get("id") or "") == str(vendor_id_value or "")
+        ),
+        None,
+    )
+    if not vendor:
+        raise ValueError("Vendedor ativo nao encontrado.")
+
+    all_goals = load_json(vendor_goals_file(company_id), {})
+    stored = all_goals.get(vendor_goals_key(vendor_id_value, year), {})
+    goal_record = normalize_vendor_goal_record(stored, company_id, vendor_id_value, year)
+    achievements = vendor_goal_achievements(company_id, vendor_id_value, year, goal_record, target_months, True)
+    months = target_months or list(range(1, 13))
+    month_names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    rows = []
+    total = 0
+    for month in months:
+        month_key = str(month)
+        value = int(number_value((achievements.get(month_key) or {}).get("clientes_com_vendas")))
+        total += value
+        rows.append({
+            "year": year,
+            "month": month,
+            "label": month_names[month - 1],
+            "clientes": value,
+        })
+    return {
+        "empresa": COMPANIES[company_id],
+        "empresa_id": company_id,
+        "vendedor": vendor_goal_option_record(vendor),
+        "year": year,
+        "month": month_value or "agrupado",
+        "years": list(range(START_YEAR, CURRENT_YEAR + 2)),
+        "rows": rows,
+        "total": total,
+        "criterio": "Clientes/grupos economicos unicos da regiao do vendedor com compra no mes.",
+    }
 
 
 def build_home_vendor_panel_payload(token: str, company_id_value: str = "", vendor_id_value: str = ""):
@@ -6680,6 +6781,78 @@ def save_economic_group_payload(payload: dict):
     return {"message": "Grupo economico salvo com sucesso.", **economic_group_payload(company_id, master_id)}
 
 
+def economic_groups_export_xlsx(company_id: str) -> bytes:
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    rows = []
+    for group in load_economic_groups(company_id):
+        master = group.get("master") or {}
+        clients = group.get("clientes") or []
+        if not clients:
+            clients = [{}]
+        for client in clients:
+            rows.append({
+                "Empresa CRM": COMPANIES[company_id],
+                "ID Grupo Economico": group.get("id") or "",
+                "Codigo Cliente Master": master.get("codigo") or "",
+                "Nome Cliente Master": master.get("nome") or "",
+                "Documento Master": master.get("documento") or "",
+                "UF Master": master.get("uf") or "",
+                "Cidade Master": master.get("cidade") or "",
+                "Vendedor Master": master.get("vendedor") or "",
+                "Codigo Cliente GE": client.get("codigo") or "",
+                "Nome Cliente GE": client.get("nome") or "",
+                "Documento GE": client.get("documento") or "",
+                "UF GE": client.get("uf") or "",
+                "Cidade GE": client.get("cidade") or "",
+                "Vendedor GE": client.get("vendedor") or "",
+                "Criado em": group.get("created_at") or "",
+                "Atualizado em": group.get("updated_at") or "",
+            })
+
+    columns = [
+        "Empresa CRM",
+        "ID Grupo Economico",
+        "Codigo Cliente Master",
+        "Nome Cliente Master",
+        "Documento Master",
+        "UF Master",
+        "Cidade Master",
+        "Vendedor Master",
+        "Codigo Cliente GE",
+        "Nome Cliente GE",
+        "Documento GE",
+        "UF GE",
+        "Cidade GE",
+        "Vendedor GE",
+        "Criado em",
+        "Atualizado em",
+    ]
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        dataframe = pd.DataFrame(rows, columns=columns)
+        dataframe.to_excel(writer, index=False, sheet_name="Quem e Quem")
+        worksheet = writer.sheets["Quem e Quem"]
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+
+        from openpyxl.styles import Border, Font, PatternFill, Side
+
+        header_fill = PatternFill(fill_type="solid", fgColor="0B2A5B")
+        header_font = Font(color="FFFFFF", bold=True)
+        thin_side = Side(style="thin", color="CBD5E1")
+        header_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.border = header_border
+
+        for column_cells in worksheet.columns:
+            max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in column_cells)
+            worksheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 14), 55)
+    return output.getvalue()
+
+
 def region_client_label(client: dict) -> str:
     return f"{normalize_identifier(client.get('ID'))} - {client.get('NOM') or ''}".strip()
 
@@ -7714,7 +7887,7 @@ def ods_cell_text(cell, namespaces):
     return "\n".join(part for part in parts if part is not None)
 
 
-def read_ods_rows(file_bytes: bytes):
+def read_ods_sheets_rows(file_bytes: bytes):
     namespaces = {
         "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
         "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
@@ -7722,22 +7895,73 @@ def read_ods_rows(file_bytes: bytes):
     }
     with zipfile.ZipFile(BytesIO(file_bytes)) as ods:
         root = ET.fromstring(ods.read("content.xml"))
-    table = root.find(".//table:table", namespaces)
-    if table is None:
-        return []
-    rows = []
-    for row in table.findall("table:table-row", namespaces):
-        row_repeat = int(row.attrib.get(f"{{{namespaces['table']}}}number-rows-repeated", "1"))
-        values = []
-        for cell in row.findall("table:table-cell", namespaces):
-            column_repeat = int(cell.attrib.get(f"{{{namespaces['table']}}}number-columns-repeated", "1"))
-            value = ods_cell_text(cell, namespaces)
-            values.extend([value] * min(column_repeat, 200))
-        while values and values[-1] in (None, ""):
-            values.pop()
-        if values:
-            rows.extend([values] * min(row_repeat, 1000))
-    return rows
+    sheets = []
+    for table in root.findall(".//table:table", namespaces):
+        sheet_name = table.attrib.get(f"{{{namespaces['table']}}}name") or f"Aba {len(sheets) + 1}"
+        rows = []
+        for row in table.findall("table:table-row", namespaces):
+            row_repeat = int(row.attrib.get(f"{{{namespaces['table']}}}number-rows-repeated", "1"))
+            values = []
+            for cell in row.findall("table:table-cell", namespaces):
+                column_repeat = int(cell.attrib.get(f"{{{namespaces['table']}}}number-columns-repeated", "1"))
+                value = ods_cell_text(cell, namespaces)
+                values.extend([value] * min(column_repeat, 200))
+            while values and values[-1] in (None, ""):
+                values.pop()
+            if values:
+                rows.extend([values] * min(row_repeat, 1000))
+        if rows:
+            sheets.append((sheet_name, rows))
+    return sheets
+
+
+def read_ods_rows(file_bytes: bytes):
+    sheets = read_ods_sheets_rows(file_bytes)
+    return sheets[0][1] if sheets else []
+
+
+def read_delimited_rows(file_name: str, file_bytes: bytes):
+    suffix = Path(file_name or "").suffix.lower()
+    text = file_bytes.decode("utf-8-sig", errors="replace")
+    delimiter = "\t" if suffix == ".tsv" else None
+    sample = text[:4096]
+    if delimiter is None:
+        try:
+            delimiter = csv.Sniffer().sniff(sample, delimiters=";,|\t,").delimiter if sample.strip() else ","
+        except csv.Error:
+            delimiter = ";"
+    return list(csv.reader(text.splitlines(), delimiter=delimiter))
+
+
+def read_spreadsheet_sheets(file_name: str, file_bytes: bytes):
+    suffix = Path(file_name or "").suffix.lower()
+    if suffix == ".ods" or (file_bytes[:2] == b"PK" and b"content.xml" in file_bytes[:20000]):
+        return read_ods_sheets_rows(file_bytes)
+    if suffix in (".csv", ".txt", ".tsv"):
+        return [(Path(file_name or "").stem or "Arquivo", read_delimited_rows(file_name, file_bytes))]
+
+    workbook = pd.ExcelFile(BytesIO(file_bytes))
+    sheets = []
+    for sheet_name in workbook.sheet_names:
+        frame = pd.read_excel(workbook, sheet_name=sheet_name, header=None, dtype=object)
+        frame = frame.where(pd.notnull(frame), None)
+        rows = frame.values.tolist()
+        sheets.append((sheet_name, rows))
+    return sheets
+
+
+def read_spreadsheet_frame(file_name: str, file_bytes: bytes, preferred_sheet: str | None = None):
+    sheets = read_spreadsheet_sheets(file_name, file_bytes)
+    if not sheets:
+        return pd.DataFrame(), "Aba 1"
+    sheet_name, rows = next(
+        ((name, sheet_rows) for name, sheet_rows in sheets if preferred_sheet and name == preferred_sheet),
+        sheets[0],
+    )
+    records, _sheet_label = rows_to_records(rows)
+    frame = pd.DataFrame(records)
+    frame = frame.where(pd.notnull(frame), None)
+    return frame, sheet_name
 
 
 def rows_to_records(rows):
@@ -7773,35 +7997,12 @@ def rows_to_records(rows):
 
 
 def read_spreadsheet_records(file_name: str, file_bytes: bytes):
-    suffix = Path(file_name or "").suffix.lower()
-    if suffix == ".ods" or (file_bytes[:2] == b"PK" and b"content.xml" in file_bytes[:20000]):
-        return rows_to_records(read_ods_rows(file_bytes))
-    if suffix in (".csv", ".txt", ".tsv"):
-        text = file_bytes.decode("utf-8-sig", errors="replace")
-        delimiter = "\t" if suffix == ".tsv" else None
-        sample = text[:4096]
-        if delimiter is None:
-            try:
-                delimiter = csv.Sniffer().sniff(sample, delimiters=";,|\t,").delimiter if sample.strip() else ","
-            except csv.Error:
-                delimiter = ";"
-        rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
-        return rows_to_records(rows)
-
     try:
-        workbook = pd.ExcelFile(BytesIO(file_bytes))
-        sheet_name = workbook.sheet_names[0]
-        frame = pd.read_excel(workbook, sheet_name=sheet_name)
+        frame, sheet_name = read_spreadsheet_frame(file_name, file_bytes)
         frame = frame.where(pd.notnull(frame), None)
         return frame.to_dict(orient="records"), sheet_name
     except Exception:
-        text = file_bytes.decode("utf-8-sig", errors="replace")
-        sample = text[:4096]
-        try:
-            delimiter = csv.Sniffer().sniff(sample, delimiters=";,|\t,").delimiter if sample.strip() else ";"
-        except csv.Error:
-            delimiter = ";"
-        rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
+        rows = read_delimited_rows(file_name, file_bytes)
         return rows_to_records(rows)
 
 
@@ -7818,11 +8019,10 @@ def unique_headers(raw_headers: list) -> list[str]:
 
 
 def read_mercado_livre_ads_records(file_name: str, file_bytes: bytes):
-    workbook = pd.ExcelFile(BytesIO(file_bytes))
-    sheet_name = next((name for name in workbook.sheet_names if "ANUNCI" in normalize_text(name)), workbook.sheet_names[0])
-    frame = pd.read_excel(workbook, sheet_name=sheet_name, header=None, dtype=object)
-    frame = frame.where(pd.notnull(frame), None)
-    rows = frame.values.tolist()
+    sheets = read_spreadsheet_sheets(file_name, file_bytes)
+    if not sheets:
+        raise ValueError("Nao encontrei abas na planilha de anuncios.")
+    sheet_name, rows = next((item for item in sheets if "ANUNCI" in normalize_text(item[0])), sheets[0])
 
     header_index = None
     for index, row in enumerate(rows):
@@ -7853,17 +8053,14 @@ def read_mercado_livre_ads_records(file_name: str, file_bytes: bytes):
 
 
 def read_mercado_livre_technical_sheet_records(file_name: str, file_bytes: bytes):
-    workbook = pd.ExcelFile(BytesIO(file_bytes))
+    sheets = read_spreadsheet_sheets(file_name, file_bytes)
     records = []
     skipped = 0
     used_sheets = []
     first_header_row = None
-    for sheet_name in workbook.sheet_names:
+    for sheet_name, rows in sheets:
         if normalize_text(sheet_name) in ("AJUDA", "HIDDEN"):
             continue
-        frame = pd.read_excel(workbook, sheet_name=sheet_name, header=None, dtype=object)
-        frame = frame.where(pd.notnull(frame), None)
-        rows = frame.values.tolist()
 
         header_index = None
         for index, row in enumerate(rows[:12]):
@@ -7900,11 +8097,10 @@ def read_mercado_livre_technical_sheet_records(file_name: str, file_bytes: bytes
 
 
 def read_mercado_livre_sales_records(file_name: str, file_bytes: bytes):
-    workbook = pd.ExcelFile(BytesIO(file_bytes))
-    sheet_name = next((name for name in workbook.sheet_names if "VENDA" in normalize_text(name)), workbook.sheet_names[0])
-    frame = pd.read_excel(workbook, sheet_name=sheet_name, header=None, dtype=object)
-    frame = frame.where(pd.notnull(frame), None)
-    rows = frame.values.tolist()
+    sheets = read_spreadsheet_sheets(file_name, file_bytes)
+    if not sheets:
+        raise ValueError("Nao encontrei abas na planilha de vendas do Mercado Livre.")
+    sheet_name, rows = next((item for item in sheets if "VENDA" in normalize_text(item[0])), sheets[0])
 
     header_index = None
     for index, row in enumerate(rows):
@@ -7962,6 +8158,44 @@ def mercado_livre_sales_key(record: dict) -> str:
     sku = normalize_text(mercado_livre_sales_value(record, "SKU"))
     ad_code = normalize_text(mercado_livre_sales_value(record, "# de anuncio", "# de anúncio", "# de an�ncio"))
     return "|".join(part for part in (sale_number, sku, ad_code) if part)
+
+
+def mercado_livre_sales_is_package(record: dict) -> bool:
+    state = normalize_text(mercado_livre_sales_value(record, "Estado"))
+    return "PACOTE" in state
+
+
+def mercado_livre_sales_ad_code(record: dict) -> str:
+    return normalize_text(mercado_livre_sales_value(
+        record,
+        "# de anuncio",
+        "# de anúncio",
+        "# de an�ncio",
+        "Codigo do anuncio",
+        "Código do anúncio",
+        "C�digo do an�ncio",
+    ))
+
+
+def mercado_livre_sku_by_ad_code(company_id: str) -> dict[str, str]:
+    sku_by_ad = {}
+    for row in mercado_livre_summary_rows(company_id):
+        ad_code = normalize_text(row.get("Código do anúncio") or row.get("Codigo do anuncio"))
+        sku = str(normalize_record(row.get("SKU")) or "").strip()
+        if ad_code and sku:
+            sku_by_ad.setdefault(ad_code, sku)
+    return sku_by_ad
+
+
+def mercado_livre_sales_effective_sku(company_id: str, record: dict, sku_by_ad_code: dict[str, str] | None = None) -> str:
+    sku = str(normalize_record(mercado_livre_sales_value(record, "SKU")) or "").strip()
+    if sku:
+        return sku
+    ad_code = mercado_livre_sales_ad_code(record)
+    if not ad_code:
+        return ""
+    sku_map = sku_by_ad_code if sku_by_ad_code is not None else mercado_livre_sku_by_ad_code(company_id)
+    return sku_map.get(ad_code, "")
 
 
 def mercado_livre_sales_payload(company_id: str, query: str = "", limit: int = 300):
@@ -8043,6 +8277,23 @@ def parse_mercado_livre_sale_date(value) -> date | None:
     return None
 
 
+def parse_mercado_livre_import_month(value: str) -> tuple[int, int]:
+    text = str(value or "").strip()
+    match = re.fullmatch(r"(\d{4})-(\d{1,2})", text)
+    if not match:
+        raise ValueError("Selecione o mes da importacao de vendas do Mercado Livre.")
+    year = int(match.group(1))
+    month = int(match.group(2))
+    if month < 1 or month > 12:
+        raise ValueError("Mes da importacao invalido.")
+    return year, month
+
+
+def mercado_livre_record_in_month(record: dict, year: int, month: int) -> bool:
+    sold_at = parse_mercado_livre_sale_date(mercado_livre_sales_value(record, "Data da venda"))
+    return bool(sold_at and sold_at.year == year and sold_at.month == month)
+
+
 def mercado_livre_sales_net_value(record: dict) -> float:
     columns = [
         ("Receita por produtos (BRL)", "Receita por produtos"),
@@ -8073,7 +8324,9 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
     product_filter = normalize_record(product_filter)
     if chart_type not in {"sales-value", "sales-count", "pf-pj", "top-sku"}:
         chart_type = "sales-value"
-    dependencies = [mercado_livre_sales_file(current_company_id) for current_company_id in company_ids]
+    dependencies = []
+    for current_company_id in company_ids:
+        dependencies.extend(mercado_livre_summary_dependencies(current_company_id))
     cache_key = ("mercado_livre_sales_dashboard", tuple(company_ids), year_filter, month_filter, chart_type, product_filter)
 
     def build():
@@ -8085,8 +8338,16 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
         years = set()
         rows_count = 0
         ignored_without_date = 0
+        ignored_packages = 0
+        sku_maps = {
+            current_company_id: mercado_livre_sku_by_ad_code(current_company_id)
+            for current_company_id in company_ids
+        }
         for current_company_id in company_ids:
             for record in load_json(mercado_livre_sales_file(current_company_id), []):
+                if mercado_livre_sales_is_package(record):
+                    ignored_packages += 1
+                    continue
                 sold_at = parse_mercado_livre_sale_date(mercado_livre_sales_value(record, "Data da venda"))
                 if not sold_at:
                     ignored_without_date += 1
@@ -8097,7 +8358,7 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
                 rows_count += 1
                 sale_number = normalize_record(mercado_livre_sales_value(record, "N. de venda", "N.� de venda", "N.º de venda", "NÂº de venda"))
                 sale_key = normalize_text(sale_number) or mercado_livre_sales_key(record)
-                sku = normalize_record(mercado_livre_sales_value(record, "SKU")) or "Sem SKU"
+                sku = mercado_livre_sales_effective_sku(current_company_id, record, sku_maps.get(current_company_id)) or "Sem SKU"
                 doc_text = normalize_text(mercado_livre_sales_value(record, "Tipo e numero do documento", "Tipo e número do documento", "Tipo e n�mero do documento"))
                 monthly[(sold_at.year, sold_at.month)] += mercado_livre_sales_net_value(record)
                 if sale_key:
@@ -8243,6 +8504,7 @@ def mercado_livre_sales_dashboard_payload(company_id: str = "agrupado", year_fil
             },
             "linhas_consideradas": rows_count,
             "linhas_sem_data": ignored_without_date,
+            "linhas_pacote_ignoradas": ignored_packages,
         }
 
     return cached_payload(cache_key, dependencies, build)
@@ -8507,8 +8769,11 @@ MERCADO_LIVRE_GENERAL_COLUMNS = [
     "Estoque no dep\u00f3sito Nativalab",
     "Estoque Ionlab",
     "Pre\u00e7o Onix",
+    "MKP ION Onix",
     "Pre\u00e7o Vitralab",
+    "MKP ION Vitralab",
     "Pre\u00e7o Nativalab",
+    "MKP ION Nativalab",
     "Estado Onix",
     "Estado Vitralab",
     "Estado Nativalab",
@@ -8561,6 +8826,10 @@ def build_mercado_livre_general_rows() -> list[dict]:
             row[f"Estado {company_label}"] = summary_row.get("Estado") if summary_row.get("Estado") not in (None, "") else ""
 
     for row in rows_by_sku.values():
+        ionlab_price = optional_number_value(row.get("Pre\u00e7o de venda Ionlab")) or 0
+        for _company_id, company_label in MERCADO_LIVRE_GENERAL_COMPANIES:
+            company_price = optional_number_value(row.get(f"Pre\u00e7o {company_label}"))
+            row[f"MKP ION {company_label}"] = round(company_price / ionlab_price, 4) if company_price and ionlab_price else ""
         announced_stock = sum(
             optional_number_value(row.get(column)) or 0
             for column in (
@@ -8595,30 +8864,105 @@ def mercado_livre_general_export_xlsx() -> bytes:
     rows = mercado_livre_general_rows()
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        dataframe = pd.DataFrame(rows, columns=MERCADO_LIVRE_GENERAL_COLUMNS)
+        export_rows = []
+        urgent_rows = []
+        for source_row in rows:
+            row = dict(source_row)
+            ionlab_stock = optional_number_value(row.get("Estoque Ionlab")) or 0
+            has_active_ad = any(
+                normalize_text(row.get(f"Estado {company_label}")) == "ATIVO"
+                for _company_id, company_label in MERCADO_LIVRE_GENERAL_COMPANIES
+            )
+            if ionlab_stock <= 0 and has_active_ad:
+                row["Observa\u00e7\u00f5es"] = "INATIVAR ANUNCIO. ESTOQUE ZERO NA IONLAB"
+                urgent_rows.append(row)
+            else:
+                export_rows.append(row)
+
+        dataframe = pd.DataFrame(export_rows, columns=MERCADO_LIVRE_GENERAL_COLUMNS)
         dataframe.to_excel(writer, index=False, sheet_name="Gestao Geral")
         worksheet = writer.sheets["Gestao Geral"]
-        worksheet.freeze_panes = "A2"
-        worksheet.auto_filter.ref = worksheet.dimensions
+        if urgent_rows:
+            urgent_dataframe = pd.DataFrame(urgent_rows, columns=MERCADO_LIVRE_GENERAL_COLUMNS)
+            urgent_dataframe.to_excel(writer, index=False, sheet_name="URGENTE")
+            urgent_worksheet = writer.sheets["URGENTE"]
+        else:
+            urgent_worksheet = None
 
+        from openpyxl.styles import Border, Font, PatternFill, Side
+
+        red_fill = PatternFill(fill_type="solid", fgColor="FF0000")
+        white_font = Font(color="FFFFFF")
+        yellow_fill = PatternFill(fill_type="solid", fgColor="FFFF00")
+        thin_side = Side(style="thin", color="000000")
+        header_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
         money_columns = {"Pre\u00e7o Onix", "Pre\u00e7o Vitralab", "Pre\u00e7o Nativalab", "Pre\u00e7o de venda Ionlab"}
-        stock_columns = {"Estoque no dep\u00f3sito Onix", "Estoque no dep\u00f3sito Vitralab", "Estoque no dep\u00f3sito Nativalab", "Estoque Ionlab"}
-        column_indexes = {cell.value: cell.column for cell in worksheet[1]}
-        for column_name in money_columns:
-            column_index = column_indexes.get(column_name)
-            if column_index:
-                for column_cells in worksheet.iter_cols(min_col=column_index, max_col=column_index, min_row=2, max_row=worksheet.max_row):
-                    for cell in column_cells:
-                        cell.number_format = '#,##0.00'
-        for column_name in stock_columns:
-            column_index = column_indexes.get(column_name)
-            if column_index:
-                for column_cells in worksheet.iter_cols(min_col=column_index, max_col=column_index, min_row=2, max_row=worksheet.max_row):
-                    for cell in column_cells:
-                        cell.number_format = '#,##0.###'
-        for column_cells in worksheet.columns:
-            max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in column_cells)
-            worksheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 14), 55)
+        mkp_columns = {"MKP ION Onix", "MKP ION Vitralab", "MKP ION Nativalab"}
+        stock_columns = {
+            "Estoque no dep\u00f3sito Onix",
+            "Estoque no dep\u00f3sito Vitralab",
+            "Estoque no dep\u00f3sito Nativalab",
+            "Estoque Ionlab",
+        }
+        state_columns = {"Estado Onix", "Estado Vitralab", "Estado Nativalab"}
+
+        def format_general_sheet(sheet, urgent=False):
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            column_indexes = {cell.value: cell.column for cell in sheet[1]}
+            for header_cell in sheet[1]:
+                header_cell.border = header_border
+
+            for column_name in money_columns:
+                column_index = column_indexes.get(column_name)
+                if column_index:
+                    for column_cells in sheet.iter_cols(min_col=column_index, max_col=column_index, min_row=2, max_row=sheet.max_row):
+                        for cell in column_cells:
+                            cell.number_format = '#,##0.00'
+            for column_name in mkp_columns:
+                column_index = column_indexes.get(column_name)
+                if column_index:
+                    for column_cells in sheet.iter_cols(min_col=column_index, max_col=column_index, min_row=2, max_row=sheet.max_row):
+                        for cell in column_cells:
+                            cell.number_format = '0.00'
+                            value = optional_number_value(cell.value)
+                            if value is not None and value <= 1.4:
+                                cell.fill = red_fill
+                                cell.font = white_font
+            for column_name in stock_columns:
+                column_index = column_indexes.get(column_name)
+                if column_index:
+                    for column_cells in sheet.iter_cols(min_col=column_index, max_col=column_index, min_row=2, max_row=sheet.max_row):
+                        for cell in column_cells:
+                            cell.number_format = '0'
+
+            ionlab_stock_index = column_indexes.get("Estoque Ionlab")
+            if ionlab_stock_index:
+                for row_cells in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+                    cell = row_cells[ionlab_stock_index - 1]
+                    if cell.value not in (None, ""):
+                        cell.fill = yellow_fill
+
+            state_indexes = [column_indexes.get(column_name) for column_name in state_columns if column_indexes.get(column_name)]
+            for row_cells in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+                if urgent:
+                    for cell in row_cells:
+                        cell.fill = red_fill
+                        cell.font = white_font
+                    continue
+                for index in state_indexes:
+                    cell = row_cells[index - 1]
+                    if normalize_text(cell.value) == "INATIVO":
+                        cell.fill = red_fill
+                        cell.font = white_font
+
+            for column_cells in sheet.columns:
+                max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in column_cells)
+                sheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 14), 55)
+
+        format_general_sheet(worksheet, urgent=False)
+        if urgent_worksheet is not None:
+            format_general_sheet(urgent_worksheet, urgent=True)
     return output.getvalue()
 
 
@@ -9044,20 +9388,47 @@ def import_mercado_livre_ads(company_id: str, file_name: str, file_bytes: bytes,
     return summary
 
 
-def import_mercado_livre_sales(company_id: str, file_name: str, file_bytes: bytes):
+def import_mercado_livre_sales(company_id: str, file_name: str, file_bytes: bytes, import_month: str = ""):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     if company_id not in MERCADO_LIVRE_COMPANIES:
         raise ValueError("Empresa invalida para Mercado Livre.")
 
+    target_year, target_month = parse_mercado_livre_import_month(import_month)
     raw_records, sheet_name, header_row, skipped = read_mercado_livre_sales_records(file_name, file_bytes)
     now = datetime.now().isoformat(timespec="seconds")
     existing_records = load_json(mercado_livre_sales_file(company_id), [])
+    period_label = f"{target_month:02d}/{target_year}"
+    filtered_raw_records = []
+    skipped_outside_period = 0
+    skipped_without_date = 0
+    for record in raw_records:
+        sold_at = parse_mercado_livre_sale_date(mercado_livre_sales_value(record, "Data da venda"))
+        if not sold_at:
+            skipped_without_date += 1
+            continue
+        if sold_at.year == target_year and sold_at.month == target_month:
+            filtered_raw_records.append(record)
+        else:
+            skipped_outside_period += 1
+
+    if not filtered_raw_records:
+        raise ValueError(f"O arquivo nao possui vendas no periodo selecionado ({period_label}). A base nao foi alterada.")
+
+    removed_period = 0
+    remaining_records = []
+    for record in existing_records:
+        if mercado_livre_record_in_month(record, target_year, target_month):
+            removed_period += 1
+            continue
+        remaining_records.append(record)
+
     by_key = {}
     merged_records = []
-    for record in existing_records:
+    for record in remaining_records:
         key = mercado_livre_sales_key(record)
         if not key:
+            merged_records.append(record)
             continue
         if key not in by_key:
             by_key[key] = record
@@ -9067,12 +9438,13 @@ def import_mercado_livre_sales(company_id: str, file_name: str, file_bytes: byte
     updated = 0
     unchanged = 0
     skipped_without_key = 0
-    for index, record in enumerate(raw_records, start=1):
+    for index, record in enumerate(filtered_raw_records, start=1):
         clean_record = {key: normalize_record(value) for key, value in record.items()}
         clean_record["_empresa_id"] = company_id
         clean_record["_empresa_nome"] = COMPANIES[company_id]
         clean_record["_importado_em"] = now
         clean_record["_linha_importacao"] = index
+        clean_record["_periodo_importacao"] = f"{target_year}-{target_month:02d}"
         key = mercado_livre_sales_key(clean_record)
         if not key:
             skipped_without_key += 1
@@ -9105,13 +9477,19 @@ def import_mercado_livre_sales(company_id: str, file_name: str, file_bytes: byte
         "arquivo": file_name,
         "aba": sheet_name,
         "linha_cabecalho": header_row,
+        "periodo": period_label,
+        "periodo_valor": f"{target_year}-{target_month:02d}",
         "linhas_lidas": len(raw_records) + skipped,
+        "linhas_lidas_periodo": len(filtered_raw_records),
         "linhas_importadas": inserted + updated,
         "linhas_incluidas": inserted,
         "linhas_alteradas": updated,
         "linhas_sem_alteracao": unchanged,
-        "linhas_ignoradas": skipped + skipped_without_key,
+        "linhas_ignoradas": skipped + skipped_without_key + skipped_outside_period + skipped_without_date,
         "linhas_sem_chave": skipped_without_key,
+        "linhas_removidas_periodo": removed_period,
+        "linhas_fora_periodo": skipped_outside_period,
+        "linhas_sem_data": skipped_without_date,
         "total_vendas_empresa": len(merged_records),
         "importado_em": now,
     }
@@ -10156,9 +10534,12 @@ def import_sales(company_id: str, file_name: str, file_bytes: bytes):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
 
-    workbook = pd.ExcelFile(BytesIO(file_bytes))
-    sheet_name = "LucratividadeVenda" if "LucratividadeVenda" in workbook.sheet_names else workbook.sheet_names[0]
-    frame = pd.read_excel(workbook, sheet_name=sheet_name)
+    sheets = read_spreadsheet_sheets(file_name, file_bytes)
+    if not sheets:
+        raise ValueError("Nao encontrei dados na planilha de vendas.")
+    sheet_name, rows = next((item for item in sheets if normalize_text(item[0]) == "LUCRATIVIDADEVENDA"), sheets[0])
+    records, _sheet_label = rows_to_records(rows)
+    frame = pd.DataFrame(records)
     frame = frame.where(pd.notnull(frame), None)
 
     existing = load_json(sales_file(company_id), [])
@@ -10239,9 +10620,7 @@ def import_clients(company_id: str, file_name: str, file_bytes: bytes):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
 
-    workbook = pd.ExcelFile(BytesIO(file_bytes))
-    sheet_name = workbook.sheet_names[0]
-    frame = pd.read_excel(workbook, sheet_name=sheet_name)
+    frame, sheet_name = read_spreadsheet_frame(file_name, file_bytes)
     frame = frame.where(pd.notnull(frame), None)
 
     existing = load_json(clients_file(company_id), [])
@@ -10640,6 +11019,23 @@ class CRMHandler(BaseHTTPRequestHandler):
             try:
                 content = clients_export_xlsx(company_id, query)
                 filename = f"clientes_{company_id}.xlsx"
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+        if path in ("/api/export-economic-groups", "/api/economic-groups/export"):
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            try:
+                content = economic_groups_export_xlsx(company_id)
+                filename = f"quem_e_quem_{company_id}.xlsx"
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
@@ -11130,6 +11526,15 @@ class CRMHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+        if path == "/api/vendor-monthly-buying-clients":
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            vendor_id_value = params.get("vendor_id", [""])[0]
+            try:
+                return self.send_json(vendor_monthly_buying_clients_payload(company_id, vendor_id_value, params))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
         if path == "/api/vendor-day-by-day/report":
             params = parse_qs(parsed.query)
             company_id = params.get("company", ["ionlab"])[0]
@@ -11263,6 +11668,13 @@ class CRMHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/api/cache/clear":
+            clear_payload_caches(include_disk=True)
+            return self.send_json({
+                "message": "Dados temporarios atualizados. As proximas telas serao recalculadas uma vez e depois ficarao prontas para exibicao.",
+                "cleared": True,
+            })
+
         if path == "/api/auth/login":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -11444,7 +11856,7 @@ class CRMHandler(BaseHTTPRequestHandler):
             elif path == "/api/import-mercado-livre-ads":
                 summary = import_mercado_livre_ads(company_id, upload["filename"], upload["content"], fields.get("kind") or fields.get("type") or "anuncios")
             elif path == "/api/import-mercado-livre-sales":
-                summary = import_mercado_livre_sales(company_id, upload["filename"], upload["content"])
+                summary = import_mercado_livre_sales(company_id, upload["filename"], upload["content"], fields.get("month") or fields.get("mes") or "")
             else:
                 summary = import_stock(company_id, upload["filename"], upload["content"])
             return self.send_json(summary)
