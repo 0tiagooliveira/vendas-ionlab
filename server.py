@@ -3181,9 +3181,12 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
     day_key = day_value.isoformat()
     load_started_at = time.perf_counter()
     data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
+    data_loaded_at = time.perf_counter()
     blocked_clients = blocked_client_map(company_id)
+    blocked_loaded_at = time.perf_counter()
     list_key = f"{day_key}|{vendor_id_value}"
     current_list = data.setdefault("listas", {}).get(list_key) or load_vendor_day_by_day_queue(company_id, day_key, vendor_id_value) or {}
+    queue_loaded_at = time.perf_counter()
     saved_details = current_list.get("details") or {}
     expected_selection_strategy = "unattended_until_wallet_complete_v2"
     saved_schema_is_current = all(
@@ -3198,11 +3201,12 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
         for record in (data.get("atendimentos") or {}).values()
     )
     saved_schema_is_current = saved_schema_is_current or (bool(saved_details) and saved_has_today_attendance)
-    filter_started_at = time.perf_counter()
+    candidates_started_at = time.perf_counter()
     if saved_details and saved_schema_is_current:
         records = data.get("atendimentos", {})
         _vendor_for_filter, current_candidates = vendor_day_by_day_candidates(company_id, vendor_id_value)
         current_recontacts = vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data)
+        candidates_done_at = time.perf_counter()
         allowed_saved_ids = {
             status_key: {
                 normalize_identifier(row.get("id"))
@@ -3237,8 +3241,10 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
         candidate_counts = current_list.get("candidate_counts") or {}
         if not inactive_rows and not never_rows and not recontact_rows and not candidate_counts.get("inactive") and not candidate_counts.get("never"):
             recontact_rows = vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data)[:DAY_BY_DAY_DAILY_TARGET]
+        filtered_done_at = time.perf_counter()
         selected_ufs = sorted({row.get("uf") for row in inactive_rows + never_rows + recontact_rows if row.get("uf")})
         vendor = vendor_record_by_id(company_id, vendor_id_value)
+        vendor_loaded_at = time.perf_counter()
         response = {
             "empresa": COMPANIES[company_id],
             "empresa_id": company_id,
@@ -3262,19 +3268,25 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
             "contatos_anteriores": vendor_day_by_day_previous_contacts(data, vendor_id_value, day_key) if count_summary.get("faltam") == 0 else [],
             "agrp_options": vendor_agrp_options(company_id),
         }
+        response_done_at = time.perf_counter()
         perf_log(
             "vendor_day_by_day",
             company=company_id,
             vendor_id=vendor_id_value,
-            load_json_ms=round((filter_started_at - load_started_at) * 1000, 2),
-            filtering_ms=round((time.perf_counter() - filter_started_at) * 1000, 2),
-            ordering_ms=0.0,
-            response_ms=0.0,
+            load_json_ms=round((data_loaded_at - load_started_at) * 1000, 2),
+            blocked_ms=round((blocked_loaded_at - data_loaded_at) * 1000, 2),
+            queue_ms=round((queue_loaded_at - blocked_loaded_at) * 1000, 2),
+            candidates_ms=round((candidates_done_at - candidates_started_at) * 1000, 2),
+            filtering_ms=round((filtered_done_at - candidates_done_at) * 1000, 2),
+            vendor_ms=round((vendor_loaded_at - filtered_done_at) * 1000, 2),
+            response_ms=round((response_done_at - vendor_loaded_at) * 1000, 2),
             total_ms=round((time.perf_counter() - started_at) * 1000, 2),
         )
         return response
 
+    candidates_done_at = time.perf_counter()
     vendor, candidates = vendor_day_by_day_candidates(company_id, vendor_id_value)
+    candidates_done_at = time.perf_counter()
     changed = False
     selected = {}
     targets = {"inactive": 35, "never": 15}
@@ -3291,6 +3303,7 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
         recontact_candidates = vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data)
         unattended_candidates["recontact"] = recontact_candidates
         targets = {"recontact": DAY_BY_DAY_DAILY_TARGET}
+    unattended_done_at = time.perf_counter()
     candidate_by_status = {
         status: {row.get("id"): row for row in rows}
         for status, rows in unattended_candidates.items()
@@ -3317,6 +3330,7 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
         selected[status_key] = saved_ids
         if current_list.get(status_key) != saved_ids:
             changed = True
+    ordering_done_at = time.perf_counter()
 
     selected_details = {
         status_key: [
@@ -3354,6 +3368,7 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
             save_vendor_day_by_day_data(company_id, data)
         except PermissionError:
             save_vendor_day_by_day_queue(company_id, day_key, vendor_id_value, queue_payload)
+    persist_done_at = time.perf_counter()
 
     records = data.get("atendimentos", {})
 
@@ -3396,14 +3411,19 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
         "agrp_options": vendor_agrp_options(company_id),
         "aviso_gravacao": save_warning,
     }
+    response_done_at = time.perf_counter()
     perf_log(
         "vendor_day_by_day",
         company=company_id,
         vendor_id=vendor_id_value,
-        load_json_ms=round((filter_started_at - load_started_at) * 1000, 2),
-        filtering_ms=round((ordering_started_at - filter_started_at) * 1000, 2),
-        ordering_ms=round((response_build_started_at - ordering_started_at) * 1000, 2),
-        response_ms=round((time.perf_counter() - response_build_started_at) * 1000, 2),
+        load_json_ms=round((data_loaded_at - load_started_at) * 1000, 2),
+        blocked_ms=round((blocked_loaded_at - data_loaded_at) * 1000, 2),
+        queue_ms=round((queue_loaded_at - blocked_loaded_at) * 1000, 2),
+        candidates_ms=round((candidates_done_at - candidates_started_at) * 1000, 2),
+        unattended_ms=round((unattended_done_at - candidates_done_at) * 1000, 2),
+        ordering_ms=round((ordering_done_at - ordering_started_at) * 1000, 2),
+        persist_ms=round((persist_done_at - response_build_started_at) * 1000, 2),
+        response_ms=round((response_done_at - persist_done_at) * 1000, 2),
         total_ms=round((time.perf_counter() - started_at) * 1000, 2),
     )
     return response
@@ -4482,13 +4502,16 @@ def build_vendor_page_payload(company_id: str, vendor_id_value: str):
         raise ValueError("Vendedor nao encontrado.")
     if vendor.get("status") != "Ativo":
         raise ValueError("Pagina disponivel somente para vendedores ativos.")
+    regions_started_at = time.perf_counter()
     payload = vendor_regions_payload(company_id, vendor_id_value)
+    regions_done_at = time.perf_counter()
     perf_log(
         "vendor_page",
         company=company_id,
         vendor_id=vendor_id_value,
         sync_vendors_ms=round((lookup_started_at - sync_started_at) * 1000, 2),
         lookup_ms=round((time.perf_counter() - lookup_started_at) * 1000, 2),
+        regions_ms=round((regions_done_at - regions_started_at) * 1000, 2),
         total_ms=round((time.perf_counter() - started_at) * 1000, 2),
     )
     return payload
@@ -6133,10 +6156,13 @@ def save_vendor_monthly_items_payload(payload: dict):
 
 
 def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, goal_record: dict, target_months=None, fast_mode=False):
+    started_at = time.perf_counter()
     try:
+        context_started_at = time.perf_counter()
         vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
     except Exception:
         return {str(month): {} for month in range(1, 13)}
+    context_done_at = time.perf_counter()
 
     if target_months:
         month_filter = {
@@ -6156,6 +6182,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
         economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
         for client_id in region_client_ids
     }
+    region_keys_done_at = time.perf_counter()
     achievements = {str(month): {key: 0.0 for key, _label, _kind in VENDOR_GOAL_OBJECTIVES} for month in range(1, 13)}
     sales = []
     other_region_sales = []
@@ -6179,6 +6206,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
                 continue
             if vendor_name_key and normalize_text(sale.get("VN_NOM")) == vendor_name_key:
                 other_region_sales.append((sale_date, client_id, sale_year, sale_month, sale_company_id, sale))
+    sales_collected_at = time.perf_counter()
 
     first_purchase_by_economic_group = {}
     previous_purchase_by_group = {}
@@ -6193,6 +6221,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
                 achievements[str(sale_month)].get("vendas_liquidas_outras_regioes", 0.0)
                 + sale_net_revenue(sale)
             )
+    other_region_done_at = time.perf_counter()
 
     sem_giro_details_by_month = {str(month): [] for month in range(1, 13)}
     if not fast_mode:
@@ -6293,6 +6322,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
                         "percentual_bonificacao": round(bonus_percent, 4),
                         "bonificacao": round(bonus_value, 2),
                     })
+    sem_giro_done_at = time.perf_counter()
     for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(sales, key=lambda item: (item[0], item[1])):
         client = client_index.get(client_id)
         ge_group_key = economic_group_master_id_from_index(group_index, client_id)
@@ -6322,6 +6352,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             new_clients_by_month[month_key].add(group_key)
 
         previous_purchase_by_group[group_key] = sale_date
+    core_sales_done_at = time.perf_counter()
 
     for month in month_filter:
         month_key = str(month)
@@ -6343,6 +6374,22 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             if key == "sem_giro_detalhes":
                 continue
             achievements[month_key][key] = round(number_value(achievements[month_key][key]), 2)
+    months_done_at = time.perf_counter()
+    perf_log(
+        "vendor_goal_achievements",
+        company=company_id,
+        vendor_id=vendor_id_value,
+        context_ms=round((context_done_at - context_started_at) * 1000, 2),
+        region_keys_ms=round((region_keys_done_at - context_done_at) * 1000, 2),
+        sales_collect_ms=round((sales_collected_at - region_keys_done_at) * 1000, 2),
+        other_region_ms=round((other_region_done_at - sales_collected_at) * 1000, 2),
+        sem_giro_ms=round((sem_giro_done_at - other_region_done_at) * 1000, 2),
+        core_sales_ms=round((core_sales_done_at - sem_giro_done_at) * 1000, 2),
+        months_ms=round((months_done_at - core_sales_done_at) * 1000, 2),
+        total_ms=round((months_done_at - started_at) * 1000, 2),
+        fast=1 if fast_mode else 0,
+        months=",".join(str(month) for month in sorted(month_filter)),
+    )
     return {
         month_key: value
         for month_key, value in achievements.items()
@@ -6412,8 +6459,10 @@ def build_vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_
     fast_mode = str(fast_value or "").strip().lower() in {"1", "true", "sim", "yes"}
     vendors_started_at = time.perf_counter()
     vendors = load_json(vendors_file(company_id), []) if fast_mode else sync_vendors_from_sales(company_id)[0]
+    vendors_loaded_at = time.perf_counter()
     if fast_mode and vendor_id_value and not any(item.get("id") == vendor_id_value for item in vendors):
         vendors, _inserted = sync_vendors_from_sales(company_id)
+        vendors_loaded_at = time.perf_counter()
     active_vendors = [vendor for vendor in vendors if vendor.get("status") == "Ativo"]
     goal_vendors = [vendor_goal_option_record(vendor) for vendor in active_vendors]
     if not vendor_id_value and goal_vendors:
@@ -6424,6 +6473,7 @@ def build_vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_
 
     goals_started_at = time.perf_counter()
     all_goals = load_json(vendor_goals_file(company_id), {})
+    goals_loaded_at = time.perf_counter()
     stored = all_goals.get(vendor_goals_key(vendor_id_value, year), {}) if vendor_id_value else {}
     record = normalize_vendor_goal_record(stored, company_id, vendor_id_value, year) if vendor_id_value else default_vendor_goal_record(company_id, "", year)
     bases_started_at = time.perf_counter()
@@ -6432,6 +6482,7 @@ def build_vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_
     else:
         sales_base = vendor_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_sales_goal_base(company_id, "", year)
         client_sales_base = vendor_client_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_client_sales_goal_base(company_id, "", year)
+    bases_done_at = time.perf_counter()
     calculation_started_at = time.perf_counter()
     for month in range(1, 13):
         month_record = record["months"][str(month)]
@@ -6480,9 +6531,10 @@ def build_vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_
                 percent = (achieved / meta * 100) if meta else 0.0
             month_record["objetivos"][key]["valor_atingido"] = round(achieved, 2)
             month_record["objetivos"][key]["percentual_atingido"] = round(max(0.0, min(percent, 999.0)), 2)
-            if key == "sem_giro":
-                month_record["objetivos"][key]["comissao_valor"] = round(number_value((achievements.get(month_key) or {}).get("sem_giro_comissao")), 2)
-                month_record["objetivos"][key]["detalhes"] = (achievements.get(month_key) or {}).get("sem_giro_detalhes") or []
+        if key == "sem_giro":
+            month_record["objetivos"][key]["comissao_valor"] = round(number_value((achievements.get(month_key) or {}).get("sem_giro_comissao")), 2)
+            month_record["objetivos"][key]["detalhes"] = (achievements.get(month_key) or {}).get("sem_giro_detalhes") or []
+    calculation_done_at = time.perf_counter()
 
     response = {
         "empresa": COMPANIES[company_id],
@@ -6496,15 +6548,17 @@ def build_vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_
         "client_sales_base": client_sales_base,
         "goals": record,
     }
+    response_done_at = time.perf_counter()
     perf_log(
         "vendor_goals",
         company=company_id,
         vendor_id=vendor_id_value,
-        load_vendors_ms=round((goals_started_at - vendors_started_at) * 1000, 2),
-        load_goals_ms=round((bases_started_at - goals_started_at) * 1000, 2),
-        bases_ms=round((calculation_started_at - bases_started_at) * 1000, 2),
-        build_ms=round((time.perf_counter() - calculation_started_at) * 1000, 2),
-        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        load_vendors_ms=round((vendors_loaded_at - vendors_started_at) * 1000, 2),
+        load_goals_ms=round((goals_loaded_at - goals_started_at) * 1000, 2),
+        bases_ms=round((bases_done_at - bases_started_at) * 1000, 2),
+        calc_ms=round((calculation_done_at - calculation_started_at) * 1000, 2),
+        response_ms=round((response_done_at - calculation_done_at) * 1000, 2),
+        total_ms=round((response_done_at - started_at) * 1000, 2),
         fast=1 if fast_mode else 0,
     )
     return response
