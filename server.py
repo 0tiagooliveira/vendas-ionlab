@@ -1124,6 +1124,13 @@ def economic_client_key(client_id: str, client: dict | None = None, sale: dict |
 
 
 def all_client_record_map(company_id: str) -> dict:
+    dependencies = []
+    for client_company_id in vendor_sales_company_ids(company_id):
+        dependencies.append(clients_file(client_company_id))
+    return cached_payload(("all_client_record_map", company_id), dependencies, lambda: build_all_client_record_map(company_id))
+
+
+def build_all_client_record_map(company_id: str) -> dict:
     rows = {}
     for client_company_id in vendor_sales_company_ids(company_id):
         if client_company_id not in COMPANIES:
@@ -2324,6 +2331,18 @@ def finalize_region_summary(row: dict) -> dict:
 
 
 def vendor_region_client_context(company_id: str, vendor_id_value: str):
+    dependencies = [vendors_file(company_id), region_assignments_file(company_id), economic_groups_file(company_id)]
+    for client_company_id in vendor_sales_company_ids(company_id):
+        dependencies.append(clients_file(client_company_id))
+        dependencies.append(sales_file(client_company_id))
+    return cached_payload(
+        ("vendor_region_client_context", company_id, vendor_id_value),
+        dependencies,
+        lambda: build_vendor_region_client_context(company_id, vendor_id_value),
+    )
+
+
+def build_vendor_region_client_context(company_id: str, vendor_id_value: str):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     if not vendor_id_value:
@@ -2799,6 +2818,14 @@ def day_by_day_weekend_payload(company_id: str, vendor_id_value: str, day_value:
 
 
 def vendor_client_sales_stats(company_id: str) -> dict:
+    dependencies = [economic_groups_file(company_id)]
+    for sale_company_id in vendor_sales_company_ids(company_id):
+        dependencies.append(clients_file(sale_company_id))
+        dependencies.append(sales_file(sale_company_id))
+    return cached_payload(("vendor_client_sales_stats", company_id), dependencies, lambda: build_vendor_client_sales_stats(company_id))
+
+
+def build_vendor_client_sales_stats(company_id: str) -> dict:
     sales_stats = {}
     group_index = economic_group_index(company_id)
     client_lookup = all_client_record_map(company_id)
@@ -6833,6 +6860,10 @@ def load_economic_groups(company_id: str) -> list[dict]:
 
 
 def economic_group_index(company_id: str) -> dict:
+    return cached_payload(("economic_group_index", company_id), [economic_groups_file(company_id)], lambda: build_economic_group_index(company_id))
+
+
+def build_economic_group_index(company_id: str) -> dict:
     index = {}
     for group in load_economic_groups(company_id):
         master = group.get("master") or {}
