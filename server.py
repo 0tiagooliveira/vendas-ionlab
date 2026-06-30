@@ -3095,12 +3095,14 @@ def vendor_day_by_day_monthly_count(company_id: str, vendor_id_value: str, year:
 
 
 def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: str = ""):
+    started_at = time.perf_counter()
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     day_value = day_by_day_date_value(day_key)
     if not is_day_by_day_business_day(day_value):
         return day_by_day_weekend_payload(company_id, vendor_id_value, day_value)
     day_key = day_value.isoformat()
+    load_started_at = time.perf_counter()
     data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     blocked_clients = blocked_client_map(company_id)
     list_key = f"{day_key}|{vendor_id_value}"
@@ -3119,6 +3121,7 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
         for record in (data.get("atendimentos") or {}).values()
     )
     saved_schema_is_current = saved_schema_is_current or (bool(saved_details) and saved_has_today_attendance)
+    filter_started_at = time.perf_counter()
     if saved_details and saved_schema_is_current:
         records = data.get("atendimentos", {})
         _vendor_for_filter, current_candidates = vendor_day_by_day_candidates(company_id, vendor_id_value)
@@ -3159,7 +3162,7 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
             recontact_rows = vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data)[:DAY_BY_DAY_DAILY_TARGET]
         selected_ufs = sorted({row.get("uf") for row in inactive_rows + never_rows + recontact_rows if row.get("uf")})
         vendor = vendor_record_by_id(company_id, vendor_id_value)
-        return {
+        response = {
             "empresa": COMPANIES[company_id],
             "empresa_id": company_id,
             "vendedor": vendor,
@@ -3182,10 +3185,20 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
             "contatos_anteriores": vendor_day_by_day_previous_contacts(data, vendor_id_value, day_key) if count_summary.get("faltam") == 0 else [],
             "agrp_options": vendor_agrp_options(company_id),
         }
+        perf_log(
+            "vendor_day_by_day",
+            company=company_id,
+            vendor_id=vendor_id_value,
+            load_json_ms=round((filter_started_at - load_started_at) * 1000, 2),
+            filtering_ms=round((time.perf_counter() - filter_started_at) * 1000, 2),
+            ordering_ms=0.0,
+            response_ms=0.0,
+            total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
+        return response
 
     vendor, candidates = vendor_day_by_day_candidates(company_id, vendor_id_value)
     changed = False
-
     selected = {}
     targets = {"inactive": 35, "never": 15}
     recontact_candidates = []
@@ -3205,6 +3218,7 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
         status: {row.get("id"): row for row in rows}
         for status, rows in unattended_candidates.items()
     }
+    ordering_started_at = time.perf_counter()
     for status_key, amount in targets.items():
         previous_pending = vendor_day_by_day_unattended_previous_ids(data, vendor_id_value, day_value, status_key)
         saved_ids = [
@@ -3237,6 +3251,7 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
     }
 
     save_warning = ""
+    response_build_started_at = time.perf_counter()
     if changed or list_key not in data.get("listas", {}) or not current_list.get("details") or not saved_schema_is_current:
         queue_payload = {
             "data": day_key,
@@ -3280,8 +3295,7 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
     recontact_rows = rows_for("recontact")
     selected_ufs = sorted({row.get("uf") for row in inactive_rows + never_rows + recontact_rows if row.get("uf")})
     count_summary = vendor_day_by_day_count_summary(data, vendor_id_value, day_key)
-
-    return {
+    response = {
         "empresa": COMPANIES[company_id],
         "empresa_id": company_id,
         "vendedor": vendor_public_record(vendor),
@@ -3305,6 +3319,17 @@ def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: st
         "agrp_options": vendor_agrp_options(company_id),
         "aviso_gravacao": save_warning,
     }
+    perf_log(
+        "vendor_day_by_day",
+        company=company_id,
+        vendor_id=vendor_id_value,
+        load_json_ms=round((filter_started_at - load_started_at) * 1000, 2),
+        filtering_ms=round((ordering_started_at - filter_started_at) * 1000, 2),
+        ordering_ms=round((response_build_started_at - ordering_started_at) * 1000, 2),
+        response_ms=round((time.perf_counter() - response_build_started_at) * 1000, 2),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+    )
+    return response
 
 
 def vendor_day_by_day_previous_contacts(data: dict, vendor_id_value: str, day_key: str) -> list[dict]:
@@ -4362,13 +4387,25 @@ def save_vendor_region_exclusions_payload(payload: dict):
 
 
 def vendor_page_payload(company_id: str, vendor_id_value: str):
+    started_at = time.perf_counter()
+    sync_started_at = time.perf_counter()
     vendors, _inserted = sync_vendors_from_sales(company_id)
+    lookup_started_at = time.perf_counter()
     vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
         raise ValueError("Vendedor nao encontrado.")
     if vendor.get("status") != "Ativo":
         raise ValueError("Pagina disponivel somente para vendedores ativos.")
-    return vendor_regions_payload(company_id, vendor_id_value)
+    payload = vendor_regions_payload(company_id, vendor_id_value)
+    perf_log(
+        "vendor_page",
+        company=company_id,
+        vendor_id=vendor_id_value,
+        sync_vendors_ms=round((lookup_started_at - sync_started_at) * 1000, 2),
+        lookup_ms=round((time.perf_counter() - lookup_started_at) * 1000, 2),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+    )
+    return payload
 
 
 def vendor_about_goal_region_rows(company_id: str, vendor: dict, client_index: dict) -> list[dict]:
@@ -6274,10 +6311,12 @@ def normalize_vendor_goal_record(record: dict, company_id: str, vendor_id_value:
 
 
 def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=None, month_value=None, fast_value=None):
+    started_at = time.perf_counter()
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     year = int(optional_number_value(year_value) or CURRENT_YEAR)
     fast_mode = str(fast_value or "").strip().lower() in {"1", "true", "sim", "yes"}
+    vendors_started_at = time.perf_counter()
     vendors = load_json(vendors_file(company_id), []) if fast_mode else sync_vendors_from_sales(company_id)[0]
     if fast_mode and vendor_id_value and not any(item.get("id") == vendor_id_value for item in vendors):
         vendors, _inserted = sync_vendors_from_sales(company_id)
@@ -6289,14 +6328,17 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
     if vendor_id_value and not vendor:
         raise ValueError("Vendedor ativo nao encontrado.")
 
+    goals_started_at = time.perf_counter()
     all_goals = load_json(vendor_goals_file(company_id), {})
     stored = all_goals.get(vendor_goals_key(vendor_id_value, year), {}) if vendor_id_value else {}
     record = normalize_vendor_goal_record(stored, company_id, vendor_id_value, year) if vendor_id_value else default_vendor_goal_record(company_id, "", year)
+    bases_started_at = time.perf_counter()
     if fast_mode and vendor_id_value:
         sales_base, client_sales_base = fast_vendor_goal_bases(company_id, vendor_id_value, year)
     else:
         sales_base = vendor_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_sales_goal_base(company_id, "", year)
         client_sales_base = vendor_client_sales_goal_base(company_id, vendor_id_value, year) if vendor_id_value else vendor_client_sales_goal_base(company_id, "", year)
+    calculation_started_at = time.perf_counter()
     for month in range(1, 13):
         month_record = record["months"][str(month)]
         increase = optional_number_value(month_record.get("percentual_aumento")) or 0.0
@@ -6348,7 +6390,7 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
                 month_record["objetivos"][key]["comissao_valor"] = round(number_value((achievements.get(month_key) or {}).get("sem_giro_comissao")), 2)
                 month_record["objetivos"][key]["detalhes"] = (achievements.get(month_key) or {}).get("sem_giro_detalhes") or []
 
-    return {
+    response = {
         "empresa": COMPANIES[company_id],
         "empresa_id": company_id,
         "year": year,
@@ -6360,6 +6402,18 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
         "client_sales_base": client_sales_base,
         "goals": record,
     }
+    perf_log(
+        "vendor_goals",
+        company=company_id,
+        vendor_id=vendor_id_value,
+        load_vendors_ms=round((goals_started_at - vendors_started_at) * 1000, 2),
+        load_goals_ms=round((bases_started_at - goals_started_at) * 1000, 2),
+        bases_ms=round((calculation_started_at - bases_started_at) * 1000, 2),
+        build_ms=round((time.perf_counter() - calculation_started_at) * 1000, 2),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        fast=1 if fast_mode else 0,
+    )
+    return response
 
 
 def save_vendor_goals_payload(payload: dict):
@@ -11916,6 +11970,14 @@ def server_log(message: str):
         timestamp = datetime.now().isoformat(timespec="seconds")
         with SERVER_LOG_FILE.open("a", encoding="utf-8") as log:
             log.write(f"[{timestamp}] {message}\n")
+    except Exception:
+        pass
+
+
+def perf_log(scope: str, **metrics):
+    try:
+        detail = " ".join(f"{key}={value}" for key, value in metrics.items())
+        server_log(f"PERF {scope} {detail}".strip())
     except Exception:
         pass
 
