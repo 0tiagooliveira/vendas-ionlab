@@ -12319,8 +12319,7 @@ def main():
         server_log(f"CRM iniciado em http://127.0.0.1:{port}")
         print(f"CRM iniciado em http://127.0.0.1:{port}")
         server_log("Iniciando warmup dos caches principais.")
-        warm_start_caches()
-        server_log("Warmup dos caches principais finalizado.")
+        threading.Thread(target=warm_start_caches, daemon=True).start()
         server.serve_forever()
     except Exception:
         server_log(f"Erro fatal:\n{traceback.format_exc()}")
