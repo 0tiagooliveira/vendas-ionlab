@@ -2909,7 +2909,6 @@ def build_vendor_client_sales_stats(company_id: str) -> dict:
             sale_date = str(item.get("sale_date") or "")
             sale_year = int(item.get("sale_year") or 0)
             net_revenue = number_value(item.get("net_revenue"))
-            client_id = normalize_identifier(item.get("client_id"))
             stats_key = group_key
             entry = sales_stats.setdefault(stats_key, {
                 "historical": False,
@@ -2917,66 +2916,20 @@ def build_vendor_client_sales_stats(company_id: str) -> dict:
                 "current_year_revenue": 0.0,
                 "last_purchase": None,
                 "last_purchase_revenue": 0.0,
-                "purchase_notes": {},
+                "purchase_counts_by_year": {str(year): 0 for year in range(START_YEAR, CURRENT_YEAR + 1)},
             })
             entry["historical"] = True
-            note_id = normalize_identifier(sale.get("id_nf") or sale.get("nf_num") or f"{sale_date}|{sale.get('id_prnf')}")
-            if note_id:
-                note = entry["purchase_notes"].setdefault(note_id, {
-                    "id_nf": sale.get("id_nf") or "",
-                    "nf_num": sale.get("nf_num") or "",
-                    "data": sale_date,
-                    "ano": sale_year,
-                    "faturamento_liquido": 0.0,
-                    "itens": 0,
-                    "itens_detalhe": [],
-                })
-                note["faturamento_liquido"] += net_revenue
-                note["itens"] += 1
-                note.setdefault("itens_detalhe", []).append({
-                    "referencia": sale.get("referencia") or "",
-                    "descricao": sale.get("descricao") or "",
-                    "quantidade": round(number_value(sale.get("quantidade")), 3),
-                    "faturamento_liquido": round(net_revenue, 2),
-                    "agrp": sale.get("agrp") or "",
-                    "origem": sale.get("origem") or "",
-                })
-                if sale_date and (not note.get("data") or str(sale_date) > str(note.get("data"))):
-                    note["data"] = sale_date
-                if sale_year:
-                    note["ano"] = sale_year
             if sale_date:
                 if entry["last_purchase"] is None or str(sale_date) > str(entry["last_purchase"]):
                     entry["last_purchase"] = sale_date
                     entry["last_purchase_revenue"] = net_revenue
                 elif str(sale_date) == str(entry["last_purchase"]):
                     entry["last_purchase_revenue"] += net_revenue
+            if START_YEAR <= sale_year <= CURRENT_YEAR:
+                entry["purchase_counts_by_year"][str(sale_year)] += 1
             if sale_year == CURRENT_YEAR:
                 entry["current_year_purchases"] += 1
                 entry["current_year_revenue"] += net_revenue
-    for entry in sales_stats.values():
-        notes = list((entry.get("purchase_notes") or {}).values())
-        yearly_counts = {str(year): 0 for year in range(START_YEAR, CURRENT_YEAR + 1)}
-        for note in notes:
-            year = note.get("ano")
-            if year and START_YEAR <= year <= CURRENT_YEAR:
-                yearly_counts[str(year)] += 1
-        notes.sort(key=lambda note: str(note.get("data") or ""), reverse=True)
-        entry["purchase_counts_by_year"] = yearly_counts
-        purchases_by_year = {str(year): [] for year in range(START_YEAR, CURRENT_YEAR + 1)}
-        for note in notes:
-            year_key = str(note.get("ano") or "")
-            if year_key not in purchases_by_year:
-                continue
-            purchases_by_year[year_key].append({
-                "data": display_date_br(note.get("data")),
-                "data_iso": str(note.get("data") or ""),
-                "nf_num": note.get("nf_num") or note.get("id_nf") or "",
-                "faturamento_liquido": round(note.get("faturamento_liquido") or 0, 2),
-                "itens": note.get("itens") or 0,
-                "itens_detalhe": note.get("itens_detalhe") or [],
-            })
-        entry["purchases_by_year"] = purchases_by_year
     return sales_stats
 
 
@@ -2998,7 +2951,6 @@ def vendor_day_by_day_client_row(client_id: str, client: dict, stats: dict, stat
         "ultima_compra_iso": str(last_purchase or ""),
         "faturamento_liquido": round(revenue, 2),
         "compras_por_ano": stats.get("purchase_counts_by_year") or {str(year): 0 for year in range(START_YEAR, CURRENT_YEAR + 1)},
-        "compras_ano_detalhe": stats.get("purchases_by_year") or {str(year): [] for year in range(START_YEAR, CURRENT_YEAR + 1)},
     }
 
 
@@ -3295,7 +3247,7 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
     saved_details = current_list.get("details") or {}
     expected_selection_strategy = "unattended_until_wallet_complete_v2"
     saved_schema_is_current = all(
-        "compras_por_ano" in item and "compras_ano_detalhe" in item
+        "compras_por_ano" in item
         for rows in saved_details.values()
         for item in (rows or [])
     ) and current_list.get("selection_strategy") == expected_selection_strategy
