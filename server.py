@@ -783,6 +783,83 @@ def vendor_sales_company_ids(company_id: str) -> list[str]:
     return [company_id]
 
 
+def sales_index_dependencies(company_id: str) -> list[Path]:
+    dependencies = [economic_groups_file(company_id)]
+    for sale_company_id in vendor_sales_company_ids(company_id):
+        dependencies.append(clients_file(sale_company_id))
+        dependencies.append(sales_file(sale_company_id))
+    return dependencies
+
+
+def compact_sale_snapshot(sale: dict) -> dict:
+    return {
+        "id_nf": sale.get("ID_NF") or "",
+        "nf_num": sale.get("NF_NUM") or "",
+        "id_prnf": sale.get("ID_PRNF") or "",
+        "data": normalize_record(sale.get("NF_EMI")),
+        "data_iso": str(sale.get("NF_EMI") or ""),
+        "cliente_id": normalize_identifier(sale.get("ID_CL")),
+        "cliente_nome": normalize_record(sale.get("CL_NOM")),
+        "vendedor_nome": normalize_record(sale.get("VN_NOM")),
+        "referencia": normalize_record(sale.get("PR_COD")),
+        "descricao": normalize_record(sale.get("PR_DES")),
+        "quantidade": number_value(sale.get("PR_QTD")),
+        "subtotal": number_value(sale.get("PR_SBT")),
+        "agrp": normalize_record(sale.get("AGRP")),
+        "origem": normalize_record(sale.get("Origem")),
+    }
+
+
+def vendor_sales_index(company_id: str):
+    return cached_payload(("vendor_sales_index", company_id), sales_index_dependencies(company_id), lambda: build_vendor_sales_index(company_id))
+
+
+def build_vendor_sales_index(company_id: str) -> dict:
+    group_index = economic_group_index(company_id)
+    client_lookup = all_client_record_map(company_id)
+    by_group = {}
+    by_vendor_name = {}
+    by_company_ref = {}
+    by_client = {}
+    for sale_company_id in vendor_sales_company_ids(company_id):
+        company_refs = by_company_ref.setdefault(sale_company_id, {})
+        for sale in load_json(sales_file(sale_company_id), []):
+            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
+                continue
+            client_id = normalize_identifier(sale.get("ID_CL"))
+            if not client_id:
+                continue
+            client = client_lookup.get(client_id, {})
+            group_key = economic_group_key_from_index(group_index, client_id, client, sale)
+            sale_date_value = record_date_value(sale.get("NF_EMI"))
+            sale_entry = {
+                "sale_company_id": sale_company_id,
+                "sale_date": sale_date_value.isoformat() if sale_date_value else "",
+                "sale_year": record_year(sale.get("NF_EMI")) or 0,
+                "sale_month": record_month(sale.get("NF_EMI")) or 0,
+                "client_id": client_id,
+                "group_key": group_key,
+                "vendor_name_key": normalize_text(sale.get("VN_NOM")),
+                "ref_key": normalize_text(sale.get("PR_COD")),
+                "net_revenue": round(sale_net_revenue(sale), 2),
+                "sale": compact_sale_snapshot(sale),
+            }
+            by_group.setdefault(group_key, []).append(sale_entry)
+            by_client.setdefault(client_id, []).append(sale_entry)
+            vendor_name_key = sale_entry["vendor_name_key"]
+            if vendor_name_key:
+                by_vendor_name.setdefault(vendor_name_key, []).append(sale_entry)
+            ref_key = sale_entry["ref_key"]
+            if ref_key:
+                company_refs.setdefault(ref_key, []).append(sale_entry)
+    return {
+        "by_group": by_group,
+        "by_vendor_name": by_vendor_name,
+        "by_company_ref": by_company_ref,
+        "by_client": by_client,
+    }
+
+
 def vendor_page_dependencies(company_id: str, vendor_id_value: str) -> list[Path]:
     dependencies = [
         vendors_file(company_id),
@@ -2458,28 +2535,21 @@ def clients_for_vendor_region(company_id: str, vendor_id_value: str, client_inde
 
 def vendor_regions_payload(company_id: str, vendor_id_value: str):
     vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
-
+    sales_index_data = vendor_sales_index(company_id)
     sales_by_client = {}
-    historical_clients = set()
+    historical_clients = set(sales_index_data.get("by_group", {}).keys())
     group_index = economic_group_index(company_id)
     all_clients = dict(all_client_record_map(company_id))
     all_clients.update(client_index)
     years = list(range(START_YEAR, CURRENT_YEAR + 1))
     closed_month_count = max(1, date.today().month - 1) if CURRENT_YEAR == date.today().year else 12
     months = list(range(1, date.today().month + 1)) if CURRENT_YEAR == date.today().year else list(range(1, 13))
-    for sale_company_id in vendor_sales_company_ids(company_id):
-        for sale in load_json(sales_file(sale_company_id), []):
-            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
-                continue
-            client_id = normalize_identifier(sale.get("ID_CL"))
-            if not client_id:
-                continue
-            sale_client = all_clients.get(client_id, {})
-            group_key = economic_group_key_from_index(group_index, client_id, sale_client, sale)
-            historical_clients.add(group_key)
-            year = record_year(sale.get("NF_EMI"))
-            month = record_month(sale.get("NF_EMI"))
-            net_revenue = sale_net_revenue(sale)
+    for group_key, entries in sales_index_data.get("by_group", {}).items():
+        historical_clients.add(group_key)
+        for item in entries:
+            year = int(item.get("sale_year") or 0)
+            month = int(item.get("sale_month") or 0)
+            net_revenue = number_value(item.get("net_revenue"))
             entry = sales_by_client.setdefault(group_key, {
                 "total": 0.0,
                 "years": {str(year_value): 0.0 for year_value in years},
@@ -2818,29 +2888,22 @@ def day_by_day_weekend_payload(company_id: str, vendor_id_value: str, day_value:
 
 
 def vendor_client_sales_stats(company_id: str) -> dict:
-    dependencies = [economic_groups_file(company_id)]
-    for sale_company_id in vendor_sales_company_ids(company_id):
-        dependencies.append(clients_file(sale_company_id))
-        dependencies.append(sales_file(sale_company_id))
+    dependencies = sales_index_dependencies(company_id)
     return cached_payload(("vendor_client_sales_stats", company_id), dependencies, lambda: build_vendor_client_sales_stats(company_id))
 
 
 def build_vendor_client_sales_stats(company_id: str) -> dict:
     sales_stats = {}
     group_index = economic_group_index(company_id)
-    client_lookup = all_client_record_map(company_id)
-    for sale_company_id in vendor_sales_company_ids(company_id):
-        for sale in load_json(sales_file(sale_company_id), []):
-            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
-                continue
-            client_id = normalize_identifier(sale.get("ID_CL"))
-            if not client_id:
-                continue
-            sale_client = client_lookup.get(client_id, {})
-            stats_key = economic_group_key_from_index(group_index, client_id, sale_client, sale)
-            sale_date = normalize_record(sale.get("NF_EMI"))
-            sale_year = record_year(sale.get("NF_EMI"))
-            net_revenue = sale_net_revenue(sale)
+    sales_index_data = vendor_sales_index(company_id)
+    for group_key, entries in sales_index_data.get("by_group", {}).items():
+        for item in entries:
+            sale = item.get("sale") or {}
+            sale_date = str(item.get("sale_date") or "")
+            sale_year = int(item.get("sale_year") or 0)
+            net_revenue = number_value(item.get("net_revenue"))
+            client_id = normalize_identifier(item.get("client_id"))
+            stats_key = group_key
             entry = sales_stats.setdefault(stats_key, {
                 "historical": False,
                 "current_year_purchases": 0,
@@ -2850,11 +2913,11 @@ def build_vendor_client_sales_stats(company_id: str) -> dict:
                 "purchase_notes": {},
             })
             entry["historical"] = True
-            note_id = normalize_identifier(sale.get("ID_NF") or sale.get("NF_NUM") or f"{sale_date}|{sale.get('ID_PRNF')}")
+            note_id = normalize_identifier(sale.get("id_nf") or sale.get("nf_num") or f"{sale_date}|{sale.get('id_prnf')}")
             if note_id:
                 note = entry["purchase_notes"].setdefault(note_id, {
-                    "id_nf": sale.get("ID_NF") or "",
-                    "nf_num": sale.get("NF_NUM") or "",
+                    "id_nf": sale.get("id_nf") or "",
+                    "nf_num": sale.get("nf_num") or "",
                     "data": sale_date,
                     "ano": sale_year,
                     "faturamento_liquido": 0.0,
@@ -2864,12 +2927,12 @@ def build_vendor_client_sales_stats(company_id: str) -> dict:
                 note["faturamento_liquido"] += net_revenue
                 note["itens"] += 1
                 note.setdefault("itens_detalhe", []).append({
-                    "referencia": normalize_record(sale.get("PR_COD")),
-                    "descricao": normalize_record(sale.get("PR_DES")),
-                    "quantidade": round(number_value(sale.get("PR_QTD")), 3),
+                    "referencia": sale.get("referencia") or "",
+                    "descricao": sale.get("descricao") or "",
+                    "quantidade": round(number_value(sale.get("quantidade")), 3),
                     "faturamento_liquido": round(net_revenue, 2),
-                    "agrp": normalize_record(sale.get("AGRP")),
-                    "origem": normalize_record(sale.get("Origem")),
+                    "agrp": sale.get("agrp") or "",
+                    "origem": sale.get("origem") or "",
                 })
                 if sale_date and (not note.get("data") or str(sale_date) > str(note.get("data"))):
                     note["data"] = sale_date
@@ -2933,6 +2996,24 @@ def vendor_day_by_day_client_row(client_id: str, client: dict, stats: dict, stat
 
 
 def vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str, data: dict) -> list[dict]:
+    dependencies = [
+        vendors_file(company_id),
+        clients_file(company_id),
+        blocked_clients_file(company_id),
+        region_assignments_file(company_id),
+        economic_groups_file(company_id),
+        vendor_day_by_day_file(company_id),
+        vendor_day_by_day_operational_file(company_id),
+    ]
+    dependencies.extend(sales_index_dependencies(company_id))
+    return cached_payload(
+        ("vendor_day_by_day_recontact_candidates", company_id, vendor_id_value),
+        dependencies,
+        lambda: build_vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data),
+    )
+
+
+def build_vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str, data: dict) -> list[dict]:
     _vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
     sales_stats = vendor_client_sales_stats(company_id)
     blocked_clients = blocked_client_map(company_id)
@@ -2986,6 +3067,23 @@ def vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str
 
 
 def vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
+    dependencies = [
+        vendors_file(company_id),
+        clients_file(company_id),
+        blocked_clients_file(company_id),
+        region_assignments_file(company_id),
+        economic_groups_file(company_id),
+    ]
+    dependencies.extend(sales_index_dependencies(company_id))
+    payload = cached_payload(
+        ("vendor_day_by_day_candidates", company_id, vendor_id_value),
+        dependencies,
+        lambda: build_vendor_day_by_day_candidates(company_id, vendor_id_value),
+    )
+    return payload["vendor"], payload["candidates"]
+
+
+def build_vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
     vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
     sales_stats = vendor_client_sales_stats(company_id)
     blocked_clients = blocked_client_map(company_id)
@@ -3015,7 +3113,7 @@ def vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
     candidates["inactive"].sort(key=lambda row: normalize_text(row.get("nome")))
     candidates["inactive"].sort(key=lambda row: row.get("ultima_compra_iso") or "", reverse=True)
     candidates["never"].sort(key=lambda row: normalize_text(row.get("nome")))
-    return vendor, candidates
+    return {"vendor": vendor, "candidates": candidates}
 
 
 def vendor_record_by_id(company_id: str, vendor_id_value: str) -> dict:
@@ -6178,6 +6276,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     max_month_needed = max(month_filter)
 
     group_index = economic_group_index(company_id)
+    sales_index_data = vendor_sales_index(company_id)
     region_group_keys = {
         economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
         for client_id in region_client_ids
@@ -6187,25 +6286,22 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     sales = []
     other_region_sales = []
     vendor_name_key = normalize_text(vendor.get("nome_completo"))
-    for sale_company_id in vendor_sales_company_ids(company_id):
-        for sale in load_json(sales_file(sale_company_id), []):
-            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
-                continue
-            client_id = normalize_identifier(sale.get("ID_CL"))
-            client = client_index.get(client_id)
-            group_key = economic_group_key_from_index(group_index, client_id, client, sale)
-            sale_date = record_date_value(sale.get("NF_EMI"))
-            sale_year = record_year(sale.get("NF_EMI"))
-            sale_month = record_month(sale.get("NF_EMI"))
-            if not sale_date or not sale_year or not sale_month:
-                continue
+    for group_key in region_group_keys:
+        for item in sales_index_data.get("by_group", {}).get(group_key, []):
+            sale_year = int(item.get("sale_year") or 0)
+            sale_month = int(item.get("sale_month") or 0)
             if sale_year > year or (sale_year == year and sale_month > max_month_needed):
                 continue
-            if group_key in region_group_keys:
-                sales.append((sale_date, client_id, sale_year, sale_month, sale_company_id, sale))
+            sales.append(item)
+    if vendor_name_key:
+        for item in sales_index_data.get("by_vendor_name", {}).get(vendor_name_key, []):
+            sale_year = int(item.get("sale_year") or 0)
+            sale_month = int(item.get("sale_month") or 0)
+            if sale_year > year or (sale_year == year and sale_month > max_month_needed):
                 continue
-            if vendor_name_key and normalize_text(sale.get("VN_NOM")) == vendor_name_key:
-                other_region_sales.append((sale_date, client_id, sale_year, sale_month, sale_company_id, sale))
+            if item.get("group_key") in region_group_keys:
+                continue
+            other_region_sales.append(item)
     sales_collected_at = time.perf_counter()
 
     first_purchase_by_economic_group = {}
@@ -6215,11 +6311,13 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     new_clients_by_month = {str(month): set() for month in range(1, 13)}
     sem_giro_commission_by_month = {str(month): 0.0 for month in range(1, 13)}
 
-    for _sale_date, _client_id, sale_year, sale_month, _sale_company_id, sale in other_region_sales:
+    for item in other_region_sales:
+        sale_year = int(item.get("sale_year") or 0)
+        sale_month = int(item.get("sale_month") or 0)
         if sale_year == year and sale_month in month_filter:
             achievements[str(sale_month)]["vendas_liquidas_outras_regioes"] = (
                 achievements[str(sale_month)].get("vendas_liquidas_outras_regioes", 0.0)
-                + sale_net_revenue(sale)
+                + number_value(item.get("net_revenue"))
             )
     other_region_done_at = time.perf_counter()
 
@@ -6227,15 +6325,18 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     if not fast_mode:
         target_sales_for_sem_giro = [
             item for item in sales + other_region_sales
-            if item[2] == year and item[3] in month_filter
+            if int(item.get("sale_year") or 0) == year and int(item.get("sale_month") or 0) in month_filter
         ]
         target_refs_by_company = defaultdict(set)
         month_start_by_company_ref = {}
-        for _sale_date, _client_id, sale_year, sale_month, sale_company_id, sale in target_sales_for_sem_giro:
-            ref_key = normalize_text(sale.get("PR_COD"))
+        for item in target_sales_for_sem_giro:
+            ref_key = item.get("ref_key") or ""
             if not ref_key:
                 continue
+            sale_company_id = item.get("sale_company_id") or ""
             target_refs_by_company[sale_company_id].add(ref_key)
+            sale_year = int(item.get("sale_year") or 0)
+            sale_month = int(item.get("sale_month") or 0)
             month_start = date(sale_year, sale_month, 1)
             key = (sale_company_id, ref_key)
             current_start = month_start_by_company_ref.get(key)
@@ -6246,18 +6347,19 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
         for sale_company_id, ref_keys in target_refs_by_company.items():
             if sale_company_id not in COMPANIES:
                 continue
-            for product_sale in load_json(sales_file(sale_company_id), []):
-                ref_key = normalize_text(product_sale.get("PR_COD"))
-                if ref_key not in ref_keys:
-                    continue
-                sale_date_value = record_date_value(product_sale.get("NF_EMI"))
+            company_ref_index = sales_index_data.get("by_company_ref", {}).get(sale_company_id, {})
+            for ref_key in ref_keys:
                 month_start = month_start_by_company_ref.get((sale_company_id, ref_key))
-                if not sale_date_value or not month_start or sale_date_value >= month_start:
+                if not month_start:
                     continue
-                key = (sale_company_id, ref_key)
-                current_date = previous_product_sale_by_company_ref.get(key)
-                if current_date is None or sale_date_value > current_date:
-                    previous_product_sale_by_company_ref[key] = sale_date_value
+                for product_sale in company_ref_index.get(ref_key, []):
+                    sale_date_value = record_date_value(product_sale.get("sale_date"))
+                    if not sale_date_value or sale_date_value >= month_start:
+                        continue
+                    key = (sale_company_id, ref_key)
+                    current_date = previous_product_sale_by_company_ref.get(key)
+                    if current_date is None or sale_date_value > current_date:
+                        previous_product_sale_by_company_ref[key] = sale_date_value
 
         stock_bonus_by_company = {}
         for sale_company_id, ref_keys in target_refs_by_company.items():
@@ -6276,11 +6378,17 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
                         values[ref_key] = number_value(record.get("Bonus"))
             stock_bonus_by_company[sale_company_id] = values
 
-        for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(
+        for item in sorted(
             target_sales_for_sem_giro,
-            key=lambda item: (item[0], normalize_text(item[5].get("PR_COD")), item[1]),
+            key=lambda entry: (entry.get("sale_date") or "", normalize_text((entry.get("sale") or {}).get("referencia")), entry.get("client_id") or ""),
         ):
-            ref_key = normalize_text(sale.get("PR_COD"))
+            sale = item.get("sale") or {}
+            sale_company_id = item.get("sale_company_id") or ""
+            sale_date = record_date_value(item.get("sale_date"))
+            sale_year = int(item.get("sale_year") or 0)
+            sale_month = int(item.get("sale_month") or 0)
+            client_id = item.get("client_id") or ""
+            ref_key = item.get("ref_key") or ""
             if not ref_key:
                 continue
             month_start = date(sale_year, sale_month, 1) if sale_year and sale_month else None
@@ -6289,10 +6397,10 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             days_without_movement_base = (previous_month_end - previous_product_sale).days if previous_product_sale and previous_month_end else 0
             if previous_product_sale and days_without_movement_base > 180:
                 month_key = str(sale_month)
-                net_revenue = sale_net_revenue(sale)
+                net_revenue = number_value(item.get("net_revenue"))
                 month_objectives = ((goal_record.get("months") or {}).get(month_key) or {}).get("objetivos") or {}
                 sem_giro_goal = month_objectives.get("sem_giro") if isinstance(month_objectives.get("sem_giro"), dict) else {}
-                sale_qty = number_value(sale.get("PR_QTD"))
+                sale_qty = number_value(sale.get("quantidade"))
                 min_qty = number_value(sem_giro_goal.get("qty_minima"))
                 min_value = number_value(sem_giro_goal.get("valor_minimo"))
                 if (not min_qty or sale_qty >= min_qty) and (not min_value or net_revenue >= min_value):
@@ -6301,18 +6409,18 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
                         bonus_percent = max(0.0, number_value(sem_giro_goal.get("meta")))
                     if bonus_percent <= 0:
                         bonus_percent = 1.5
-                    gross_total = number_value(sale.get("PR_SBT"))
+                    gross_total = number_value(sale.get("subtotal"))
                     unit_value = gross_total / sale_qty if sale_qty else 0.0
                     bonus_value = net_revenue * bonus_percent / 100
                     achievements[month_key]["sem_giro"] += net_revenue
                     sem_giro_commission_by_month[month_key] += bonus_value
                     sem_giro_details_by_month[month_key].append({
-                        "nota_fiscal": normalize_record(sale.get("NF_NUM") or sale.get("ID_NF")),
+                        "nota_fiscal": normalize_record(sale.get("nf_num") or sale.get("id_nf")),
                         "data_emissao": format_date_br(sale_date),
                         "codigo_cliente": normalize_record(client_id),
-                        "nome_cliente": normalize_record(sale.get("CL_NOM")),
-                        "referencia_produto": normalize_record(sale.get("PR_COD")),
-                        "descricao_produto": normalize_record(sale.get("PR_DES")),
+                        "nome_cliente": normalize_record(sale.get("cliente_nome")),
+                        "referencia_produto": normalize_record(ref_key),
+                        "descricao_produto": normalize_record(sale.get("descricao")),
                         "dias_sem_movimento": format_days_without_movement(days_without_movement_base),
                         "dias_sem_movimento_numero": days_without_movement_base,
                         "quantidade": round(sale_qty, 3),
@@ -6323,29 +6431,38 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
                         "bonificacao": round(bonus_value, 2),
                     })
     sem_giro_done_at = time.perf_counter()
-    for sale_date, client_id, sale_year, sale_month, sale_company_id, sale in sorted(sales, key=lambda item: (item[0], item[1])):
+    for item in sorted(sales, key=lambda entry: (entry.get("sale_date") or "", entry.get("client_id") or "")):
+        client_id = item.get("client_id") or ""
         client = client_index.get(client_id)
+        sale_date = record_date_value(item.get("sale_date"))
+        sale_year = int(item.get("sale_year") or 0)
+        sale_month = int(item.get("sale_month") or 0)
+        sale_company_id = item.get("sale_company_id") or ""
+        sale = item.get("sale") or {}
+        if not sale_date:
+            previous_purchase_by_group[item.get("group_key") or economic_group_key_from_index(group_index, client_id, client, sale)] = sale_date
+            continue
         ge_group_key = economic_group_master_id_from_index(group_index, client_id)
-        group_key = economic_group_key_from_index(group_index, client_id, client, sale)
-        ref_key = normalize_text(sale.get("PR_COD"))
+        group_key = item.get("group_key") or economic_group_key_from_index(group_index, client_id, client, sale)
+        ref_key = item.get("ref_key") or ""
         first_purchase_by_economic_group.setdefault(group_key, sale_date)
         if sale_year != year or sale_month not in month_filter:
             previous_purchase_by_group[group_key] = sale_date
             continue
 
         month_key = str(sale_month)
-        net_revenue = sale_net_revenue(sale)
+        net_revenue = number_value(item.get("net_revenue"))
         achievements[month_key]["vendas_liquidas"] += net_revenue
         active_clients_by_month[month_key].add(group_key)
         previous_purchase = previous_purchase_by_group.get(group_key)
         if previous_purchase and (sale_date - previous_purchase).days > 180:
             reactivated_by_month[month_key].add(group_key)
         client_import_date = record_date_value((client or {}).get("_importado_em"))
-        is_new_registered_client = bool((client or {}).get("_novo_cliente_cadastrado")) and client_import_date and sale_date >= client_import_date
+        is_new_registered_client = bool((client or {}).get("_novo_cliente_cadastrado")) and client_import_date and sale_date and sale_date >= client_import_date
         if (
             is_new_registered_client
             and first_purchase_by_economic_group.get(group_key) == sale_date
-            and not is_excluded_group_sale(sale_company_id, sale.get("CL_NOM"))
+            and not is_excluded_group_sale(sale_company_id, sale.get("cliente_nome"))
             and not is_group_company_client(client or {})
             and not ge_group_key
         ):
