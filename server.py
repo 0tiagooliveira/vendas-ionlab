@@ -826,7 +826,7 @@ def compact_sale_snapshot(sale: dict) -> dict:
 
 
 def vendor_sales_index(company_id: str):
-    return cached_payload(("vendor_sales_index", company_id), sales_index_dependencies(company_id), lambda: build_vendor_sales_index(company_id))
+    return cached_payload(("vendor_sales_index_v2", company_id), sales_index_dependencies(company_id), lambda: build_vendor_sales_index(company_id))
 
 
 def build_vendor_sales_index(company_id: str) -> dict:
@@ -2947,7 +2947,7 @@ def day_by_day_weekend_payload(company_id: str, vendor_id_value: str, day_value:
 
 def vendor_client_sales_stats(company_id: str) -> dict:
     dependencies = sales_index_dependencies(company_id)
-    return cached_payload(("vendor_client_sales_stats", company_id), dependencies, lambda: build_vendor_client_sales_stats(company_id))
+    return cached_payload(("vendor_client_sales_stats_v2", company_id), dependencies, lambda: build_vendor_client_sales_stats(company_id))
 
 
 def build_vendor_client_sales_stats(company_id: str) -> dict:
@@ -3030,7 +3030,7 @@ def vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str
     ]
     dependencies.extend(sales_index_dependencies(company_id))
     return cached_payload(
-        ("vendor_day_by_day_recontact_candidates", company_id, vendor_id_value),
+        ("vendor_day_by_day_recontact_candidates_v2", company_id, vendor_id_value),
         dependencies,
         lambda: build_vendor_day_by_day_recontact_candidates(company_id, vendor_id_value, data),
     )
@@ -3114,7 +3114,7 @@ def vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
     ]
     dependencies.extend(sales_index_dependencies(company_id))
     payload = cached_payload(
-        ("vendor_day_by_day_candidates", company_id, vendor_id_value),
+        ("vendor_day_by_day_candidates_v2", company_id, vendor_id_value),
         dependencies,
         lambda: build_vendor_day_by_day_candidates(company_id, vendor_id_value),
     )
@@ -3599,7 +3599,7 @@ def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_k
 def vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: str = ""):
     normalized_day_key = day_by_day_date_value(day_key).isoformat()
     return cached_payload(
-        ("vendor_day_by_day", company_id, vendor_id_value, normalized_day_key),
+        ("vendor_day_by_day_v2", company_id, vendor_id_value, normalized_day_key),
         vendor_day_by_day_dependencies(company_id, vendor_id_value, normalized_day_key),
         lambda: build_vendor_day_by_day_payload(company_id, vendor_id_value, normalized_day_key),
     )
@@ -6727,7 +6727,7 @@ def vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_value=
     year = int(optional_number_value(year_value) or CURRENT_YEAR)
     month = str(month_value or "")
     return cached_payload(
-        ("vendor_goals", company_id, vendor_id_value, str(year), month, "1" if fast_mode else "0"),
+        ("vendor_goals_v2", company_id, vendor_id_value, str(year), month, "1" if fast_mode else "0"),
         vendor_goals_dependencies(company_id, fast_mode),
         lambda: build_vendor_goals_payload(company_id, vendor_id_value, year_value, month_value, fast_value),
     )
