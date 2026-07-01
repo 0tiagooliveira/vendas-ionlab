@@ -906,18 +906,12 @@ def vendor_goals_dependencies(company_id: str, fast_mode: bool) -> list[Path]:
 
 def vendor_day_by_day_dependencies(company_id: str, vendor_id_value: str, day_key: str = "") -> list[Path]:
     day_value = day_by_day_date_value(day_key)
-    current_key = day_value.isoformat()
-    previous_key = previous_day_by_day_business_day(day_value).isoformat()
     dependencies = [
         vendors_file(company_id),
         clients_file(company_id),
         blocked_clients_file(company_id),
         region_assignments_file(company_id),
         economic_groups_file(company_id),
-        vendor_day_by_day_file(company_id),
-        vendor_day_by_day_operational_file(company_id),
-        vendor_day_by_day_queue_file(company_id, current_key, vendor_id_value),
-        vendor_day_by_day_queue_file(company_id, previous_key, vendor_id_value),
     ]
     dependencies.extend(sales_file(current_company_id) for current_company_id in vendor_sales_company_ids(company_id))
     return dependencies
