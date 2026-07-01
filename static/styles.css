@@ -1767,6 +1767,17 @@ h3 {
   width: 100%;
 }
 
+.daybyday-purchases-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 10px;
+}
+
+.daybyday-purchases-summary strong {
+  color: var(--brand-dark);
+}
+
 .daybyday-purchases-panel h5 {
   color: var(--brand-dark);
   font-size: 13px;

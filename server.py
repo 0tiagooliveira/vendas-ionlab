@@ -3678,6 +3678,62 @@ def vendor_day_by_day_client_payload(company_id: str, vendor_id_value: str, clie
     }
 
 
+def vendor_day_by_day_client_purchases_dependencies(company_id: str) -> list[Path]:
+    return sales_index_dependencies(company_id)
+
+
+def vendor_day_by_day_client_purchases_payload(company_id: str, vendor_id_value: str, client_id: str, year_value=None) -> dict:
+    if company_id not in COMPANIES:
+        raise ValueError("Empresa invalida.")
+    client_id = normalize_identifier(client_id)
+    if not client_id:
+        raise ValueError("Cliente invalido.")
+
+    year = int(optional_number_value(year_value) or CURRENT_YEAR)
+    client_map = all_client_record_map(company_id)
+    client = client_map.get(client_id, {})
+    group_index = economic_group_index(company_id)
+    group_key = economic_group_key_from_index(group_index, client_id, client)
+    sales_index_data = vendor_sales_index(company_id)
+    rows = []
+    for item in (sales_index_data.get("by_group", {}).get(group_key, []) or []):
+        if int(item.get("sale_year") or 0) != year:
+            continue
+        sale = item.get("sale") or {}
+        rows.append({
+            "empresa": dashboard_company_name(item.get("sale_company_id") or company_id),
+            "empresa_id": str(item.get("sale_company_id") or company_id),
+            "data": item.get("sale_date") or "",
+            "data_label": display_date_br(item.get("sale_date")),
+            "nf_num": sale.get("nf_num") or "",
+            "referencia": sale.get("referencia") or item.get("ref_key") or "",
+            "descricao": sale.get("descricao") or "",
+            "quantidade": number_value(sale.get("quantidade")),
+            "subtotal": round(number_value(sale.get("subtotal") or item.get("net_revenue")), 2),
+            "cliente_nome": sale.get("cliente_nome") or "",
+            "vendedor_nome": sale.get("vendedor_nome") or "",
+        })
+    rows.sort(key=lambda row: (str(row.get("data") or ""), str(row.get("nf_num") or ""), str(row.get("referencia") or "")), reverse=True)
+    total_revenue = round(sum(number_value(row.get("subtotal")) for row in rows), 2)
+    return {
+        "empresa": COMPANIES[company_id],
+        "empresa_id": company_id,
+        "vendedor_id": vendor_id_value,
+        "cliente": {
+            "id": client_id,
+            "nome": normalize_record(client.get("NOM")),
+            "documento": normalize_record(client.get("CGC")),
+            "cidade": normalize_record(client.get("CID")),
+            "uf": normalize_record(client.get("UF")),
+        },
+        "ano": year,
+        "grupo": group_key,
+        "total_pedidos": len(rows),
+        "faturamento_total": total_revenue,
+        "rows": rows,
+    }
+
+
 def vendor_day_by_day_contact_summary(form: dict) -> str:
     if day_by_day_is_no(form.get("cliente_revenda")):
         return "Cliente informado como nao revenda."
@@ -11897,6 +11953,23 @@ class CRMHandler(BaseHTTPRequestHandler):
             day_key = params.get("date", [""])[0]
             try:
                 return self.send_json(vendor_day_by_day_client_payload(company_id, vendor_id_value, client_id, day_key))
+            except Exception as exc:
+                return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/vendor-day-by-day/client-purchases":
+            params = parse_qs(parsed.query)
+            company_id = params.get("company", ["ionlab"])[0]
+            vendor_id_value = params.get("vendor_id", [""])[0]
+            client_id = params.get("client_id", [""])[0]
+            year_value = params.get("year", [""])[0]
+            try:
+                year_key = str(int(optional_number_value(year_value) or CURRENT_YEAR))
+                payload = cached_payload(
+                    ("vendor_day_by_day_client_purchases_v2", company_id, normalize_identifier(client_id), year_key),
+                    vendor_day_by_day_client_purchases_dependencies(company_id),
+                    lambda: vendor_day_by_day_client_purchases_payload(company_id, vendor_id_value, client_id, year_value),
+                )
+                return self.send_json(payload)
             except Exception as exc:
                 return self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 

@@ -121,6 +121,7 @@ let currentVendorCommissionMemory = new Map();
 let currentVendorAboutGoalPayload = null;
 let currentVendorDayByDayPayload = null;
 let currentVendorDayByDayClient = null;
+let currentVendorDayByDayPurchaseCache = new Map();
 let currentVendorAgendaPayload = null;
 let currentVendorContactReportPayload = null;
 let currentVendorDailyContactsPayload = null;
@@ -3003,6 +3004,7 @@ async function loadVendorDayByDay() {
     const payload = await fetchJson(`/api/vendor-day-by-day?company=${encodeURIComponent(route.company)}&vendor_id=${encodeURIComponent(route.vendorId)}`);
     currentVendorDayByDayPayload = payload;
     currentVendorDayByDayClient = null;
+    currentVendorDayByDayPurchaseCache = new Map();
     renderVendorDayByDay();
     status.textContent = payload.aviso_gravacao
       ? payload.aviso_gravacao
@@ -3020,6 +3022,7 @@ function renderVendorDayByDay() {
   if (!payload || !summary || !content) {
     return;
   }
+  currentVendorDayByDayPurchaseCache = currentVendorDayByDayPurchaseCache || new Map();
   if (payload.dia_util === false) {
     summary.innerHTML = `
       <article class="daybyday-progress-card">
@@ -3071,6 +3074,9 @@ function renderVendorDayByDay() {
   `;
   content.querySelectorAll("[data-daybyday-client]").forEach((button) => {
     button.addEventListener("click", () => openVendorDayByDayClient(button.dataset.daybydayClient));
+  });
+  content.querySelectorAll("[data-daybyday-year]").forEach((button) => {
+    button.addEventListener("click", () => openVendorDayByDayClientPurchases(button.dataset.daybydayClient, button.dataset.daybydayYearValue));
   });
 }
 
@@ -3128,6 +3134,7 @@ function renderVendorDayByDayList(title, rows, statusKey) {
             </div>
             ${statusKey === "recontact" && client.resumo_contato ? `<span>${escapeHtml(client.resumo_contato)}</span>` : ""}
             ${renderVendorDayByDayYearCounts(client)}
+            <div class="daybyday-purchases-panel" data-daybyday-year-panel="${escapeHtml(client.id)}"></div>
             <div class="daybyday-card-actions">
               <button class="mini-action" type="button" data-daybyday-client="${escapeHtml(client.id)}">${client.atendimento_salvo ? "Editar ficha" : "Abrir ficha"}</button>
             </div>
@@ -3147,13 +3154,98 @@ function renderVendorDayByDayYearCounts(client) {
   return `
     <div class="daybyday-year-counts">
       ${years.map((year) => `
-        <span>
+        <button type="button" data-daybyday-year="${escapeHtml(client.id)}" data-daybyday-year-value="${escapeHtml(year)}">
           <small>${escapeHtml(year)}</small>
           <strong>${formatNumber.format(Number(counts[year] || 0))}</strong>
-        </span>
+        </button>
       `).join("")}
     </div>
   `;
+}
+
+function renderVendorDayByDayClientPurchases(detail) {
+  const rows = detail.rows || [];
+  const totalRevenue = formatCurrency2.format(Number(detail.faturamento_total || 0));
+  const client = detail.cliente || {};
+  return `
+    <h5>Compras de ${escapeHtml(String(detail.ano || ""))} | ${formatNumber.format(rows.length)} pedido(s) | ${totalRevenue}</h5>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>NF</th>
+            <th>Referencia</th>
+            <th>Descricao</th>
+            <th>Qtd</th>
+            <th>Total</th>
+            <th>Empresa</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              <td>${escapeHtml(row.data_label || row.data || "")}</td>
+              <td>${escapeHtml(row.nf_num || "")}</td>
+              <td>${escapeHtml(row.referencia || "")}</td>
+              <td>${escapeHtml(row.descricao || "")}</td>
+              <td>${formatNumber2.format(Number(row.quantidade || 0))}</td>
+              <td>${formatCurrency2.format(Number(row.subtotal || 0))}</td>
+              <td>${escapeHtml(row.empresa || "")}</td>
+            </tr>
+          `).join("") || '<tr><td colspan="7" class="muted">Nenhuma compra encontrada para este ano.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+    <div class="daybyday-purchases-summary">
+      <span><strong>${escapeHtml(client.nome || "")}</strong></span>
+      <span>${escapeHtml(client.documento || "Sem documento")}</span>
+      <span>${escapeHtml([client.cidade, client.uf].filter(Boolean).join(" - ") || "Localidade nao informada")}</span>
+    </div>
+  `;
+}
+
+async function openVendorDayByDayClientPurchases(clientId, year) {
+  const route = vendorPageRoute();
+  const payload = currentVendorDayByDayPayload;
+  if (!route || !payload || !clientId || !year) {
+    return;
+  }
+  const panel = Array.from(document.querySelectorAll("[data-daybyday-year-panel]")).find((element) => element.dataset.daybydayYearPanel === clientId);
+  if (!panel) {
+    return;
+  }
+  if (panel.classList.contains("active") && panel.dataset.year === String(year)) {
+    panel.classList.remove("active");
+    panel.dataset.year = "";
+    panel.innerHTML = "";
+    return;
+  }
+  panel.classList.add("active");
+  panel.dataset.year = String(year);
+  panel.innerHTML = '<div class="muted">Carregando compras do ano selecionado...</div>';
+  try {
+    const cacheKey = `${clientId}|${year}`;
+    let detail = currentVendorDayByDayPurchaseCache.get(cacheKey);
+    if (!detail) {
+      const params = new URLSearchParams({
+        company: route.company,
+        vendor_id: route.vendorId,
+        client_id: clientId,
+        year: String(year),
+      });
+      detail = await fetchJson(`/api/vendor-day-by-day/client-purchases?${params.toString()}`);
+      currentVendorDayByDayPurchaseCache.set(cacheKey, detail);
+    }
+    if (panel.dataset.year !== String(year)) {
+      return;
+    }
+    panel.innerHTML = renderVendorDayByDayClientPurchases(detail);
+  } catch (error) {
+    if (panel.dataset.year === String(year)) {
+      panel.innerHTML = `<div class="empty-state compact">${escapeHtml(error.message)}</div>`;
+    }
+  }
 }
 
 async function openVendorDayByDayClient(clientId) {
