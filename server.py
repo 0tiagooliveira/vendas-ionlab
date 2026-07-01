@@ -830,12 +830,16 @@ def vendor_sales_index(company_id: str):
 
 
 def build_vendor_sales_index(company_id: str) -> dict:
+    started_at = time.perf_counter()
     group_index = economic_group_index(company_id)
     client_lookup = all_client_record_map(company_id)
     by_group = {}
     by_vendor_name = {}
     by_company_ref = {}
     by_client = {}
+    by_group_month_revenue = {}
+    by_vendor_name_month_revenue = {}
+    by_month_group_keys = {}
     for sale_company_id in vendor_sales_company_ids(company_id):
         company_refs = by_company_ref.setdefault(sale_company_id, {})
         for sale in load_json(sales_file(sale_company_id), []):
@@ -861,17 +865,56 @@ def build_vendor_sales_index(company_id: str) -> dict:
             }
             by_group.setdefault(group_key, []).append(sale_entry)
             by_client.setdefault(client_id, []).append(sale_entry)
+            month_key = vendor_items_key(sale_entry["sale_year"], sale_entry["sale_month"]) if sale_entry["sale_year"] and sale_entry["sale_month"] else ""
+            if month_key:
+                group_months = by_group_month_revenue.setdefault(group_key, {})
+                group_bucket = group_months.setdefault(month_key, {"net_revenue": 0.0, "sale_count": 0})
+                group_bucket["net_revenue"] += sale_entry["net_revenue"]
+                group_bucket["sale_count"] += 1
+                by_month_group_keys.setdefault(month_key, set()).add(group_key)
             vendor_name_key = sale_entry["vendor_name_key"]
             if vendor_name_key:
                 by_vendor_name.setdefault(vendor_name_key, []).append(sale_entry)
+                if month_key:
+                    vendor_months = by_vendor_name_month_revenue.setdefault(vendor_name_key, {})
+                    vendor_bucket = vendor_months.setdefault(month_key, {"net_revenue": 0.0, "sale_count": 0})
+                    vendor_bucket["net_revenue"] += sale_entry["net_revenue"]
+                    vendor_bucket["sale_count"] += 1
             ref_key = sale_entry["ref_key"]
             if ref_key:
                 company_refs.setdefault(ref_key, []).append(sale_entry)
+    sale_sort_key = lambda item: (
+        str(item.get("sale_date") or ""),
+        str(item.get("client_id") or ""),
+        str(item.get("ref_key") or ""),
+        str(item.get("id_nf") or ""),
+    )
+    for rows in by_group.values():
+        rows.sort(key=sale_sort_key)
+    for rows in by_vendor_name.values():
+        rows.sort(key=sale_sort_key)
+    for refs in by_company_ref.values():
+        for rows in refs.values():
+            rows.sort(key=sale_sort_key)
+    by_month_group_keys = {
+        month_key: sorted(group_keys)
+        for month_key, group_keys in by_month_group_keys.items()
+    }
+    perf_log(
+        "vendor_sales_index",
+        company=company_id,
+        groups=len(by_group),
+        vendor_names=len(by_vendor_name),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+    )
     return {
         "by_group": by_group,
         "by_vendor_name": by_vendor_name,
         "by_company_ref": by_company_ref,
         "by_client": by_client,
+        "by_group_month_revenue": by_group_month_revenue,
+        "by_vendor_name_month_revenue": by_vendor_name_month_revenue,
+        "by_month_group_keys": by_month_group_keys,
     }
 
 
@@ -2427,6 +2470,7 @@ def vendor_region_client_context(company_id: str, vendor_id_value: str):
 
 
 def build_vendor_region_client_context(company_id: str, vendor_id_value: str):
+    started_at = time.perf_counter()
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
     if not vendor_id_value:
@@ -2451,7 +2495,14 @@ def build_vendor_region_client_context(company_id: str, vendor_id_value: str):
                 client_index[client_id] = client
 
     region_client_ids = clients_for_vendor_region(company_id, vendor_id_value, client_index, vendor)
-
+    perf_log(
+        "vendor_region_client_context",
+        company=company_id,
+        vendor_id=vendor_id_value,
+        clients=len(client_index),
+        region_clients=len(region_client_ids),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+    )
     return vendor, client_index, region_client_ids
 
 
@@ -2900,36 +2951,49 @@ def vendor_client_sales_stats(company_id: str) -> dict:
 
 
 def build_vendor_client_sales_stats(company_id: str) -> dict:
+    started_at = time.perf_counter()
     sales_stats = {}
     group_index = economic_group_index(company_id)
     sales_index_data = vendor_sales_index(company_id)
+    by_group_month_revenue = sales_index_data.get("by_group_month_revenue", {})
     for group_key, entries in sales_index_data.get("by_group", {}).items():
-        for item in entries:
-            sale = item.get("sale") or {}
-            sale_date = str(item.get("sale_date") or "")
-            sale_year = int(item.get("sale_year") or 0)
-            net_revenue = number_value(item.get("net_revenue"))
-            stats_key = group_key
-            entry = sales_stats.setdefault(stats_key, {
-                "historical": False,
-                "current_year_purchases": 0,
-                "current_year_revenue": 0.0,
-                "last_purchase": None,
-                "last_purchase_revenue": 0.0,
-                "purchase_counts_by_year": {str(year): 0 for year in range(START_YEAR, CURRENT_YEAR + 1)},
-            })
-            entry["historical"] = True
-            if sale_date:
-                if entry["last_purchase"] is None or str(sale_date) > str(entry["last_purchase"]):
-                    entry["last_purchase"] = sale_date
-                    entry["last_purchase_revenue"] = net_revenue
-                elif str(sale_date) == str(entry["last_purchase"]):
-                    entry["last_purchase_revenue"] += net_revenue
+        stats_key = group_key
+        entry = sales_stats.setdefault(stats_key, {
+            "historical": False,
+            "current_year_purchases": 0,
+            "current_year_revenue": 0.0,
+            "last_purchase": None,
+            "last_purchase_revenue": 0.0,
+            "purchase_counts_by_year": {str(year): 0 for year in range(START_YEAR, CURRENT_YEAR + 1)},
+        })
+        entry["historical"] = True
+        if entries:
+            last_purchase_date = str(entries[-1].get("sale_date") or "")
+            if last_purchase_date:
+                entry["last_purchase"] = last_purchase_date
+                last_purchase_revenue = 0.0
+                for item in reversed(entries):
+                    if str(item.get("sale_date") or "") != last_purchase_date:
+                        break
+                    last_purchase_revenue += number_value(item.get("net_revenue"))
+                entry["last_purchase_revenue"] = round(last_purchase_revenue, 2)
+        for month_key, bucket in (by_group_month_revenue.get(group_key) or {}).items():
+            try:
+                sale_year = int(str(month_key)[:4])
+            except Exception:
+                continue
+            sale_count = int(bucket.get("sale_count") or 0)
             if START_YEAR <= sale_year <= CURRENT_YEAR:
-                entry["purchase_counts_by_year"][str(sale_year)] += 1
+                entry["purchase_counts_by_year"][str(sale_year)] += sale_count
             if sale_year == CURRENT_YEAR:
-                entry["current_year_purchases"] += 1
-                entry["current_year_revenue"] += net_revenue
+                entry["current_year_purchases"] += sale_count
+                entry["current_year_revenue"] += number_value(bucket.get("net_revenue"))
+    perf_log(
+        "vendor_client_sales_stats",
+        company=company_id,
+        groups=len(sales_index_data.get("by_group", {})),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+    )
     return sales_stats
 
 
@@ -2973,8 +3037,13 @@ def vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str
 
 
 def build_vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_value: str, data: dict) -> list[dict]:
+    started_at = time.perf_counter()
+    context_started_at = time.perf_counter()
     _vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+    context_done_at = time.perf_counter()
+    sales_stats_started_at = time.perf_counter()
     sales_stats = vendor_client_sales_stats(company_id)
+    sales_stats_done_at = time.perf_counter()
     blocked_clients = blocked_client_map(company_id)
     group_index = economic_group_index(company_id)
     all_clients = dict(all_client_record_map(company_id))
@@ -3022,10 +3091,20 @@ def build_vendor_day_by_day_recontact_candidates(company_id: str, vendor_id_valu
         })
         rows.append(row)
     rows.sort(key=lambda item: (item.get("primeiro_contato") or "", item.get("primeiro_contato_salvo_em") or ""))
+    perf_log(
+        "vendor_day_by_day_recontact_candidates",
+        company=company_id,
+        vendor_id=vendor_id_value,
+        context_ms=round((context_done_at - context_started_at) * 1000, 2),
+        sales_stats_ms=round((sales_stats_done_at - sales_stats_started_at) * 1000, 2),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        rows=len(rows),
+    )
     return rows
 
 
 def vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
+    started_at = time.perf_counter()
     dependencies = [
         vendors_file(company_id),
         clients_file(company_id),
@@ -3043,8 +3122,13 @@ def vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
 
 
 def build_vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
+    started_at = time.perf_counter()
+    context_started_at = time.perf_counter()
     vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+    context_done_at = time.perf_counter()
+    sales_stats_started_at = time.perf_counter()
     sales_stats = vendor_client_sales_stats(company_id)
+    sales_stats_done_at = time.perf_counter()
     blocked_clients = blocked_client_map(company_id)
     group_index = economic_group_index(company_id)
     all_clients = dict(all_client_record_map(company_id))
@@ -3072,6 +3156,16 @@ def build_vendor_day_by_day_candidates(company_id: str, vendor_id_value: str):
     candidates["inactive"].sort(key=lambda row: normalize_text(row.get("nome")))
     candidates["inactive"].sort(key=lambda row: row.get("ultima_compra_iso") or "", reverse=True)
     candidates["never"].sort(key=lambda row: normalize_text(row.get("nome")))
+    perf_log(
+        "vendor_day_by_day_candidates",
+        company=company_id,
+        vendor_id=vendor_id_value,
+        context_ms=round((context_done_at - context_started_at) * 1000, 2),
+        sales_stats_ms=round((sales_stats_done_at - sales_stats_started_at) * 1000, 2),
+        total_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        inactive=len(candidates["inactive"]),
+        never=len(candidates["never"]),
+    )
     return {"vendor": vendor, "candidates": candidates}
 
 
@@ -3226,6 +3320,22 @@ def vendor_day_by_day_monthly_count(company_id: str, vendor_id_value: str, year:
             events = counter.get("eventos") if isinstance(counter.get("eventos"), list) else []
             total += len(events)
     return total
+
+
+def vendor_day_by_day_monthly_counts(company_id: str, vendor_id_value: str) -> dict:
+    data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
+    counts = {}
+    for key, counter in (data.get("contagens") or {}).items():
+        if str((counter or {}).get("vendor_id") or "") != vendor_id_value:
+            continue
+        day_key = str((counter or {}).get("data") or key.split("|", 1)[0])
+        parsed = record_date_value(day_key)
+        if not parsed or not is_day_by_day_business_day(parsed):
+            continue
+        events = counter.get("eventos") if isinstance(counter.get("eventos"), list) else []
+        month_key = f"{parsed.year:04d}-{parsed.month:02d}"
+        counts[month_key] = counts.get(month_key, 0) + len(events)
+    return counts
 
 
 def build_vendor_day_by_day_payload(company_id: str, vendor_id_value: str, day_key: str = ""):
@@ -5898,6 +6008,16 @@ def vendor_goal_option_record(vendor: dict) -> dict:
     }
 
 
+def vendor_region_group_context(company_id: str, vendor_id_value: str):
+    vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+    group_index = economic_group_index(company_id)
+    region_group_keys = {
+        economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
+        for client_id in region_client_ids
+    }
+    return vendor, client_index, region_client_ids, region_group_keys, group_index, vendor_sales_index(company_id)
+
+
 def vendor_sales_goal_base(company_id: str, vendor_id_value: str, target_year=None):
     year = int(optional_number_value(target_year) or CURRENT_YEAR)
     empty = {
@@ -5910,24 +6030,23 @@ def vendor_sales_goal_base(company_id: str, vendor_id_value: str, target_year=No
         "meses_base": [],
     }
     try:
-        payload = vendor_regions_payload(company_id, vendor_id_value)
+        _vendor, _client_index, _region_client_ids, region_group_keys, _group_index, sales_index_data = vendor_region_group_context(company_id, vendor_id_value)
     except Exception:
         return empty
 
-    grouped = (payload.get("agrupado") or [{}])[0]
-    closed_months = [int(month) for month in payload.get("meses_fechados", [])]
     last_two_years = [base_year for base_year in (year - 2, year - 1) if base_year >= START_YEAR]
-    months_by_year = grouped.get("vendas_meses_anos") or {}
+    if not last_two_years or not region_group_keys:
+        return empty
+    closed_months = max(1, date.today().month - 1) if CURRENT_YEAR == date.today().year else 12
+    by_group_month_revenue = sales_index_data.get("by_group_month_revenue", {})
     monthly_values = []
     for base_year in last_two_years:
-        monthly_values.extend([
-            {
-                "year": base_year,
-                "month": month,
-                "value": number_value((months_by_year.get(str(base_year)) or {}).get(str(month))),
-            }
-            for month in range(1, 13)
-        ])
+        for month in range(1, 13):
+            month_key = vendor_items_key(base_year, month)
+            value = 0.0
+            for group_key in region_group_keys:
+                value += number_value((by_group_month_revenue.get(group_key) or {}).get(month_key, {}).get("net_revenue"))
+            monthly_values.append({"year": base_year, "month": month, "value": value})
     selected_months = sorted(monthly_values, key=lambda item: item["value"], reverse=True)[:3]
 
     base_average = (
@@ -5958,7 +6077,7 @@ def vendor_client_sales_goal_base(company_id: str, vendor_id_value: str, target_
         "meses_base": [],
     }
     try:
-        _vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+        _vendor, _client_index, _region_client_ids, region_group_keys, _group_index, sales_index_data = vendor_region_group_context(company_id, vendor_id_value)
     except Exception:
         return empty
 
@@ -5966,34 +6085,18 @@ def vendor_client_sales_goal_base(company_id: str, vendor_id_value: str, target_
     if not last_two_years:
         return empty
 
-    clients_by_month = {
-        (base_year, month): set()
-        for base_year in last_two_years
-        for month in range(1, 13)
-    }
-    group_index = economic_group_index(company_id)
-    region_group_keys = {
-        economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
-        for client_id in region_client_ids
-    }
-    for sale_company_id in vendor_sales_company_ids(company_id):
-        for sale in load_json(sales_file(sale_company_id), []):
-            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
-                continue
-            sale_year = record_year(sale.get("NF_EMI"))
-            sale_month = record_month(sale.get("NF_EMI"))
-            if sale_year not in last_two_years or not sale_month or not (1 <= sale_month <= 12):
-                continue
-            client_id = normalize_identifier(sale.get("ID_CL"))
-            client = client_index.get(client_id)
-            group_key = economic_group_key_from_index(group_index, client_id, client, sale)
-            if group_key not in region_group_keys:
-                continue
-            clients_by_month[(sale_year, sale_month)].add(group_key)
+    if not region_group_keys:
+        return empty
+    month_group_keys = sales_index_data.get("by_month_group_keys", {})
 
     month_rows = [
-        {"ano": base_year, "mes": month, "clientes": len(client_ids)}
-        for (base_year, month), client_ids in clients_by_month.items()
+        {
+            "ano": base_year,
+            "mes": month,
+            "clientes": len(region_group_keys.intersection(month_group_keys.get(vendor_items_key(base_year, month), []))),
+        }
+        for base_year in last_two_years
+        for month in range(1, 13)
     ]
     best = max(month_rows, key=lambda item: (item["clientes"], item["ano"], item["mes"]), default=None)
     return {
@@ -6026,7 +6129,7 @@ def fast_vendor_goal_bases(company_id: str, vendor_id_value: str, target_year=No
         "fast_mode": True,
     }
     try:
-        _vendor, client_index, region_client_ids = vendor_region_client_context(company_id, vendor_id_value)
+        _vendor, _client_index, _region_client_ids, region_group_keys, _group_index, sales_index_data = vendor_region_group_context(company_id, vendor_id_value)
     except Exception:
         return sales_empty, clients_empty
 
@@ -6034,52 +6137,27 @@ def fast_vendor_goal_bases(company_id: str, vendor_id_value: str, target_year=No
     if not last_two_years:
         return sales_empty, clients_empty
 
-    group_index = economic_group_index(company_id)
-    region_group_keys = {
-        economic_group_key_from_index(group_index, client_id, client_index.get(client_id))
-        for client_id in region_client_ids
-    }
-    sales_by_month = {
-        (base_year, month): 0.0
-        for base_year in last_two_years
-        for month in range(1, 13)
-    }
-    clients_by_month = {
-        (base_year, month): set()
-        for base_year in last_two_years
-        for month in range(1, 13)
-    }
-
-    for sale_company_id in vendor_sales_company_ids(company_id):
-        for sale in load_json(sales_file(sale_company_id), []):
-            if is_excluded_group_sale(sale_company_id, sale.get("CL_NOM")):
-                continue
-            sale_year = record_year(sale.get("NF_EMI"))
-            sale_month = record_month(sale.get("NF_EMI"))
-            if sale_year not in last_two_years or not sale_month or not (1 <= sale_month <= 12):
-                continue
-            client_id = normalize_identifier(sale.get("ID_CL"))
-            client = client_index.get(client_id)
-            group_key = economic_group_key_from_index(group_index, client_id, client, sale)
-            if group_key not in region_group_keys:
-                continue
-            month_key = (sale_year, sale_month)
-            sales_by_month[month_key] += sale_net_revenue(sale)
-            clients_by_month[month_key].add(group_key)
-
-    monthly_values = [
-        {"year": base_year, "month": month, "value": value}
-        for (base_year, month), value in sales_by_month.items()
-    ]
+    by_group_month_revenue = sales_index_data.get("by_group_month_revenue", {})
+    month_group_keys = sales_index_data.get("by_month_group_keys", {})
+    monthly_values = []
+    month_rows = []
+    for base_year in last_two_years:
+        for month in range(1, 13):
+            month_key = vendor_items_key(base_year, month)
+            revenue = 0.0
+            for group_key in region_group_keys:
+                revenue += number_value((by_group_month_revenue.get(group_key) or {}).get(month_key, {}).get("net_revenue"))
+            monthly_values.append({"year": base_year, "month": month, "value": revenue})
+            month_rows.append({
+                "ano": base_year,
+                "mes": month,
+                "clientes": len(region_group_keys.intersection(month_group_keys.get(month_key, []))),
+            })
     selected_months = sorted(monthly_values, key=lambda item: item["value"], reverse=True)[:3]
     base_average = (
         sum(item["value"] for item in selected_months) / len(selected_months)
         if selected_months else 0.0
     )
-    month_rows = [
-        {"ano": base_year, "mes": month, "clientes": len(client_ids)}
-        for (base_year, month), client_ids in clients_by_month.items()
-    ]
     best_clients = max(month_rows, key=lambda item: (item["clientes"], item["ano"], item["mes"]), default=None)
     sales_base = {
         **sales_empty,
@@ -6242,9 +6320,27 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     }
     region_keys_done_at = time.perf_counter()
     achievements = {str(month): {key: 0.0 for key, _label, _kind in VENDOR_GOAL_OBJECTIVES} for month in range(1, 13)}
+    by_group_month_revenue = sales_index_data.get("by_group_month_revenue", {})
+    by_vendor_name_month_revenue = sales_index_data.get("by_vendor_name_month_revenue", {})
+    month_group_keys = sales_index_data.get("by_month_group_keys", {})
+    day_by_day_monthly_counts = vendor_day_by_day_monthly_counts(company_id, vendor_id_value)
     sales = []
     other_region_sales = []
     vendor_name_key = normalize_text(vendor.get("nome_completo"))
+    for month in month_filter:
+        month_key = str(month)
+        year_month_key = vendor_items_key(year, month)
+        region_total = sum(
+            number_value((by_group_month_revenue.get(group_key) or {}).get(year_month_key, {}).get("net_revenue"))
+            for group_key in region_group_keys
+        )
+        achievements[month_key]["vendas_liquidas"] = region_total
+        achievements[month_key]["vendas_liquidas_outras_regioes"] = max(
+            0.0,
+            number_value((by_vendor_name_month_revenue.get(vendor_name_key) or {}).get(year_month_key, {}).get("net_revenue")) - region_total,
+        )
+        achievements[month_key]["clientes_com_vendas"] = len(region_group_keys.intersection(month_group_keys.get(year_month_key, [])))
+        achievements[month_key]["contatos_inativos_nunca"] = day_by_day_monthly_counts.get(year_month_key, 0)
     for group_key in region_group_keys:
         for item in sales_index_data.get("by_group", {}).get(group_key, []):
             sale_year = int(item.get("sale_year") or 0)
@@ -6252,7 +6348,7 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
             if sale_year > year or (sale_year == year and sale_month > max_month_needed):
                 continue
             sales.append(item)
-    if vendor_name_key:
+    if not fast_mode and vendor_name_key:
         for item in sales_index_data.get("by_vendor_name", {}).get(vendor_name_key, []):
             sale_year = int(item.get("sale_year") or 0)
             sale_month = int(item.get("sale_month") or 0)
@@ -6266,19 +6362,9 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
     first_purchase_by_economic_group = {}
     previous_purchase_by_group = {}
     reactivated_by_month = {str(month): set() for month in range(1, 13)}
-    active_clients_by_month = {str(month): set() for month in range(1, 13)}
     new_clients_by_month = {str(month): set() for month in range(1, 13)}
     sem_giro_commission_by_month = {str(month): 0.0 for month in range(1, 13)}
-
-    for item in other_region_sales:
-        sale_year = int(item.get("sale_year") or 0)
-        sale_month = int(item.get("sale_month") or 0)
-        if sale_year == year and sale_month in month_filter:
-            achievements[str(sale_month)]["vendas_liquidas_outras_regioes"] = (
-                achievements[str(sale_month)].get("vendas_liquidas_outras_regioes", 0.0)
-                + number_value(item.get("net_revenue"))
-            )
-    other_region_done_at = time.perf_counter()
+    other_region_done_at = sales_collected_at
 
     sem_giro_details_by_month = {str(month): [] for month in range(1, 13)}
     if not fast_mode:
@@ -6411,8 +6497,6 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
 
         month_key = str(sale_month)
         net_revenue = number_value(item.get("net_revenue"))
-        achievements[month_key]["vendas_liquidas"] += net_revenue
-        active_clients_by_month[month_key].add(group_key)
         previous_purchase = previous_purchase_by_group.get(group_key)
         if previous_purchase and (sale_date - previous_purchase).days > 180:
             reactivated_by_month[month_key].add(group_key)
@@ -6437,8 +6521,6 @@ def vendor_goal_achievements(company_id: str, vendor_id_value: str, year: int, g
         new_client_goal = objectives.get("novos_clientes") if isinstance(objectives.get("novos_clientes"), dict) else {}
         new_client_value = optional_number_value(new_client_goal.get("meta")) or optional_number_value(month_record.get("valor_novo_cliente")) or 0.0
         achievements[month_key]["reativacao_inativos"] = len(reactivated_by_month[month_key])
-        achievements[month_key]["clientes_com_vendas"] = len(active_clients_by_month[month_key])
-        achievements[month_key]["contatos_inativos_nunca"] = vendor_day_by_day_monthly_count(company_id, vendor_id_value, year, month)
         achievements[month_key]["novos_clientes"] = len(new_clients_by_month[month_key]) * new_client_value
         achievements[month_key]["sem_giro_comissao"] = sem_giro_commission_by_month[month_key]
         achievements[month_key]["sem_giro_detalhes"] = sem_giro_details_by_month[month_key]
