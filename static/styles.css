@@ -1749,6 +1749,36 @@ h3 {
   margin-top: 8px;
 }
 
+.daybyday-purchases-detail {
+  border: 1px solid rgba(0, 114, 136, 0.18);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+.daybyday-purchases-detail-head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.daybyday-purchases-detail-head h4 {
+  color: var(--brand-dark);
+  margin: 0;
+}
+
+.daybyday-purchases-detail-head span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
 .daybyday-purchases-panel {
   border-top: 1px solid var(--line);
   display: none;
