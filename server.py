@@ -12318,7 +12318,9 @@ def main():
         server = CRMHTTPServer(("127.0.0.1", port), CRMHandler)
         server_log(f"CRM iniciado em http://127.0.0.1:{port}")
         print(f"CRM iniciado em http://127.0.0.1:{port}")
-        threading.Thread(target=warm_start_caches, daemon=True).start()
+        server_log("Iniciando warmup dos caches principais.")
+        warm_start_caches()
+        server_log("Warmup dos caches principais finalizado.")
         server.serve_forever()
     except Exception:
         server_log(f"Erro fatal:\n{traceback.format_exc()}")
