@@ -45,8 +45,10 @@ PERSISTENT_CACHE_DIR = DATA_DIR / "_cache"
 JSON_CACHE = {}
 PAYLOAD_CACHE = {}
 SHARED_PAYLOAD_CACHE = {}
+PAYLOAD_BUILD_LOCKS = {}
 RUNTIME_AUTH_SESSIONS = {}
 SAVE_JSON_LOCK = threading.Lock()
+PAYLOAD_BUILD_LOCKS_LOCK = threading.Lock()
 STARTUP_PREWARM_VENDOR_LIMIT = 3
 
 COMPANIES = {
@@ -673,6 +675,7 @@ def persistent_cache_file(cache_key: tuple) -> Path:
 def clear_payload_caches(include_disk: bool = False):
     PAYLOAD_CACHE.clear()
     SHARED_PAYLOAD_CACHE.clear()
+    PAYLOAD_BUILD_LOCKS.clear()
     if not include_disk:
         return
     try:
@@ -686,45 +689,56 @@ def clear_payload_caches(include_disk: bool = False):
         pass
 
 
+def payload_build_lock(cache_key: tuple) -> threading.Lock:
+    with PAYLOAD_BUILD_LOCKS_LOCK:
+        lock = PAYLOAD_BUILD_LOCKS.get(cache_key)
+        if lock is None:
+            lock = threading.Lock()
+            PAYLOAD_BUILD_LOCKS[cache_key] = lock
+        return lock
+
+
 def cached_payload(cache_key: tuple, dependencies: list[Path], builder):
-    signature = file_signature(dependencies)
-    cached = PAYLOAD_CACHE.get(cache_key)
-    if cached and cached["signature"] == signature:
-        return copy.deepcopy(cached["payload"])
-    cache_file = persistent_cache_file(cache_key)
-    if cache_file.exists():
-        try:
-            cached_disk = json.loads(cache_file.read_text(encoding="utf-8"))
-            if cached_disk.get("signature") == json.loads(json.dumps(signature)):
-                payload = cached_disk.get("payload")
-                PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": copy.deepcopy(payload)}
-                return copy.deepcopy(payload)
-        except Exception:
+    with payload_build_lock(cache_key):
+        signature = file_signature(dependencies)
+        cached = PAYLOAD_CACHE.get(cache_key)
+        if cached and cached["signature"] == signature:
+            return copy.deepcopy(cached["payload"])
+        cache_file = persistent_cache_file(cache_key)
+        if cache_file.exists():
             try:
-                cache_file.unlink()
+                cached_disk = json.loads(cache_file.read_text(encoding="utf-8"))
+                if cached_disk.get("signature") == json.loads(json.dumps(signature)):
+                    payload = cached_disk.get("payload")
+                    PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": copy.deepcopy(payload)}
+                    return copy.deepcopy(payload)
             except Exception:
-                pass
-    payload = builder()
-    PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": copy.deepcopy(payload)}
-    try:
-        PERSISTENT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(
-            json.dumps({"signature": signature, "payload": payload}, ensure_ascii=False),
-            encoding="utf-8",
-        )
-    except Exception:
-        pass
-    return payload
+                try:
+                    cache_file.unlink()
+                except Exception:
+                    pass
+        payload = builder()
+        PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": copy.deepcopy(payload)}
+        try:
+            PERSISTENT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(
+                json.dumps({"signature": signature, "payload": payload}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        return payload
 
 
 def shared_cached_payload(cache_key: tuple, dependencies: list[Path], builder):
-    signature = file_signature(dependencies)
-    cached = SHARED_PAYLOAD_CACHE.get(cache_key)
-    if cached and cached["signature"] == signature:
-        return cached["payload"]
-    payload = builder()
-    SHARED_PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": payload}
-    return payload
+    with payload_build_lock(("shared",) + tuple(cache_key)):
+        signature = file_signature(dependencies)
+        cached = SHARED_PAYLOAD_CACHE.get(cache_key)
+        if cached and cached["signature"] == signature:
+            return cached["payload"]
+        payload = builder()
+        SHARED_PAYLOAD_CACHE[cache_key] = {"signature": signature, "payload": payload}
+        return payload
 
 
 def common_company_dependencies(company_id: str) -> list[Path]:
@@ -881,8 +895,6 @@ def vendor_goals_dependencies(company_id: str, fast_mode: bool) -> list[Path]:
         blocked_clients_file(company_id),
         region_assignments_file(company_id),
         economic_groups_file(company_id),
-        vendor_day_by_day_file(company_id),
-        vendor_day_by_day_operational_file(company_id),
     ]
     for current_company_id in vendor_sales_company_ids(company_id):
         dependencies.append(sales_file(current_company_id))
