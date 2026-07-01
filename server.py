@@ -47,6 +47,7 @@ PAYLOAD_CACHE = {}
 SHARED_PAYLOAD_CACHE = {}
 RUNTIME_AUTH_SESSIONS = {}
 SAVE_JSON_LOCK = threading.Lock()
+STARTUP_PREWARM_VENDOR_LIMIT = 3
 
 COMPANIES = {
     "ionlab": "Ionlab",
@@ -12275,6 +12276,33 @@ def warm_start_caches():
             server_log(f"Catalogo de busca preparado para {company_id}.")
         except Exception:
             server_log(f"Falha ao preparar catalogo de busca para {company_id}:\n{traceback.format_exc()}")
+        try:
+            vendor_sales_index(company_id)
+            vendor_client_sales_stats(company_id)
+            server_log(f"Indice de vendas preparado para {company_id}.")
+        except Exception:
+            server_log(f"Falha ao preparar indice de vendas para {company_id}:\n{traceback.format_exc()}")
+        try:
+            active_vendors = [vendor for vendor in load_json(vendors_file(company_id), []) if vendor.get("status") == "Ativo"]
+            active_vendors.sort(key=lambda item: normalize_text(item.get("nome_completo")))
+            current_day = date.today().isoformat()
+            current_year = CURRENT_YEAR
+            current_month = date.today().month
+            for vendor in active_vendors[:STARTUP_PREWARM_VENDOR_LIMIT]:
+                vendor_id_value = str(vendor.get("id") or "").strip()
+                if not vendor_id_value:
+                    continue
+                try:
+                    vendor_day_by_day_payload(company_id, vendor_id_value, current_day)
+                except Exception:
+                    server_log(f"Falha ao preparar Day by Day de {company_id}/{vendor_id_value}:\n{traceback.format_exc()}")
+                try:
+                    vendor_goals_payload(company_id, vendor_id_value, current_year, current_month, 1)
+                except Exception:
+                    server_log(f"Falha ao preparar metas de {company_id}/{vendor_id_value}:\n{traceback.format_exc()}")
+            server_log(f"Cache dos vendedores mais usados preparado para {company_id}.")
+        except Exception:
+            server_log(f"Falha ao preparar cache dos vendedores de {company_id}:\n{traceback.format_exc()}")
 
 
 def main():
