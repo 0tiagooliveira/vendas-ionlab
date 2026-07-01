@@ -2479,7 +2479,7 @@ def build_vendor_region_client_context(company_id: str, vendor_id_value: str):
     vendors = load_json(vendors_file(company_id), [])
     vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
-        vendors, _inserted = sync_vendors_from_sales(company_id)
+        vendors, _inserted = synced_vendors_from_sales(company_id)
         vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
         raise ValueError("Vendedor nao encontrado.")
@@ -3183,7 +3183,7 @@ def build_vendor_record_by_id(company_id: str, vendor_id_value: str) -> dict:
     vendors = load_json(vendors_file(company_id), [])
     vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
-        vendors, _inserted = sync_vendors_from_sales(company_id)
+        vendors, _inserted = synced_vendors_from_sales(company_id)
         vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
         raise ValueError("Vendedor nao encontrado.")
@@ -3934,6 +3934,23 @@ def vendor_day_by_day_daily_contacts_payload(company_id: str, vendor_id_value: s
     month_key = str((params.get("month") or [date.today().strftime("%Y-%m")])[0] or "").strip()
     if not re.match(r"^\d{4}-\d{2}$", month_key):
         month_key = date.today().strftime("%Y-%m")
+    payload = cached_payload(
+        ("vendor_day_by_day_daily_contacts_v2", company_id, vendor_id_value, month_key),
+        [vendor_day_by_day_file(company_id), vendor_day_by_day_operational_file(company_id)],
+        lambda: build_vendor_day_by_day_daily_contacts_payload(company_id, vendor_id_value, month_key),
+    )
+    return {
+        "empresa": COMPANIES.get(company_id, company_id),
+        "empresa_id": company_id,
+        "vendor_id": vendor_id_value,
+        "titulo": "Contatos diarios",
+        "month": month_key,
+        "rows": payload.get("rows") or [],
+        "totals": payload.get("totals") or {"inativos": 0, "nunca_comprou": 0, "total": 0},
+    }
+
+
+def build_vendor_day_by_day_daily_contacts_payload(company_id: str, vendor_id_value: str, month_key: str) -> dict:
     data = load_vendor_day_by_day_data(company_id, {"listas": {}, "atendimentos": {}, "contagens": {}, "historico": []})
     grouped = {}
     for record in data.get("historico") or []:
@@ -3968,15 +3985,7 @@ def vendor_day_by_day_daily_contacts_payload(company_id: str, vendor_id_value: s
         "nunca_comprou": sum(row["nunca_comprou"] for row in rows),
         "total": sum(row["total"] for row in rows),
     }
-    return {
-        "empresa": COMPANIES.get(company_id, company_id),
-        "empresa_id": company_id,
-        "vendor_id": vendor_id_value,
-        "titulo": "Contatos diarios",
-        "month": month_key,
-        "rows": rows,
-        "totals": totals,
-    }
+    return {"rows": rows, "totals": totals}
 
 
 def month_business_days(year: int, month: int) -> list[date]:
@@ -4044,7 +4053,7 @@ def vendor_month_sales_goal_value(company_id: str, vendor_id_value: str, year: i
         if value > 0:
             return value
 
-        payload = vendor_goals_payload(company_id, vendor_id_value, year)
+        payload = vendor_goals_payload(company_id, vendor_id_value, year, None, "1")
         month_record = ((payload.get("goals") or {}).get("months") or {}).get(str(month), {})
         objectives = month_record.get("objetivos") if isinstance(month_record.get("objetivos"), dict) else {}
         sales_goal = objectives.get("vendas_liquidas") if isinstance(objectives.get("vendas_liquidas"), dict) else {}
@@ -4061,7 +4070,7 @@ def vendor_home_month_goals(company_id: str, vendor_id_value: str, year: int, mo
         "contatos_diarios": 0.0,
     }
     try:
-        payload = vendor_goals_payload(company_id, vendor_id_value, year)
+        payload = vendor_goals_payload(company_id, vendor_id_value, year, None, "1")
         month_record = ((payload.get("goals") or {}).get("months") or {}).get(str(month), {})
         objectives = month_record.get("objetivos") if isinstance(month_record.get("objetivos"), dict) else {}
         goals["vendas_liquidas_mes"] = number_value((objectives.get("vendas_liquidas") or {}).get("meta"))
@@ -4662,7 +4671,7 @@ def save_vendor_region_exclusions_payload(payload: dict):
 def build_vendor_page_payload(company_id: str, vendor_id_value: str):
     started_at = time.perf_counter()
     sync_started_at = time.perf_counter()
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors, _inserted = synced_vendors_from_sales(company_id)
     lookup_started_at = time.perf_counter()
     vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
@@ -6616,10 +6625,10 @@ def build_vendor_goals_payload(company_id: str, vendor_id_value: str = "", year_
     year = int(optional_number_value(year_value) or CURRENT_YEAR)
     fast_mode = str(fast_value or "").strip().lower() in {"1", "true", "sim", "yes"}
     vendors_started_at = time.perf_counter()
-    vendors = load_json(vendors_file(company_id), []) if fast_mode else sync_vendors_from_sales(company_id)[0]
+    vendors = load_json(vendors_file(company_id), []) if fast_mode else synced_vendors_from_sales(company_id)[0]
     vendors_loaded_at = time.perf_counter()
     if fast_mode and vendor_id_value and not any(item.get("id") == vendor_id_value for item in vendors):
-        vendors, _inserted = sync_vendors_from_sales(company_id)
+        vendors, _inserted = synced_vendors_from_sales(company_id)
         vendors_loaded_at = time.perf_counter()
     active_vendors = [vendor for vendor in vendors if vendor.get("status") == "Ativo"]
     goal_vendors = [vendor_goal_option_record(vendor) for vendor in active_vendors]
@@ -6742,7 +6751,7 @@ def save_vendor_goals_payload(payload: dict):
         raise ValueError("Somente Usuario Master ou Vendedor Lider/Supervisor pode alterar metas.")
     vendor_id_value = payload.get("vendor_id", "")
     year = int(optional_number_value(payload.get("year")) or CURRENT_YEAR)
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors, _inserted = synced_vendors_from_sales(company_id)
     if not any(vendor.get("id") == vendor_id_value for vendor in vendors):
         raise ValueError("Vendedor nao encontrado.")
 
@@ -6891,6 +6900,14 @@ def sync_vendors_from_sales(company_id: str):
     return vendors, inserted
 
 
+def synced_vendors_from_sales(company_id: str):
+    return cached_payload(
+        ("synced_vendors_from_sales_v2", company_id),
+        [vendors_file(company_id), sales_file(company_id)],
+        lambda: sync_vendors_from_sales(company_id),
+    )
+
+
 def valid_clients_for_assignment(company_id: str):
     blocked = blocked_client_map(company_id)
     rows = []
@@ -6906,7 +6923,7 @@ def vendor_assignment_options_payload(company_id: str):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
 
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors, _inserted = synced_vendors_from_sales(company_id)
     assigned_ufs = {}
     assigned_cities = []
     for vendor in vendors:
@@ -6990,7 +7007,7 @@ def vendor_client_search_payload(company_id: str, query: str, limit: int = 20):
 
 def client_vendor_name(company_id: str, client_id: str, client: dict | None = None) -> str:
     try:
-        vendors, _inserted = sync_vendors_from_sales(company_id)
+        vendors, _inserted = synced_vendors_from_sales(company_id)
         active_vendors = [vendor for vendor in vendors if vendor.get("status") == "Ativo"]
         rules = active_region_rules(company_id)
         if rules and client:
@@ -7045,7 +7062,7 @@ def economic_group_client_search_payload(company_id: str, query: str, limit: int
         raise ValueError("Empresa invalida.")
     query_text = normalize_text(query)
     matches = []
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors, _inserted = synced_vendors_from_sales(company_id)
     active_vendors = [vendor for vendor in vendors if vendor.get("status") == "Ativo"]
     rules = active_region_rules(company_id)
     for client in load_json(clients_file(company_id), []):
@@ -7235,7 +7252,7 @@ def region_client_label(client: dict) -> str:
 def region_options_payload(company_id: str):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors, _inserted = synced_vendors_from_sales(company_id)
     clients = valid_clients_for_assignment(company_id)
     cities = {}
     ddds_by_uf = {}
@@ -7322,7 +7339,7 @@ def normalize_region_rule(payload: dict, company_id: str) -> dict:
     if rule_type not in REGION_PRIORITY:
         raise ValueError("Selecione o tipo de regiao.")
     vendor_id_value = str(payload.get("vendor_id") or "").strip()
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors, _inserted = synced_vendors_from_sales(company_id)
     vendor = next((item for item in vendors if item.get("id") == vendor_id_value), None)
     if not vendor:
         raise ValueError("Selecione um vendedor valido.")
@@ -7530,7 +7547,7 @@ def vendors_payload(company_id: str, query: str = ""):
     if company_id not in COMPANIES:
         raise ValueError("Empresa invalida.")
 
-    vendors, inserted = sync_vendors_from_sales(company_id)
+    vendors, inserted = synced_vendors_from_sales(company_id)
     matches = [
         vendor_public_record(vendor)
         for vendor in vendors
@@ -7612,7 +7629,7 @@ def save_vendor_payload(payload: dict):
         else "Vendedor"
     )
 
-    vendors, _inserted = sync_vendors_from_sales(company_id)
+    vendors, _inserted = synced_vendors_from_sales(company_id)
     record_id = str(payload.get("id") or "").strip()
     key = vendor_key(company_id, name)
     now = datetime.now().isoformat(timespec="seconds")

@@ -8107,7 +8107,7 @@ async function loadVendorGoals() {
   }
   status.textContent = "Carregando metas e objetivos...";
   try {
-    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(company)}&vendor_id=${encodeURIComponent(vendorId)}&year=${encodeURIComponent(year)}`);
+    const payload = await fetchJson(`/api/vendor-goals?company=${encodeURIComponent(company)}&vendor_id=${encodeURIComponent(vendorId)}&year=${encodeURIComponent(year)}&fast=1`);
     renderVendorGoals(payload);
     status.textContent = "Metas carregadas. Selecione o mes, ajuste os campos e salve quando terminar.";
   } catch (error) {
